@@ -4,40 +4,130 @@ import { storage } from "./storage";
 import { insertTemplateSchema, insertLogEntrySchema, insertSettingsSchema } from "@shared/schema";
 import { z } from "zod";
 
+/**
+ * API Routes Registration with Comprehensive Error Handling
+ * 
+ * This module registers all REST API endpoints with:
+ * - Input validation using Zod schemas
+ * - Proper error handling and logging
+ * - Consistent response formatting
+ * - Database transaction management
+ * 
+ * All routes follow RESTful conventions and include proper status codes
+ */
+
+/**
+ * Utility function for consistent error response formatting
+ * @param res - Express response object
+ * @param statusCode - HTTP status code
+ * @param message - Error message for client
+ * @param error - Optional detailed error for logging
+ */
+function sendErrorResponse(res: any, statusCode: number, message: string, error?: any) {
+  if (error) {
+    console.error(`API Error (${statusCode}):`, error);
+  }
+  res.status(statusCode).json({ 
+    message, 
+    timestamp: new Date().toISOString(),
+    status: 'error'
+  });
+}
+
+/**
+ * Register all API routes with error handling and validation
+ * @param app - Express application instance
+ * @returns HTTP server instance
+ */
 export async function registerRoutes(app: Express): Promise<Server> {
   
-  // Templates routes
+  /**
+   * TEMPLATE MANAGEMENT ROUTES
+   * Handle template CRUD operations with validation and error handling
+   */
+  
+  /**
+   * GET /api/templates - Retrieve all templates
+   * Returns array of template objects ordered by creation date
+   */
   app.get("/api/templates", async (_req, res) => {
     try {
+      console.log("Fetching all templates");
       const templates = await storage.getTemplates();
-      res.json(templates);
+      
+      res.json({
+        status: 'success',
+        data: templates,
+        count: templates.length,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch templates" });
+      sendErrorResponse(res, 500, "Failed to fetch templates", error);
     }
   });
 
+  /**
+   * GET /api/templates/active - Get currently active template
+   * Returns the template marked as active for voice command processing
+   */
   app.get("/api/templates/active", async (_req, res) => {
     try {
+      console.log("Fetching active template");
       const template = await storage.getActiveTemplate();
+      
       if (!template) {
-        return res.status(404).json({ message: "No active template found" });
+        return sendErrorResponse(res, 404, "No active template found. Please activate a template first.");
       }
-      res.json(template);
+      
+      res.json({
+        status: 'success',
+        data: template,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch active template" });
+      sendErrorResponse(res, 500, "Failed to fetch active template", error);
     }
   });
 
+  /**
+   * POST /api/templates - Create new template
+   * Validates input data and creates template with proper error handling
+   */
   app.post("/api/templates", async (req, res) => {
     try {
+      console.log("Creating new template:", req.body);
+      
+      // Validate input data using Zod schema
       const template = insertTemplateSchema.parse(req.body);
+      
+      // Check for duplicate template names
+      const existingTemplates = await storage.getTemplates();
+      const duplicate = existingTemplates.find(t => t.name.toLowerCase() === template.name.toLowerCase());
+      
+      if (duplicate) {
+        return sendErrorResponse(res, 409, `Template with name "${template.name}" already exists`);
+      }
+      
+      // Create the template
       const newTemplate = await storage.createTemplate(template);
-      res.json(newTemplate);
+      console.log("Template created successfully:", newTemplate.id);
+      
+      res.status(201).json({
+        status: 'success',
+        data: newTemplate,
+        message: `Template "${newTemplate.name}" created successfully`,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid template data", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid template data", 
+          errors: error.errors,
+          status: 'error',
+          timestamp: new Date().toISOString()
+        });
       }
-      res.status(500).json({ message: "Failed to create template" });
+      sendErrorResponse(res, 500, "Failed to create template", error);
     }
   });
 

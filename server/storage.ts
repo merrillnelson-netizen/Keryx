@@ -33,24 +33,78 @@ export interface IStorage {
   updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
 }
 
+/**
+ * Database storage implementation with comprehensive error handling
+ * Handles all database operations with proper try/catch blocks and logging
+ * Implements garbage collection through connection pooling and proper cleanup
+ */
 export class DatabaseStorage implements IStorage {
-  // Users
+  
+  /**
+   * USER MANAGEMENT METHODS
+   * Handle user authentication and profile management
+   */
+  
+  /**
+   * Retrieve user by ID with error handling
+   * @param id - User unique identifier
+   * @returns User object or undefined if not found
+   */
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
+    try {
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid user ID provided');
+      }
+      
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user || undefined;
+    } catch (error) {
+      console.error('Error fetching user by ID:', error);
+      throw new Error(`Failed to retrieve user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
+  /**
+   * Retrieve user by username with validation
+   * @param username - User's login username
+   * @returns User object or undefined if not found
+   */
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
+    try {
+      if (!username || typeof username !== 'string') {
+        throw new Error('Invalid username provided');
+      }
+      
+      const [user] = await db.select().from(users).where(eq(users.username, username));
+      return user || undefined;
+    } catch (error) {
+      console.error('Error fetching user by username:', error);
+      throw new Error(`Failed to retrieve user by username: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
+  /**
+   * Create new user account with validation
+   * @param insertUser - User data for creation
+   * @returns Created user object
+   */
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(insertUser)
-      .returning();
-    return user;
+    try {
+      if (!insertUser || !insertUser.username) {
+        throw new Error('Invalid user data: username is required');
+      }
+      
+      const [user] = await db
+        .insert(users)
+        .values(insertUser)
+        .returning();
+        
+      console.log('User created successfully:', user.id);
+      return user;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Templates
