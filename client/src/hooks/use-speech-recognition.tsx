@@ -78,6 +78,27 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', event.error);
+      let errorMessage = "Voice recognition error: ";
+      
+      switch (event.error) {
+        case 'not-allowed':
+          errorMessage += "Microphone access was denied. Please allow microphone permissions and try again.";
+          break;
+        case 'no-speech':
+          errorMessage += "No speech was detected. Please try speaking again.";
+          break;
+        case 'audio-capture':
+          errorMessage += "Audio capture failed. Please check your microphone.";
+          break;
+        case 'network':
+          errorMessage += "Network error occurred. Please check your connection.";
+          break;
+        default:
+          errorMessage += event.error;
+      }
+      
+      setLastResponse(errorMessage);
+      speak(errorMessage);
       setIsListening(false);
     };
 
@@ -160,13 +181,29 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   };
 
   const startListening = useCallback(() => {
+    if (!isSupported) {
+      const message = "Speech recognition is not supported in this browser. Please try Chrome or Edge.";
+      setLastResponse(message);
+      console.error(message);
+      return;
+    }
+
     if (recognition && !isListening) {
       setTranscript("");
       setLastResponse("");
-      recognition.start();
-      setIsListening(true);
+      
+      try {
+        recognition.start();
+        setIsListening(true);
+        console.log('Speech recognition started');
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error);
+        const message = "Could not start voice recognition. Please check microphone permissions.";
+        setLastResponse(message);
+        speak(message);
+      }
     }
-  }, [recognition, isListening]);
+  }, [recognition, isListening, isSupported, speak]);
 
   const stopListening = useCallback(() => {
     if (recognition && isListening) {

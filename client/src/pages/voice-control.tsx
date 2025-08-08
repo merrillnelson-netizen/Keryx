@@ -4,6 +4,7 @@ import LiveTranscript from "@/components/live-transcript";
 import ActiveTemplate from "@/components/active-template";
 import RecentActivity from "@/components/recent-activity";
 import CommandExamples from "@/components/command-examples";
+import SpeechDebug from "@/components/speech-debug";
 
 export default function VoiceControl() {
   return (
@@ -34,6 +35,9 @@ export default function VoiceControl() {
       <div className="flex-1 overflow-auto p-4 lg:p-6">
         <VoiceActivation />
         <LiveTranscript />
+        
+        {/* Debug Panel - Remove this after voice is working */}
+        <SpeechDebug />
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           <ActiveTemplate />
