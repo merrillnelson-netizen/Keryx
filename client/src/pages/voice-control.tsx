@@ -1,0 +1,51 @@
+import Sidebar from "@/components/sidebar";
+import VoiceActivation from "@/components/voice-activation";
+import LiveTranscript from "@/components/live-transcript";
+import ActiveTemplate from "@/components/active-template";
+import RecentActivity from "@/components/recent-activity";
+import CommandExamples from "@/components/command-examples";
+
+export default function VoiceControl() {
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <header className="bg-surface border-b border-outline px-6 py-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-medium text-foreground">Voice Control Center</h2>
+              <p className="text-sm text-muted-foreground">Ready to receive voice commands</p>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <span className="material-icons text-secondary">volume_up</span>
+                <span className="text-sm text-muted-foreground">Voice Ready</span>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <span className="material-icons text-primary">storage</span>
+                <span className="text-sm text-muted-foreground">Database Connected</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto p-6">
+          <VoiceActivation />
+          <LiveTranscript />
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ActiveTemplate />
+            <RecentActivity />
+          </div>
+
+          <CommandExamples />
+        </main>
+      </div>
+    </div>
+  );
+}
