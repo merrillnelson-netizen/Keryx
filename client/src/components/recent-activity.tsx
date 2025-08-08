@@ -7,6 +7,7 @@ import { Link } from "wouter";
 export default function RecentActivity() {
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs", { limit: 5 }],
+    queryFn: () => fetch("/api/logs?limit=5").then(res => res.json()),
   });
 
   if (isLoading) {

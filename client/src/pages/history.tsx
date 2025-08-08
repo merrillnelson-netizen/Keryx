@@ -7,6 +7,7 @@ import { LogEntry } from "@shared/schema";
 export default function History() {
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
+    queryFn: () => fetch("/api/logs").then(res => res.json()),
   });
 
   if (isLoading) {

@@ -124,36 +124,57 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
 
     const activationPhrase = settings?.activationPhrase || "Hey M";
+    let cleanCommand = command.trim();
     
-    // Check if command starts with activation phrase
+    // If using button mode, process directly without wake phrase
+    if (mode) {
+      console.log(`Processing ${mode} command:`, cleanCommand);
+      if (mode === "log") {
+        await handleLogCommand(cleanCommand, activeTemplate);
+      } else if (mode === "query") {
+        await handleQueryCommand(cleanCommand, activeTemplate);
+      }
+      return;
+    }
+    
+    // For always-listening mode, check for wake phrase
     if (!command.toLowerCase().includes(activationPhrase.toLowerCase())) {
       return;
     }
 
     // Remove activation phrase and parse command
-    const cleanCommand = command.replace(new RegExp(activationPhrase, 'gi'), '').trim();
+    cleanCommand = command.replace(new RegExp(activationPhrase, 'gi'), '').trim();
     
     if (cleanCommand.toLowerCase().startsWith('log')) {
       await handleLogCommand(cleanCommand, activeTemplate);
     } else if (cleanCommand.toLowerCase().startsWith('query')) {
       await handleQueryCommand(cleanCommand, activeTemplate);
     }
-  }, [activeTemplate, settings, logMutation, queryMutation, speak]);
+  }, [activeTemplate, settings, logMutation, queryMutation, speak, mode]);
 
   const handleLogCommand = async (command: string, template: Template) => {
     try {
+      console.log('Parsing voice command:', command, 'with template:', template);
       const parsedData = parseVoiceCommand(command, template, "log");
+      console.log('Parsed data:', parsedData);
       
-      await logMutation.mutateAsync({
+      const logEntry = {
         templateId: template.id,
         rawCommand: command,
         parsedData,
-      });
+      };
+      
+      console.log('Sending log entry:', logEntry);
+      await logMutation.mutateAsync(logEntry);
 
-      const response = `Logged: ${command}`;
+      const response = `Successfully logged: ${command}`;
       setLastResponse(response);
       speak(response);
+      
+      // Stop listening after successful log
+      stopListening();
     } catch (error) {
+      console.error('Log command error:', error);
       const response = "Failed to log command. Please try again.";
       setLastResponse(response);
       speak(response);

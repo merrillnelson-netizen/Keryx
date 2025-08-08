@@ -39,6 +39,8 @@ export default function VoiceControl() {
         {/* Debug Panel - Remove this after voice is working */}
         <SpeechDebug />
         
+
+        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           <ActiveTemplate />
           <RecentActivity />
