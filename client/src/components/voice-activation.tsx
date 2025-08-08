@@ -45,25 +45,25 @@ export default function VoiceActivation() {
   }
 
   return (
-    <Card className="bg-surface rounded-xl shadow-sm border border-outline p-8 mb-6">
+    <Card className="bg-surface rounded-xl shadow-sm border border-outline p-4 lg:p-8 mb-4 lg:mb-6">
       <CardContent className="text-center">
-        <div className="mb-6">
+        <div className="mb-4 lg:mb-6">
           <div 
             className={cn(
-              "w-32 h-32 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg transition-all duration-300 hover:shadow-xl",
+              "w-24 h-24 lg:w-32 lg:h-32 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4 shadow-lg transition-all duration-300 hover:shadow-xl",
               isListening 
                 ? "bg-secondary listening-pulse" 
                 : "bg-primary"
             )}
           >
-            <span className="material-icons text-white text-6xl">
+            <span className="material-icons text-white text-4xl lg:text-6xl">
               {isListening ? "mic" : "mic_none"}
             </span>
           </div>
-          <h3 className="text-2xl font-medium text-foreground mb-2">
+          <h3 className="text-lg lg:text-2xl font-medium text-foreground mb-2">
             {isListening ? `${mode === "log" ? "Logging" : "Query"} Mode Active` : "Voice Command Ready"}
           </h3>
-          <p className="text-muted-foreground max-w-md mx-auto">
+          <p className="text-sm lg:text-base text-muted-foreground max-w-md mx-auto px-2">
             {isListening 
               ? `Listening for ${mode} commands...`
               : 'Say "Hey M" followed by your logging or query command, or use the buttons below'
@@ -72,12 +72,13 @@ export default function VoiceActivation() {
         </div>
         
         {/* Manual Activation Buttons */}
-        <div className="flex justify-center space-x-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-4">
           {isListening ? (
             <Button 
               onClick={stopListening}
               variant="destructive"
-              className="px-6 py-3"
+              className="px-4 lg:px-6 py-3 w-full sm:w-auto"
+              size="lg"
             >
               <span className="material-icons mr-2">stop</span>
               <span className="font-medium">Stop Listening</span>
@@ -86,7 +87,8 @@ export default function VoiceActivation() {
             <>
               <Button 
                 onClick={handleLogMode}
-                className="bg-secondary hover:bg-green-600 text-white px-6 py-3"
+                className="bg-secondary hover:bg-green-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
+                size="lg"
               >
                 <span className="material-icons mr-2">add_circle</span>
                 <span className="font-medium">Log Mode</span>
@@ -94,7 +96,8 @@ export default function VoiceActivation() {
               
               <Button 
                 onClick={handleQueryMode}
-                className="bg-accent hover:bg-orange-600 text-white px-6 py-3"
+                className="bg-accent hover:bg-orange-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
+                size="lg"
               >
                 <span className="material-icons mr-2">search</span>
                 <span className="font-medium">Query Mode</span>

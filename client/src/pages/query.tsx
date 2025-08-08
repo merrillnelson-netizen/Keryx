@@ -1,4 +1,4 @@
-import Sidebar from "@/components/sidebar";
+import MobileLayout from "@/components/mobile-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,18 +29,21 @@ export default function Query() {
   };
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-surface border-b border-outline px-6 py-4">
-          <div>
-            <h2 className="text-lg font-medium text-foreground">Query Data</h2>
-            <p className="text-sm text-muted-foreground">Search and analyze your logged data</p>
-          </div>
-        </header>
+    <MobileLayout>
+      {/* Desktop Header - Hidden on mobile */}
+      <header className="hidden lg:block bg-surface border-b border-outline px-6 py-4">
+        <div>
+          <h2 className="text-lg font-medium text-foreground">Query Data</h2>
+          <p className="text-sm text-muted-foreground">Search and analyze your logged data</p>
+        </div>
+      </header>
 
-        <main className="flex-1 overflow-auto p-6">
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-surface border-b border-outline px-4 py-3 sticky top-0 z-10">
+        <p className="text-sm text-muted-foreground">Search and analyze your logged data</p>
+      </div>
+
+      <main className="flex-1 overflow-auto p-4 lg:p-6">
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -87,7 +90,6 @@ export default function Query() {
             </Card>
           )}
         </main>
-      </div>
-    </div>
+    </MobileLayout>
   );
 }

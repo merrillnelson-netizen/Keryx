@@ -15,8 +15,8 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-surface shadow-lg border-r border-outline">
       <div className="p-6 border-b border-outline">
-        <h1 className="text-xl font-medium text-foreground">Voice Logger Pro</h1>
-        <p className="text-sm text-muted-foreground mt-1">Intelligent Logging System</p>
+        <h1 className="text-xl font-medium text-foreground">MyDigitalMemory</h1>
+        <p className="text-sm text-muted-foreground mt-1">MDM - Voice Memory System</p>
       </div>
       
       <nav className="mt-6">

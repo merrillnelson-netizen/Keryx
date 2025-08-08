@@ -1,4 +1,4 @@
-import Sidebar from "@/components/sidebar";
+import MobileLayout from "@/components/mobile-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
@@ -11,31 +11,33 @@ export default function History() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen">
-        <Sidebar />
+      <MobileLayout>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
             <p className="mt-2 text-muted-foreground">Loading history...</p>
           </div>
         </div>
-      </div>
+      </MobileLayout>
     );
   }
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-surface border-b border-outline px-6 py-4">
-          <div>
-            <h2 className="text-lg font-medium text-foreground">Log History</h2>
-            <p className="text-sm text-muted-foreground">View all logged commands and data</p>
-          </div>
-        </header>
+    <MobileLayout>
+      {/* Desktop Header - Hidden on mobile */}
+      <header className="hidden lg:block bg-surface border-b border-outline px-6 py-4">
+        <div>
+          <h2 className="text-lg font-medium text-foreground">Log History</h2>
+          <p className="text-sm text-muted-foreground">View all logged commands and data</p>
+        </div>
+      </header>
 
-        <main className="flex-1 overflow-auto p-6">
+      {/* Mobile Header */}
+      <div className="lg:hidden bg-surface border-b border-outline px-4 py-3 sticky top-0 z-10">
+        <p className="text-sm text-muted-foreground">View all logged commands and data</p>
+      </div>
+
+      <main className="flex-1 overflow-auto p-4 lg:p-6">
           {logEntries.length === 0 ? (
             <Card>
               <CardContent className="text-center py-8">
@@ -69,7 +71,6 @@ export default function History() {
             </div>
           )}
         </main>
-      </div>
-    </div>
+    </MobileLayout>
   );
 }

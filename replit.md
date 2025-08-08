@@ -1,18 +1,20 @@
-# Voice Logger Pro - Replit Configuration
+# MyDigitalMemory (MDM) - Replit Configuration
 
 ## Overview
 
-Voice Logger Pro is a voice-activated logging and query system that allows users to log structured data and query it using natural language voice commands. The application uses speech recognition to capture voice input, processes it through custom parsers, and stores structured data in a PostgreSQL database. Users can create custom templates to define data structures and query formats, making it adaptable for various logging scenarios like billiards leagues, project tracking, or any structured data collection.
+MyDigitalMemory (MDM) is a mobile-first voice-activated logging and query system that allows users to log structured data and query it using natural language voice commands. The application uses speech recognition to capture voice input, processes it through custom parsers, and stores structured data in a PostgreSQL database. Users can create custom templates to define data structures and query formats, making it adaptable for various logging scenarios like billiards leagues, project tracking, or any structured data collection.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Mobile-first design: Prioritize mobile experience with sliding sidebar navigation and responsive layouts.
 
 ## System Architecture
 
 ### Frontend Architecture
 - **Framework**: React 18 with TypeScript using Vite as the build tool
 - **UI Framework**: Tailwind CSS with shadcn/ui component library for Material Design-inspired interface
+- **Mobile Layout**: Custom mobile-first responsive design with sliding sidebar navigation using Sheet component
 - **Routing**: Wouter for lightweight client-side routing
 - **State Management**: TanStack Query (React Query) for server state management and caching
 - **Speech APIs**: Browser's native Web Speech API for both recognition (SpeechRecognition) and synthesis (SpeechSynthesis)
@@ -41,8 +43,12 @@ Preferred communication style: Simple, everyday language.
 
 ### Application Structure
 - **Monorepo Layout**: Shared schema between client and server in `/shared` directory
+- **Mobile-First Components**: 
+  - `MobileLayout` component handles responsive navigation with sliding sidebar
+  - Desktop shows permanent sidebar, mobile uses hamburger menu with slide-out navigation
+  - All pages wrapped in mobile layout for consistent responsive behavior
 - **Component Architecture**: Modular React components with custom hooks for speech functionality
-- **Type Safety**: Full TypeScript coverage with Zod for runtime validation
+- **Type Safety**: Full TypeScript coverage with Zod for runtime validation and custom Speech API types
 - **Development Tools**: Vite dev server with hot reload and error overlay
 
 ### Key Features
@@ -50,7 +56,11 @@ Preferred communication style: Simple, everyday language.
 - **Template Management**: Users can create, activate, and manage custom data templates
 - **Real-time Feedback**: Live transcript display and voice response confirmation
 - **Data History**: Complete log history with structured data display
-- **Responsive Design**: Mobile-friendly interface with consistent Material Design patterns
+- **Mobile-First Design**: 
+  - Sliding sidebar navigation that hides on mobile
+  - Touch-friendly voice control buttons
+  - Responsive card layouts that adapt to screen size
+  - Mobile-optimized headers and sticky navigation
 
 ## External Dependencies
 

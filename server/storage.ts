@@ -82,7 +82,7 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTemplate(id: string): Promise<boolean> {
     const result = await db.delete(templates).where(eq(templates.id, id));
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getActiveTemplate(): Promise<Template | undefined> {

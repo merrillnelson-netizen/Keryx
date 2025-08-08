@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { parseVoiceCommand } from "@/lib/voice-parser";
 import { useSpeechSynthesis } from "./use-speech-synthesis";
 import { Template, Settings } from "@shared/schema";
+import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech";
 
 interface SpeechRecognitionHook {
   isListening: boolean;
@@ -52,13 +53,15 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     if (!isSupported) return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    
     const recognitionInstance = new SpeechRecognition();
 
     recognitionInstance.continuous = true;
     recognitionInstance.interimResults = true;
     recognitionInstance.lang = 'en-US';
 
-    recognitionInstance.onresult = (event) => {
+    recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = '';
       
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -73,7 +76,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       }
     };
 
-    recognitionInstance.onerror = (event) => {
+    recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error('Speech recognition error:', event.error);
       setIsListening(false);
     };
