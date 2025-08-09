@@ -29,7 +29,7 @@ export default function Templates() {
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
-    queryFn: () => apiRequest("GET", "/api/templates").then(res => res.data || res),
+    queryFn: () => apiRequest("GET", "/api/templates").then(res => res.json()).then(response => response.data || []),
   });
 
   const activateTemplateMutation = useMutation({
