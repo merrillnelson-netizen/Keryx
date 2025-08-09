@@ -161,6 +161,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteTemplate(id);
+      if (!success) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json({ message: "Template deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete template" });
+    }
+  });
+
   // Log entries routes
   app.get("/api/logs", async (req, res) => {
     try {

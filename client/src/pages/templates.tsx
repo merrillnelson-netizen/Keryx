@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Templates() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [newTemplate, setNewTemplate] = useState({
     name: "",
     description: "",
@@ -27,6 +29,7 @@ export default function Templates() {
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
+    queryFn: () => apiRequest("GET", "/api/templates").then(res => res.data || res),
   });
 
   const activateTemplateMutation = useMutation({
@@ -49,8 +52,54 @@ export default function Templates() {
     },
   });
 
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => 
+      apiRequest("DELETE", `/api/templates/${templateId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      toast({ title: "Template deleted successfully" });
+    },
+  });
+
+  const editTemplateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => 
+      apiRequest("PUT", `/api/templates/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
+      setShowEditDialog(false);
+      setEditingTemplate(null);
+      toast({ title: "Template updated successfully" });
+    },
+  });
+
   const handleCreateTemplate = () => {
     createTemplateMutation.mutate(newTemplate);
+  };
+
+  const handleEditTemplate = (template: Template) => {
+    setEditingTemplate(template);
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateTemplate = () => {
+    if (editingTemplate) {
+      editTemplateMutation.mutate({ 
+        id: editingTemplate.id, 
+        data: {
+          name: editingTemplate.name,
+          description: editingTemplate.description,
+          logFormat: editingTemplate.logFormat,
+          queryFormat: editingTemplate.queryFormat,
+          fields: editingTemplate.fields
+        }
+      });
+    }
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    if (window.confirm("Are you sure you want to delete this template?")) {
+      deleteTemplateMutation.mutate(templateId);
+    }
   };
 
   if (isLoading) {
@@ -120,16 +169,33 @@ export default function Templates() {
                         <Label className="text-xs text-muted-foreground">Query Format</Label>
                         <p className="text-sm font-mono bg-muted p-2 rounded">{template.queryFormat}</p>
                       </div>
-                      {!template.isActive && (
+                      <div className="flex gap-2">
+                        {!template.isActive && (
+                          <Button 
+                            className="flex-1" 
+                            variant="outline"
+                            onClick={() => activateTemplateMutation.mutate(template.id)}
+                            disabled={activateTemplateMutation.isPending}
+                          >
+                            Activate
+                          </Button>
+                        )}
                         <Button 
-                          className="w-full" 
-                          variant="outline"
-                          onClick={() => activateTemplateMutation.mutate(template.id)}
-                          disabled={activateTemplateMutation.isPending}
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleEditTemplate(template)}
                         >
-                          Activate Template
+                          <span className="material-icons text-sm">edit</span>
                         </Button>
-                      )}
+                        <Button 
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteTemplate(template.id)}
+                          disabled={deleteTemplateMutation.isPending}
+                        >
+                          <span className="material-icons text-sm">delete</span>
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -190,6 +256,61 @@ export default function Templates() {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Template</DialogTitle>
+            </DialogHeader>
+            {editingTemplate && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-name">Template Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editingTemplate.name}
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Input
+                    id="edit-description"
+                    value={editingTemplate.description}
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-logFormat">Log Format</Label>
+                  <Textarea
+                    id="edit-logFormat"
+                    value={editingTemplate.logFormat}
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, logFormat: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-queryFormat">Query Format</Label>
+                  <Textarea
+                    id="edit-queryFormat"
+                    value={editingTemplate.queryFormat}
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, queryFormat: e.target.value })}
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleUpdateTemplate}
+                    disabled={editTemplateMutation.isPending}
+                  >
+                    Update Template
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
     </>
