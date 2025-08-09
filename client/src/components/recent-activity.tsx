@@ -4,10 +4,26 @@ import { useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
 import { Link } from "wouter";
 
+// Placeholder for apiRequest function, assuming it's defined elsewhere
+// Example:
+// async function apiRequest(method: string, url: string, body?: any) {
+//   const response = await fetch(url, {
+//     method,
+//     headers: { 'Content-Type': 'application/json' },
+//     body: body ? JSON.stringify(body) : undefined,
+//   });
+//   if (!response.ok) {
+//     throw new Error(`API error: ${response.statusText}`);
+//   }
+//   return response;
+// }
+
 export default function RecentActivity() {
-  const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
+  const { data: logEntries = [], isLoading, refetch } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs", { limit: 5 }],
     queryFn: () => fetch("/api/logs?limit=5").then(res => res.json()),
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    refetchOnWindowFocus: true, // Refresh when window gets focus
   });
 
   if (isLoading) {
@@ -44,7 +60,7 @@ export default function RecentActivity() {
             </Button>
           </Link>
         </div>
-        
+
         {logEntries.length === 0 ? (
           <div className="text-center py-8">
             <span className="material-icons text-6xl text-muted-foreground mb-4">history</span>

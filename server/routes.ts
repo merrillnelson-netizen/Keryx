@@ -275,14 +275,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/logs", async (req, res) => {
     try {
+      console.log("Creating log entry with data:", req.body);
+      
       const logEntry = insertLogEntrySchema.parse(req.body);
+      console.log("Validated log entry:", logEntry);
+      
       const newEntry = await storage.createLogEntry(logEntry);
-      res.json(newEntry);
+      console.log("Log entry created successfully:", newEntry.id);
+      
+      res.status(201).json({
+        status: 'success',
+        data: newEntry,
+        message: 'Log entry created successfully',
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
+      console.error("Failed to create log entry:", error);
+      
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid log entry data", errors: error.errors });
+        return res.status(400).json({ 
+          status: 'error',
+          message: "Invalid log entry data", 
+          errors: error.errors,
+          timestamp: new Date().toISOString()
+        });
       }
-      res.status(500).json({ message: "Failed to create log entry" });
+      
+      sendErrorResponse(res, 500, "Failed to create log entry", error);
     }
   });
 

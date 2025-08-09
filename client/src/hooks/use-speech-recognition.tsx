@@ -39,7 +39,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [mode, setMode] = useState<"log" | "query" | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [lastResponse, setLastResponse] = useState("");
-  
+
   // Use ref to prevent memory leaks and ensure proper cleanup
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -62,16 +62,24 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   // Mutation for logging voice commands with proper error handling
   const logMutation = useMutation({
-    mutationFn: (logEntry: any) => apiRequest("POST", "/api/logs", logEntry),
-    onSuccess: () => {
-      // Refresh the logs cache after successful creation
+    mutationFn: async (logEntry: any) => {
+      console.log('Creating log entry with data:', logEntry);
+      const response = await apiRequest("POST", "/api/logs", logEntry);
+      const result = await response.json();
+      console.log('Log entry creation response:', result);
+      return result;
+    },
+    onSuccess: (data) => {
+      console.log('Log entry created successfully:', data);
+      // Invalidate and refetch log queries
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
     },
     onError: (error) => {
-      console.error("Failed to create log entry:", error);
-      setLastResponse("Failed to save your command. Please try again.");
+      console.error('Failed to create log entry:', error);
+      speakResponse("Sorry, I couldn't save that log entry. Please try again.");
     },
   });
+
 
   // Mutation for querying log entries with error handling
   const queryMutation = useMutation({
@@ -102,7 +110,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         console.error("Speech recognition constructor not available");
         return;
       }
-      
+
       // Create new recognition instance with error handling
       const recognitionInstance = new SpeechRecognition();
 
@@ -120,7 +128,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         try {
           let finalTranscript = '';
           let interimTranscript = '';
-          
+
           // Extract both final and interim results
           for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
@@ -156,15 +164,15 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
-        
+
         // Only provide audio feedback for critical errors, not minor ones
         if (event.error === 'no-speech') {
           // Silent handling for no-speech to avoid interrupting user
           return;
         }
-        
+
         let errorMessage = "Voice recognition error: ";
-        
+
         // Provide specific error messages based on error type
         switch (event.error) {
           case 'not-allowed':
@@ -185,7 +193,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           default:
             errorMessage += `Unexpected error: ${event.error}`;
         }
-        
+
         setLastResponse(errorMessage);
         // Add delay before speaking error messages
         setTimeout(() => {
@@ -249,7 +257,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
       const activationPhrase = settings?.activationPhrase || "Hey M";
       let cleanCommand = command.trim();
-      
+
       // Button mode: process command directly without wake phrase
       if (mode) {
         console.log(`Processing ${mode} command:`, cleanCommand);
@@ -260,7 +268,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
         return;
       }
-      
+
       // Always-listening mode: require wake phrase
       if (!command.toLowerCase().includes(activationPhrase.toLowerCase())) {
         // Command doesn't contain wake phrase, ignore silently
@@ -269,7 +277,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
       // Remove activation phrase and parse command
       cleanCommand = command.replace(new RegExp(activationPhrase, 'gi'), '').trim();
-      
+
       // Route command based on type
       if (cleanCommand.toLowerCase().startsWith('log')) {
         await handleLogCommand(cleanCommand, activeTemplate);
@@ -299,52 +307,50 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const handleLogCommand = async (command: string, template: Template) => {
     try {
       console.log('Processing log command:', command, 'with template:', template.name);
-      
+
       // Stop listening immediately to prevent interruption
       if (isListening) {
         stopListening();
       }
-      
+
       // Parse the voice command using the active template
       const parsedData = parseVoiceCommand(command, template, "log");
       console.log('Parsed data structure:', parsedData);
-      
+
       // Validate parsed data has required fields
       if (!parsedData || (typeof parsedData === 'object' && Object.keys(parsedData).length === 0)) {
         throw new Error("Command could not be parsed into structured data");
       }
-      
+
       // Create log entry object
       const logEntry = {
         templateId: template.id,
         rawCommand: command,
         parsedData,
       };
-      
+
       console.log('Submitting log entry:', logEntry);
-      
+
       // Submit to database with error handling
       const result = await logMutation.mutateAsync(logEntry);
       console.log('Log entry created successfully:', result);
 
-      // Provide success feedback with delay to ensure user isn't speaking
+      // Provide voice feedback after a short delay to ensure command processing is complete
       setTimeout(() => {
-        const response = `Successfully logged: ${command}`;
-        setLastResponse(response);
-        speak(response);
-      }, 500);
-      
+        speakResponse(`Logged: ${command}`);
+      }, 1500); // 1.5 second delay to avoid interrupting user
+
       // Reset transcript for next command
       setTranscript("");
-      
+
     } catch (error) {
       console.error('Error handling log command:', error);
-      
+
       // Stop listening on error as well
       if (isListening) {
         stopListening();
       }
-      
+
       // Provide specific error feedback based on error type with delay
       setTimeout(() => {
         let response = "Failed to log your command. ";
@@ -359,7 +365,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         } else {
           response += "Please try again.";
         }
-        
+
         setLastResponse(response);
         speak(response);
       }, 500);
@@ -372,9 +378,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (isListening) {
         stopListening();
       }
-      
+
       const parsedQuery = parseVoiceCommand(command, template, "query");
-      
+
       const result = await queryMutation.mutateAsync({
         templateId: template.id,
         query: parsedQuery,
@@ -386,16 +392,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         setLastResponse(response);
         speak(response);
       }, 500);
-      
+
       // Reset transcript for next command
       setTranscript("");
-      
+
     } catch (error) {
       // Stop listening on error
       if (isListening) {
         stopListening();
       }
-      
+
       setTimeout(() => {
         const response = "Failed to process query. Please try again.";
         setLastResponse(response);
@@ -415,11 +421,21 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     if (recognition && !isListening) {
       setTranscript("");
       setLastResponse("");
-      
+
       try {
         recognition.start();
         setIsListening(true);
         console.log('Speech recognition started');
+
+        // Stop listening after a reasonable timeout to avoid infinite listening
+        const timeoutId = setTimeout(() => {
+          if (recognitionRef.current && isListening) {
+            console.log('Stopping recognition due to timeout');
+            stopListening();
+          }
+        }, 15000); // 15 seconds timeout - increased for longer commands
+
+        return () => clearTimeout(timeoutId); // Cleanup timeout on component unmount or restart
       } catch (error) {
         console.error('Failed to start speech recognition:', error);
         const message = "Could not start voice recognition. Please check microphone permissions.";
@@ -436,6 +452,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setMode(null);
     }
   }, [recognition, isListening]);
+
+  // Helper function to speak responses
+  const speakResponse = (message: string) => {
+    if (settings?.voiceEnabled) {
+      speak(message);
+    }
+  };
 
   return {
     isListening,
