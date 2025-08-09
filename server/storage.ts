@@ -25,7 +25,10 @@ export interface IStorage {
 
   // Log Entries
   getLogEntries(templateId?: string, limit?: number): Promise<LogEntry[]>;
+  getLogEntry(id: string): Promise<LogEntry | undefined>;
   createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry>;
+  updateLogEntry(id: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
+  deleteLogEntry(id: string): Promise<boolean>;
   queryLogEntries(templateId: string, query: any): Promise<LogEntry[]>;
 
   // Settings
@@ -294,22 +297,132 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Log Entries
+  /**
+   * Retrieve all log entries with optional filtering and limiting
+   * @param templateId Optional template ID to filter by
+   * @param limit Maximum number of entries to return (default: 50)
+   * @returns Promise<LogEntry[]> Array of log entries
+   * @throws Error if database query fails
+   */
   async getLogEntries(templateId?: string, limit = 50): Promise<LogEntry[]> {
-    const query = db.select().from(logEntries).orderBy(desc(logEntries.timestamp)).limit(limit);
-    
-    if (templateId) {
-      return await query.where(eq(logEntries.templateId, templateId));
+    try {
+      const query = db.select().from(logEntries).orderBy(desc(logEntries.timestamp)).limit(limit);
+      
+      if (templateId) {
+        return await query.where(eq(logEntries.templateId, templateId));
+      }
+      
+      return await query;
+    } catch (error) {
+      console.error('Failed to fetch log entries:', error);
+      throw new Error('Database error while fetching log entries');
     }
-    
-    return await query;
   }
 
+  /**
+   * Retrieve a specific log entry by ID
+   * @param id Log entry UUID
+   * @returns Promise<LogEntry | undefined> Log entry if found, undefined otherwise
+   * @throws Error if database query fails
+   */
+  async getLogEntry(id: string): Promise<LogEntry | undefined> {
+    try {
+      if (!id || typeof id !== 'string') {
+        return undefined;
+      }
+      
+      const result = await db.select().from(logEntries).where(eq(logEntries.id, id));
+      return result[0] || undefined;
+    } catch (error) {
+      console.error(`Failed to fetch log entry ${id}:`, error);
+      throw new Error(`Database error while fetching log entry: ${id}`);
+    }
+  }
+
+  /**
+   * Create a new log entry in the database
+   * @param logEntry Log entry data to insert
+   * @returns Promise<LogEntry> Created log entry with generated ID
+   * @throws Error if creation fails or validation errors occur
+   */
   async createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry> {
-    const [entry] = await db
-      .insert(logEntries)
-      .values(logEntry)
-      .returning();
-    return entry;
+    try {
+      // Validate required fields
+      if (!logEntry.templateId || !logEntry.rawCommand || !logEntry.parsedData) {
+        throw new Error('Missing required log entry fields');
+      }
+
+      const [entry] = await db
+        .insert(logEntries)
+        .values(logEntry)
+        .returning();
+        
+      if (!entry) {
+        throw new Error('Failed to create log entry - no data returned');
+      }
+      
+      return entry;
+    } catch (error) {
+      console.error('Failed to create log entry:', error);
+      throw error instanceof Error ? error : new Error('Database error while creating log entry');
+    }
+  }
+
+  /**
+   * Update an existing log entry
+   * @param id Log entry UUID to update
+   * @param logEntry Partial log entry data to update
+   * @returns Promise<LogEntry | undefined> Updated log entry or undefined if not found
+   * @throws Error if update fails
+   */
+  async updateLogEntry(id: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined> {
+    try {
+      if (!id || typeof id !== 'string') {
+        return undefined;
+      }
+
+      // Clean undefined values to avoid database issues
+      const cleanedLogEntry = Object.fromEntries(
+        Object.entries(logEntry).filter(([_, value]) => value !== undefined)
+      );
+
+      if (Object.keys(cleanedLogEntry).length === 0) {
+        // No valid updates provided, return existing log entry
+        return this.getLogEntry(id);
+      }
+
+      const result = await db
+        .update(logEntries)
+        .set(cleanedLogEntry)
+        .where(eq(logEntries.id, id))
+        .returning();
+      
+      return result[0] || undefined;
+    } catch (error) {
+      console.error(`Failed to update log entry ${id}:`, error);
+      throw new Error(`Database error while updating log entry: ${id}`);
+    }
+  }
+
+  /**
+   * Delete a log entry from the database
+   * @param id Log entry UUID to delete
+   * @returns Promise<boolean> True if deleted, false if not found
+   * @throws Error if deletion fails
+   */
+  async deleteLogEntry(id: string): Promise<boolean> {
+    try {
+      if (!id || typeof id !== 'string') {
+        return false;
+      }
+
+      const result = await db.delete(logEntries).where(eq(logEntries.id, id));
+      
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(`Failed to delete log entry ${id}:`, error);
+      throw new Error(`Database error while deleting log entry: ${id}`);
+    }
   }
 
   async queryLogEntries(templateId: string, query: any): Promise<LogEntry[]> {

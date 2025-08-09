@@ -305,6 +305,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * PUT /api/logs/:id - Update existing log entry
+   * Validates input and handles partial updates with proper error responses
+   */
+  app.put("/api/logs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`Updating log entry ${id}:`, req.body);
+
+      // Validate UUID format
+      if (!id || typeof id !== 'string' || id.length < 32) {
+        return sendErrorResponse(res, 400, "Invalid log entry ID format");
+      }
+
+      // Parse and validate partial log entry data
+      const logEntry = insertLogEntrySchema.partial().parse(req.body);
+      
+      // Check if log entry exists before updating
+      const existingEntry = await storage.getLogEntry(id);
+      if (!existingEntry) {
+        return sendErrorResponse(res, 404, "Log entry not found");
+      }
+
+      // Perform update
+      const updated = await storage.updateLogEntry(id, logEntry);
+      if (!updated) {
+        return sendErrorResponse(res, 500, "Update operation failed");
+      }
+
+      console.log(`Log entry ${id} updated successfully`);
+      res.json({
+        status: 'success',
+        data: updated,
+        message: "Log entry updated successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid log entry data", 
+          errors: error.errors,
+          status: 'error',
+          timestamp: new Date().toISOString()
+        });
+      }
+      sendErrorResponse(res, 500, "Failed to update log entry", error);
+    }
+  });
+
+  /**
+   * DELETE /api/logs/:id - Delete log entry
+   * Removes log entry with proper cleanup and error handling
+   */
+  app.delete("/api/logs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`Deleting log entry ${id}`);
+
+      // Validate UUID format
+      if (!id || typeof id !== 'string' || id.length < 32) {
+        return sendErrorResponse(res, 400, "Invalid log entry ID format");
+      }
+
+      // Check if log entry exists and get data for response
+      const existingEntry = await storage.getLogEntry(id);
+      if (!existingEntry) {
+        return sendErrorResponse(res, 404, "Log entry not found");
+      }
+
+      // Perform deletion
+      const success = await storage.deleteLogEntry(id);
+      if (!success) {
+        return sendErrorResponse(res, 500, "Delete operation failed");
+      }
+
+      console.log(`Log entry ${id} deleted successfully`);
+      res.json({
+        status: 'success',
+        message: "Log entry deleted successfully",
+        data: { deletedLogId: id, deletedCommand: existingEntry.rawCommand },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete log entry", error);
+    }
+  });
+
   app.post("/api/logs/query", async (req, res) => {
     try {
       const { templateId, query } = req.body;
