@@ -111,7 +111,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         
         // Delayed speech response to avoid interruption
         setTimeout(() => {
-          if (settings?.voiceEnabled) {
+          if (settings?.voiceResponseEnabled) {
             speak(successMessage);
           }
         }, 1000);
@@ -143,7 +143,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         
         // Delayed speech response
         setTimeout(() => {
-          if (settings?.voiceEnabled) {
+          if (settings?.voiceResponseEnabled) {
             speak(errorMessage);
           }
         }, 500);
@@ -176,7 +176,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         setLastResponse(errorMessage);
         
         setTimeout(() => {
-          if (settings?.voiceEnabled) {
+          if (settings?.voiceResponseEnabled) {
             speak(errorMessage);
           }
         }, 500);
@@ -355,7 +355,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           
           // Add delay before speaking error messages
           setTimeout(() => {
-            if (settings?.voiceEnabled) {
+            if (settings?.voiceResponseEnabled) {
               speak(errorMessage);
             }
           }, 1000);
@@ -389,7 +389,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.error("Error initializing speech recognition:", error);
       setLastResponse("Failed to initialize speech recognition. Please refresh the page.");
     }
-  }, [isSupported, cleanup, settings?.voiceEnabled, speak]);
+  }, [isSupported, cleanup, settings?.voiceResponseEnabled, speak]);
 
   /**
    * Process voice commands with comprehensive error handling and validation
@@ -405,7 +405,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (!activeTemplate) {
         const response = "No active template found. Please select a template first.";
         setLastResponse(response);
-        if (settings?.voiceEnabled) {
+        if (settings?.voiceResponseEnabled) {
           speak(response);
         }
         return;
@@ -448,7 +448,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         // Provide helpful feedback for unrecognized commands
         const response = "Command not recognized. Try saying 'log' followed by your data, or 'query' followed by your question.";
         setLastResponse(response);
-        if (settings?.voiceEnabled) {
+        if (settings?.voiceResponseEnabled) {
           speak(response);
         }
       }
@@ -457,7 +457,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       isProcessingRef.current = false;
       const response = "Sorry, I couldn't process your command. Please try again.";
       setLastResponse(response);
-      if (settings?.voiceEnabled) {
+      if (settings?.voiceResponseEnabled) {
         speak(response);
       }
     }
@@ -538,7 +538,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
 
         setLastResponse(response);
-        if (settings?.voiceEnabled) {
+        if (settings?.voiceResponseEnabled) {
           speak(response);
         }
       }, 500);
@@ -579,7 +579,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           `Found ${result.length} matching results` : 
           "No results found";
         setLastResponse(response);
-        if (settings?.voiceEnabled) {
+        if (settings?.voiceResponseEnabled) {
           speak(response);
         }
       }, 500);
@@ -605,7 +605,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
         
         setLastResponse(response);
-        if (settings?.voiceEnabled) {
+        if (settings?.voiceResponseEnabled) {
           speak(response);
         }
       }, 500);
@@ -654,7 +654,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           console.error('Failed to start speech recognition:', error);
           const message = "Could not start voice recognition. Please check microphone permissions.";
           setLastResponse(message);
-          if (settings?.voiceEnabled) {
+          if (settings?.voiceResponseEnabled) {
             speak(message);
           }
         }
@@ -662,7 +662,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     } catch (error) {
       console.error('Error in startListening:', error);
     }
-  }, [recognition, isListening, isSupported, speak, settings?.voiceEnabled]);
+  }, [recognition, isListening, isSupported, speak, settings?.voiceResponseEnabled]);
 
   /**
    * Stop listening for voice commands with proper cleanup

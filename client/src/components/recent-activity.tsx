@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 
 // Placeholder for apiRequest function, assuming it's defined elsewhere
 async function apiRequest(method: string, url: string, body?: any): Promise<any> {
@@ -32,6 +32,7 @@ async function apiRequest(method: string, url: string, body?: any): Promise<any>
 
 export default function RecentActivity() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [editingEntry, setEditingEntry] = useState<LogEntry | null>(null);
   const [editedCommand, setEditedCommand] = useState("");
   const [editedData, setEditedData] = useState("");
@@ -49,11 +50,18 @@ export default function RecentActivity() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
-      toast.("Log entry updated successfully.");
+      toast({
+        title: "Success",
+        description: "Log entry updated successfully.",
+      });
       setEditingEntry(null);
     },
     onError: (error) => {
-      toast.error(`Failed to update log entry: ${error.message}`);
+      toast({
+        title: "Error",
+        description: `Failed to update log entry: ${error.message}`,
+        variant: "destructive",
+      });
     },
   });
 
@@ -63,10 +71,17 @@ export default function RecentActivity() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
-      toast.("Log entry deleted successfully.");
+      toast({
+        title: "Success",
+        description: "Log entry deleted successfully.",
+      });
     },
     onError: (error) => {
-      toast.error(`Failed to delete log entry: ${error.message}`);
+      toast({
+        title: "Error",
+        description: `Failed to delete log entry: ${error.message}`,
+        variant: "destructive",
+      });
     },
   });
 
@@ -86,20 +101,17 @@ export default function RecentActivity() {
           parsedData: parsedData,
         });
       } catch (error: any) {
-        toast.error(`Invalid JSON format: ${error.message}`);
+        toast({
+          title: "Error",
+          description: `Invalid JSON format: ${error.message}`,
+          variant: "destructive",
+        });
       }
     }
   };
 
   const handleDelete = (id: string, rawCommand: string) => {
-    toast.promise(
-      deleteMutation.mutateAsync(id),
-      {
-        loading: `Deleting log entry: "${rawCommand}"...`,
-        success: "Log entry deleted successfully.",
-        error: (e) => `Failed to delete log entry: ${e.message}`,
-      }
-    );
+    deleteMutation.mutate(id);
   };
 
   if (isLoading) {
