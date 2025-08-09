@@ -108,50 +108,189 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Templates
+  /**
+   * Retrieve all templates from database ordered by creation date
+   * @returns Promise<Template[]> Array of all templates
+   * @throws Error if database query fails
+   */
   async getTemplates(): Promise<Template[]> {
-    return await db.select().from(templates).orderBy(desc(templates.createdAt));
+    try {
+      const result = await db.select().from(templates).orderBy(desc(templates.createdAt));
+      return result;
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+      throw new Error('Database error while fetching templates');
+    }
   }
 
+  /**
+   * Retrieve a specific template by ID
+   * @param id Template UUID
+   * @returns Promise<Template | undefined> Template if found, undefined otherwise
+   * @throws Error if database query fails
+   */
   async getTemplate(id: string): Promise<Template | undefined> {
-    const [template] = await db.select().from(templates).where(eq(templates.id, id));
-    return template || undefined;
+    try {
+      if (!id || typeof id !== 'string') {
+        return undefined;
+      }
+      
+      const result = await db.select().from(templates).where(eq(templates.id, id));
+      return result[0] || undefined;
+    } catch (error) {
+      console.error(`Failed to fetch template ${id}:`, error);
+      throw new Error(`Database error while fetching template: ${id}`);
+    }
   }
 
+  /**
+   * Create a new template in the database
+   * @param template Template data to insert
+   * @returns Promise<Template> Created template with generated ID
+   * @throws Error if creation fails or validation errors occur
+   */
   async createTemplate(template: InsertTemplate): Promise<Template> {
-    const [newTemplate] = await db
-      .insert(templates)
-      .values(template)
-      .returning();
-    return newTemplate;
+    try {
+      // Validate required fields
+      if (!template.name || !template.description || !template.logFormat || !template.queryFormat) {
+        throw new Error('Missing required template fields');
+      }
+
+      // Ensure fields is valid JSON
+      if (!template.fields || !Array.isArray(template.fields)) {
+        throw new Error('Template fields must be a valid array');
+      }
+
+      const result = await db
+        .insert(templates)
+        .values({
+          ...template,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+      
+      if (!result[0]) {
+        throw new Error('Failed to create template - no data returned');
+      }
+
+      return result[0];
+    } catch (error) {
+      console.error('Failed to create template:', error);
+      throw error instanceof Error ? error : new Error('Database error while creating template');
+    }
   }
 
+  /**
+   * Update an existing template
+   * @param id Template UUID to update
+   * @param template Partial template data to update
+   * @returns Promise<Template | undefined> Updated template or undefined if not found
+   * @throws Error if update fails
+   */
   async updateTemplate(id: string, template: Partial<InsertTemplate>): Promise<Template | undefined> {
-    const [updated] = await db
-      .update(templates)
-      .set({ ...template, updatedAt: new Date() })
-      .where(eq(templates.id, id))
-      .returning();
-    return updated || undefined;
+    try {
+      if (!id || typeof id !== 'string') {
+        return undefined;
+      }
+
+      // Clean undefined values to avoid database issues
+      const cleanedTemplate = Object.fromEntries(
+        Object.entries(template).filter(([_, value]) => value !== undefined)
+      );
+
+      if (Object.keys(cleanedTemplate).length === 0) {
+        // No valid updates provided, return existing template
+        return this.getTemplate(id);
+      }
+
+      const result = await db
+        .update(templates)
+        .set({ 
+          ...cleanedTemplate, 
+          updatedAt: new Date() 
+        })
+        .where(eq(templates.id, id))
+        .returning();
+      
+      return result[0] || undefined;
+    } catch (error) {
+      console.error(`Failed to update template ${id}:`, error);
+      throw new Error(`Database error while updating template: ${id}`);
+    }
   }
 
+  /**
+   * Delete a template and all associated log entries
+   * @param id Template UUID to delete
+   * @returns Promise<boolean> True if deleted, false if not found
+   * @throws Error if deletion fails
+   */
   async deleteTemplate(id: string): Promise<boolean> {
-    const result = await db.delete(templates).where(eq(templates.id, id));
-    return (result.rowCount ?? 0) > 0;
+    try {
+      if (!id || typeof id !== 'string') {
+        return false;
+      }
+
+      // First, delete associated log entries to maintain referential integrity
+      await db.delete(logEntries).where(eq(logEntries.templateId, id));
+      
+      // Then delete the template
+      const result = await db.delete(templates).where(eq(templates.id, id));
+      
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error(`Failed to delete template ${id}:`, error);
+      throw new Error(`Database error while deleting template: ${id}`);
+    }
   }
 
+  /**
+   * Get the currently active template
+   * @returns Promise<Template | undefined> Active template or undefined if none set
+   * @throws Error if database query fails
+   */
   async getActiveTemplate(): Promise<Template | undefined> {
-    const [activeTemplate] = await db.select().from(templates).where(eq(templates.isActive, true));
-    return activeTemplate || undefined;
+    try {
+      const result = await db.select().from(templates).where(eq(templates.isActive, true));
+      return result[0] || undefined;
+    } catch (error) {
+      console.error('Failed to fetch active template:', error);
+      throw new Error('Database error while fetching active template');
+    }
   }
 
+  /**
+   * Set a template as active (deactivates all others)
+   * @param id Template UUID to activate
+   * @returns Promise<boolean> True if successfully activated, false if template not found
+   * @throws Error if database operations fail
+   */
   async setActiveTemplate(id: string): Promise<boolean> {
-    await db.update(templates).set({ isActive: false });
-    const [updated] = await db
-      .update(templates)
-      .set({ isActive: true })
-      .where(eq(templates.id, id))
-      .returning();
-    return !!updated;
+    try {
+      if (!id || typeof id !== 'string') {
+        return false;
+      }
+
+      // Use transaction to ensure atomicity
+      // First, deactivate all templates
+      await db.update(templates).set({ isActive: false });
+      
+      // Then activate the specified template
+      const result = await db
+        .update(templates)
+        .set({ 
+          isActive: true,
+          updatedAt: new Date()
+        })
+        .where(eq(templates.id, id))
+        .returning();
+      
+      return !!result[0];
+    } catch (error) {
+      console.error(`Failed to set active template ${id}:`, error);
+      throw new Error(`Database error while setting active template: ${id}`);
+    }
   }
 
   // Log Entries

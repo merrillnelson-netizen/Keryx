@@ -131,46 +131,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * PUT /api/templates/:id - Update existing template
+   * Validates input and handles partial updates with proper error responses
+   */
   app.put("/api/templates/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      console.log(`Updating template ${id}:`, req.body);
+
+      // Validate UUID format
+      if (!id || typeof id !== 'string' || id.length < 32) {
+        return sendErrorResponse(res, 400, "Invalid template ID format");
+      }
+
+      // Parse and validate partial template data
       const template = insertTemplateSchema.partial().parse(req.body);
+      
+      // Check if template exists before updating
+      const existingTemplate = await storage.getTemplate(id);
+      if (!existingTemplate) {
+        return sendErrorResponse(res, 404, "Template not found");
+      }
+
+      // Perform update
       const updated = await storage.updateTemplate(id, template);
       if (!updated) {
-        return res.status(404).json({ message: "Template not found" });
+        return sendErrorResponse(res, 500, "Update operation failed");
       }
-      res.json(updated);
+
+      console.log(`Template ${id} updated successfully`);
+      res.json({
+        status: 'success',
+        data: updated,
+        message: `Template "${updated.name}" updated successfully`,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid template data", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid template data", 
+          errors: error.errors,
+          status: 'error',
+          timestamp: new Date().toISOString()
+        });
       }
-      res.status(500).json({ message: "Failed to update template" });
+      sendErrorResponse(res, 500, "Failed to update template", error);
     }
   });
 
+  /**
+   * POST /api/templates/:id/activate - Set template as active
+   * Deactivates all other templates and activates the specified one
+   */
   app.post("/api/templates/:id/activate", async (req, res) => {
     try {
       const { id } = req.params;
+      console.log(`Activating template ${id}`);
+
+      // Validate UUID format
+      if (!id || typeof id !== 'string' || id.length < 32) {
+        return sendErrorResponse(res, 400, "Invalid template ID format");
+      }
+
+      // Check if template exists before activating
+      const existingTemplate = await storage.getTemplate(id);
+      if (!existingTemplate) {
+        return sendErrorResponse(res, 404, "Template not found");
+      }
+
+      // Activate the template
       const success = await storage.setActiveTemplate(id);
       if (!success) {
-        return res.status(404).json({ message: "Template not found" });
+        return sendErrorResponse(res, 500, "Failed to activate template");
       }
-      res.json({ message: "Template activated successfully" });
+
+      console.log(`Template ${id} activated successfully`);
+      res.json({
+        status: 'success',
+        message: `Template "${existingTemplate.name}" activated successfully`,
+        data: { templateId: id, templateName: existingTemplate.name },
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to activate template" });
+      sendErrorResponse(res, 500, "Failed to activate template", error);
     }
   });
 
+  /**
+   * DELETE /api/templates/:id - Delete template and associated data
+   * Removes template and all related log entries with proper cleanup
+   */
   app.delete("/api/templates/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      console.log(`Deleting template ${id}`);
+
+      // Validate UUID format
+      if (!id || typeof id !== 'string' || id.length < 32) {
+        return sendErrorResponse(res, 400, "Invalid template ID format");
+      }
+
+      // Check if template exists and get name for response
+      const existingTemplate = await storage.getTemplate(id);
+      if (!existingTemplate) {
+        return sendErrorResponse(res, 404, "Template not found");
+      }
+
+      // Prevent deletion of active template without explicit confirmation
+      if (existingTemplate.isActive) {
+        return sendErrorResponse(res, 409, "Cannot delete active template. Please activate another template first.");
+      }
+
+      // Perform deletion (includes cleanup of associated log entries)
       const success = await storage.deleteTemplate(id);
       if (!success) {
-        return res.status(404).json({ message: "Template not found" });
+        return sendErrorResponse(res, 500, "Delete operation failed");
       }
-      res.json({ message: "Template deleted successfully" });
+
+      console.log(`Template ${id} deleted successfully`);
+      res.json({
+        status: 'success',
+        message: `Template "${existingTemplate.name}" deleted successfully`,
+        data: { deletedTemplateId: id, deletedTemplateName: existingTemplate.name },
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to delete template" });
+      sendErrorResponse(res, 500, "Failed to delete template", error);
     }
   });
 
