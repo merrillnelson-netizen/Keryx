@@ -119,17 +119,29 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
         try {
           let finalTranscript = '';
+          let interimTranscript = '';
           
-          // Extract final results from the speech recognition event
+          // Extract both final and interim results
           for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
               finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
             }
           }
 
+          // Update transcript with interim results for real-time feedback
+          if (interimTranscript.trim()) {
+            setTranscript(interimTranscript);
+          }
+
+          // Process final results with a small delay to ensure complete speech
           if (finalTranscript.trim()) {
             setTranscript(finalTranscript);
-            processCommand(finalTranscript);
+            // Add delay to ensure user has finished speaking
+            setTimeout(() => {
+              processCommand(finalTranscript);
+            }, 800);
           }
         } catch (error) {
           console.error("Error processing speech results:", error);
@@ -143,15 +155,20 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
        */
       recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        
+        // Only provide audio feedback for critical errors, not minor ones
+        if (event.error === 'no-speech') {
+          // Silent handling for no-speech to avoid interrupting user
+          return;
+        }
+        
         let errorMessage = "Voice recognition error: ";
         
         // Provide specific error messages based on error type
         switch (event.error) {
           case 'not-allowed':
             errorMessage += "Microphone access was denied. Please allow microphone permissions and try again.";
-            break;
-          case 'no-speech':
-            errorMessage += "No speech was detected. Please try speaking again.";
             break;
           case 'audio-capture':
             errorMessage += "Audio capture failed. Please check your microphone.";
@@ -170,8 +187,10 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
         
         setLastResponse(errorMessage);
-        speak(errorMessage);
-        setIsListening(false);
+        // Add delay before speaking error messages
+        setTimeout(() => {
+          speak(errorMessage);
+        }, 1000);
       };
 
       /**
@@ -281,6 +300,11 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     try {
       console.log('Processing log command:', command, 'with template:', template.name);
       
+      // Stop listening immediately to prevent interruption
+      if (isListening) {
+        stopListening();
+      }
+      
       // Parse the voice command using the active template
       const parsedData = parseVoiceCommand(command, template, "log");
       console.log('Parsed data structure:', parsedData);
@@ -303,43 +327,52 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       const result = await logMutation.mutateAsync(logEntry);
       console.log('Log entry created successfully:', result);
 
-      // Provide success feedback
-      const response = `Successfully logged: ${command}`;
-      setLastResponse(response);
-      speak(response);
+      // Provide success feedback with delay to ensure user isn't speaking
+      setTimeout(() => {
+        const response = `Successfully logged: ${command}`;
+        setLastResponse(response);
+        speak(response);
+      }, 500);
       
       // Reset transcript for next command
       setTranscript("");
       
-      // Auto-stop listening after successful log to prevent confusion
+    } catch (error) {
+      console.error('Error handling log command:', error);
+      
+      // Stop listening on error as well
       if (isListening) {
         stopListening();
       }
       
-    } catch (error) {
-      console.error('Error handling log command:', error);
-      
-      // Provide specific error feedback based on error type
-      let response = "Failed to log your command. ";
-      if (error instanceof Error) {
-        if (error.message.includes("parse")) {
-          response += "The command format wasn't recognized. Please check the example format and try again.";
-        } else if (error.message.includes("network") || error.message.includes("fetch")) {
-          response += "Network error occurred. Please check your connection and try again.";
+      // Provide specific error feedback based on error type with delay
+      setTimeout(() => {
+        let response = "Failed to log your command. ";
+        if (error instanceof Error) {
+          if (error.message.includes("parse")) {
+            response += "The command format wasn't recognized. Please check the example format and try again.";
+          } else if (error.message.includes("network") || error.message.includes("fetch")) {
+            response += "Network error occurred. Please check your connection and try again.";
+          } else {
+            response += "Please try again with a clearer command.";
+          }
         } else {
-          response += "Please try again with a clearer command.";
+          response += "Please try again.";
         }
-      } else {
-        response += "Please try again.";
-      }
-      
-      setLastResponse(response);
-      speak(response);
+        
+        setLastResponse(response);
+        speak(response);
+      }, 500);
     }
   };
 
   const handleQueryCommand = async (command: string, template: Template) => {
     try {
+      // Stop listening immediately to prevent interruption
+      if (isListening) {
+        stopListening();
+      }
+      
       const parsedQuery = parseVoiceCommand(command, template, "query");
       
       const result = await queryMutation.mutateAsync({
@@ -347,14 +380,27 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         query: parsedQuery,
       });
 
-      // Process results and generate response
-      const response = result ? "Found matching results" : "No results found";
-      setLastResponse(response);
-      speak(response);
+      // Process results and generate response with delay
+      setTimeout(() => {
+        const response = result ? "Found matching results" : "No results found";
+        setLastResponse(response);
+        speak(response);
+      }, 500);
+      
+      // Reset transcript for next command
+      setTranscript("");
+      
     } catch (error) {
-      const response = "Failed to process query. Please try again.";
-      setLastResponse(response);
-      speak(response);
+      // Stop listening on error
+      if (isListening) {
+        stopListening();
+      }
+      
+      setTimeout(() => {
+        const response = "Failed to process query. Please try again.";
+        setLastResponse(response);
+        speak(response);
+      }, 500);
     }
   };
 

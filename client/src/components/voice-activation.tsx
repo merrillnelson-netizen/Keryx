@@ -19,13 +19,13 @@ export default function VoiceActivation() {
   const handleLogMode = () => {
     setMode("log");
     startListening();
-    speak("Log mode activated. Ready for logging commands.");
+    // Remove immediate speech feedback to prevent interrupting user commands
   };
 
   const handleQueryMode = () => {
     setMode("query");
     startListening();
-    speak("Query mode activated. Ready for search commands.");
+    // Remove immediate speech feedback to prevent interrupting user commands
   };
 
   if (!isSupported) {
