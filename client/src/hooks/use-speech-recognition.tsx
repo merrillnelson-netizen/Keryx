@@ -391,105 +391,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   }, [isSupported, cleanup, settings?.voiceResponseEnabled, speak]);
 
   /**
-   * Process voice transcript and handle different command types
-   * Determines if transcript contains valid commands and routes appropriately
-   */
-  const processTranscript = useCallback(async (transcript: string) => {
-    try {
-      // Prevent processing if already handling a command
-      if (isProcessingRef.current) {
-        console.log("Already processing a command, skipping...");
-        return;
-      }
-
-      // Clean up the transcript - remove extra spaces and normalize
-      const cleanTranscript = transcript.trim().toLowerCase();
-
-      if (!cleanTranscript) {
-        console.log("Empty transcript, ignoring");
-        return;
-      }
-
-      console.log("Processing command:", cleanTranscript, "Mode:", mode, "Active template:", activeTemplate?.name || 'None');
-
-      // Check for activation phrase if we have settings
-      if (settings?.activationPhrase) {
-        const activationPhrase = settings.activationPhrase.toLowerCase();
-
-        if (!cleanTranscript.includes(activationPhrase)) {
-          console.log(`Activation phrase "${activationPhrase}" not found in: "${cleanTranscript}"`);
-          return;
-        }
-
-        // Remove activation phrase from transcript for processing
-        const commandPart = cleanTranscript.replace(activationPhrase, '').trim();
-        if (!commandPart) {
-          console.log("No command found after activation phrase");
-          // Provide feedback that we're listening
-          setLastResponse("I'm listening. What would you like to log?");
-          if (settings?.voiceResponseEnabled) {
-            speak("I'm listening. What would you like to log?");
-          }
-          return;
-        }
-
-        console.log(`Command after activation phrase: "${commandPart}"`);
-
-        // Process the command
-        await handleCommand(commandPart);
-      } else {
-        // No activation phrase set, process directly
-        await handleCommand(cleanTranscript);
-      }
-
-    } catch (error) {
-      console.error('Error processing transcript:', error);
-      isProcessingRef.current = false;
-
-      setTimeout(() => {
-        const errorMessage = "Failed to process your command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
-    }
-  }, [mode, activeTemplate, settings, handleCommand]);
-
-  /**
-   * Handle different types of voice commands
-   * Routes commands to appropriate handlers based on content
-   */
-  const handleCommand = useCallback(async (command: string) => {
-    try {
-      console.log('Processing command:', command);
-
-      // Handle different command types
-      if (command.startsWith('log ')) {
-        await handleLogCommand(command.substring(4)); // Remove 'log ' prefix
-      } else if (command.includes('query') || command.includes('find') || command.includes('show')) {
-        await handleQueryCommand(command);
-      } else {
-        // For billiards template, treat any command as a log command
-        // This allows natural speech like "round 1 table 2 game 1 john breaks steve misses"
-        console.log('Treating as log command:', command);
-        await handleLogCommand(command);
-      }
-    } catch (error) {
-      console.error('Error in handleCommand:', error);
-      isProcessingRef.current = false;
-
-      setTimeout(() => {
-        const errorMessage = "I didn't understand that command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
-    }
-  }, [handleLogCommand, handleQueryCommand, settings]);
-
-  /**
    * Handle log command with voice parser integration
    * Parses voice input and creates log entries in database
    */
@@ -588,9 +489,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
    * Processes voice queries and returns results
    * 
    * @param command - Cleaned voice command text
-   * @param template - Active template for parsing structure
    */
-  const handleQueryCommand = async (command: string) => {
+  const handleQueryCommand = useCallback(async (command: string) => {
     try {
       // Stop listening immediately to prevent interruption
       if (isListening) {
@@ -657,7 +557,108 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }, 500);
     }
-  };
+  }, [activeTemplate, isListening, queryMutation, settings, speak, stopListening]);
+
+  /**
+   * Handle different types of voice commands
+   * Routes commands to appropriate handlers based on content
+   */
+  const handleCommand = useCallback(async (command: string) => {
+    try {
+      console.log('Processing command:', command);
+
+      // Handle different command types
+      if (command.startsWith('log ')) {
+        await handleLogCommand(command.substring(4)); // Remove 'log ' prefix
+      } else if (command.includes('query') || command.includes('find') || command.includes('show')) {
+        await handleQueryCommand(command);
+      } else {
+        // For billiards template, treat any command as a log command
+        // This allows natural speech like "round 1 table 2 game 1 john breaks steve misses"
+        console.log('Treating as log command:', command);
+        await handleLogCommand(command);
+      }
+    } catch (error) {
+      console.error('Error in handleCommand:', error);
+      isProcessingRef.current = false;
+
+      setTimeout(() => {
+        const errorMessage = "I didn't understand that command. Please try again.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+      }, 500);
+    }
+  }, [handleLogCommand, handleQueryCommand, settings]);
+
+  /**
+   * Process voice transcript and handle different command types
+   * Determines if transcript contains valid commands and routes appropriately
+   */
+  const processTranscript = useCallback(async (transcript: string) => {
+    try {
+      // Prevent processing if already handling a command
+      if (isProcessingRef.current) {
+        console.log("Already processing a command, skipping...");
+        return;
+      }
+
+      // Clean up the transcript - remove extra spaces and normalize
+      const cleanTranscript = transcript.trim().toLowerCase();
+
+      if (!cleanTranscript) {
+        console.log("Empty transcript, ignoring");
+        return;
+      }
+
+      console.log("Processing command:", cleanTranscript, "Mode:", mode, "Active template:", activeTemplate?.name || 'None');
+
+      // Check for activation phrase if we have settings
+      if (settings?.activationPhrase) {
+        const activationPhrase = settings.activationPhrase.toLowerCase();
+
+        if (!cleanTranscript.includes(activationPhrase)) {
+          console.log(`Activation phrase "${activationPhrase}" not found in: "${cleanTranscript}"`);
+          return;
+        }
+
+        // Remove activation phrase from transcript for processing
+        const commandPart = cleanTranscript.replace(activationPhrase, '').trim();
+        if (!commandPart) {
+          console.log("No command found after activation phrase");
+          // Provide feedback that we're listening
+          setLastResponse("I'm listening. What would you like to log?");
+          if (settings?.voiceResponseEnabled) {
+            speak("I'm listening. What would you like to log?");
+          }
+          return;
+        }
+
+        console.log(`Command after activation phrase: "${commandPart}"`);
+
+        // Process the command
+        await handleCommand(commandPart);
+      } else {
+        // No activation phrase set, process directly
+        await handleCommand(cleanTranscript);
+      }
+
+    } catch (error) {
+      console.error('Error processing transcript:', error);
+      isProcessingRef.current = false;
+
+      setTimeout(() => {
+        const errorMessage = "Failed to process your command. Please try again.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+      }, 500);
+    }
+  }, [mode, activeTemplate, settings, handleCommand, speak]);
+
+  
 
   /**
    * Start listening for voice commands with proper error handling

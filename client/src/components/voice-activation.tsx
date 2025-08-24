@@ -11,9 +11,7 @@ export default function VoiceActivation() {
     startListening, 
     stopListening,
     mode,
-    setMode,
-    processTranscript, // Assuming processTranscript is available from the hook
-    isProcessing // Assuming isProcessing is available from the hook
+    setMode
   } = useSpeechRecognition();
 
   const { speak } = useSpeechSynthesis();
