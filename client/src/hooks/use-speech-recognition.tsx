@@ -188,6 +188,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // Check if speech recognition is supported in current browser
   const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
 
+
+
   /**
    * Cleanup function to prevent memory leaks
    * Properly disposes of all resources and event listeners
@@ -454,7 +456,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }, 500);
     }
-  }, [mode, activeTemplate, settings, handleCommand, speak]);
+  }, [mode, activeTemplate, settings, speak]);
 
   /**
    * Handle different types of voice commands
@@ -487,7 +489,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }, 500);
     }
-  }, [handleLogCommand, handleQueryCommand, settings]);
+  }, [settings]);
 
   /**
    * Handle query commands with comprehensive error handling
@@ -562,7 +564,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }, 500);
     }
-  }, [activeTemplate, isListening, queryMutation, settings, speak, stopListening]);
+  }, [activeTemplate, isListening, queryMutation, settings, speak]);
 
   /**
    * Handle log command with voice parser integration
@@ -599,7 +601,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       }
 
       // Parse the voice command using the voice parser
-      const parsedData = await parseVoiceCommand(data, activeTemplate);
+      const parsedData = await parseVoiceCommand(data, activeTemplate, "log");
       console.log('Parsed voice data:', parsedData);
 
       // Ensure parsed data is valid
@@ -656,7 +658,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }, 500);
     }
-  }, [activeTemplate, isListening, logMutation, settings, speak, stopListening]);
+  }, [activeTemplate, isListening, logMutation, settings, speak]);
 
   /**
    * Stop listening for voice commands with proper cleanup
