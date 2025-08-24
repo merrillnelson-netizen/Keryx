@@ -111,7 +111,9 @@ function parseBilliardsCommand(
 
 /**
  * Parse billiards log commands with comprehensive error handling
- * Expected format: "Round X Table Y Game Z - Player Action, Player Action"
+ * Expected formats: 
+ * - "Round X Table Y Game Z - Player Action, Player Action"
+ * - "Round X, Table Y, Game Z, Player Action, Player Action"
  * 
  * @param command - Cleaned command string
  * @returns Parsed billiards log data
@@ -156,9 +158,36 @@ function parseBilliardsLog(command: string): ParsedVoiceData | null {
 
     console.log('Extracted numbers - Round:', round, 'Table:', table, 'Game:', game);
 
-    // Find the actions part after the dash
-    const actionsPartMatch = command.split('-');
-    const actionsPart = actionsPartMatch.length > 1 ? actionsPartMatch[1].trim() : '';
+    // Handle both formats: dash-separated and comma-separated
+    let actionsPart = '';
+    
+    // Check for dash format first
+    const dashParts = command.split('-');
+    if (dashParts.length > 1) {
+      actionsPart = dashParts[1].trim();
+    } else {
+      // Handle comma-separated format
+      // Remove the round/table/game parts and get the remaining actions
+      let remainingCommand = command;
+      
+      // Remove round part
+      if (roundMatch) {
+        remainingCommand = remainingCommand.replace(roundMatch[0], '').trim();
+      }
+      
+      // Remove table part
+      if (tableMatch) {
+        remainingCommand = remainingCommand.replace(tableMatch[0], '').trim();
+      }
+      
+      // Remove game part
+      if (gameMatch) {
+        remainingCommand = remainingCommand.replace(gameMatch[0], '').trim();
+      }
+      
+      // Remove leading commas and clean up
+      actionsPart = remainingCommand.replace(/^,+\s*/, '').trim();
+    }
 
     if (!actionsPart) {
       console.warn('No actions found in command');
@@ -172,6 +201,8 @@ function parseBilliardsLog(command: string): ParsedVoiceData | null {
         type: 'billiards_log'
       };
     }
+
+    console.log('Actions part extracted:', actionsPart);
 
     // Parse actions and players
     const { actions, players } = parseActionsAndPlayers(actionsPart.trim());
