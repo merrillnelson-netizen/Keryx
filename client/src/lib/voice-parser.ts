@@ -1,4 +1,3 @@
-
 /**
  * Voice Command Parser Module
  * 
@@ -53,7 +52,7 @@ export function parseVoiceCommand(
 
     // Clean and normalize the command string
     const cleanCommand = command.trim().toLowerCase();
-    
+
     // Initialize result object
     const result: ParsedVoiceData = {};
 
@@ -61,7 +60,7 @@ export function parseVoiceCommand(
       // Template-specific parsing based on template name
       if (template.name.toLowerCase().includes('billiards') || 
           template.name.toLowerCase().includes('pool')) {
-        
+
         return parseBilliardsCommand(cleanCommand, template, type);
       }
 
@@ -119,20 +118,48 @@ function parseBilliardsCommand(
  */
 function parseBilliardsLog(command: string): ParsedVoiceData | null {
   try {
-    // Regex patterns for extracting billiards data
-    const roundMatch = command.match(/round\s+(\d+)/i);
-    const tableMatch = command.match(/table\s+(\d+)/i);
-    const gameMatch = command.match(/game\s+(\d+)/i);
+    // Extract round information - be more flexible with number words
+    let round = 1;
+    const roundMatch = command.match(/round\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
+    if (roundMatch) {
+      const numStr = roundMatch[1].toLowerCase();
+      const wordToNum = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+      };
+      round = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
 
-    // Extract basic numeric fields
-    const round = roundMatch ? parseInt(roundMatch[1], 10) : null;
-    const table = tableMatch ? parseInt(tableMatch[1], 10) : null;
-    const game = gameMatch ? parseInt(gameMatch[1], 10) : null;
+    // Extract table information - be more flexible with number words
+    let table = 1;
+    const tableMatch = command.match(/table\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
+    if (tableMatch) {
+      const numStr = tableMatch[1].toLowerCase();
+      const wordToNum = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+      };
+      table = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
+
+    // Extract game information - be more flexible with number words
+    let game = 1;
+    const gameMatch = command.match(/game\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
+    if (gameMatch) {
+      const numStr = gameMatch[1].toLowerCase();
+      const wordToNum = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+      };
+      game = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
 
     console.log('Extracted numbers - Round:', round, 'Table:', table, 'Game:', game);
 
     // Find the actions part after the dash
-    const actionsPart = command.split('-')[1];
+    const actionsPartMatch = command.split('-');
+    const actionsPart = actionsPartMatch.length > 1 ? actionsPartMatch[1].trim() : '';
+
     if (!actionsPart) {
       console.warn('No actions found in command');
       // Return basic structure even without actions
@@ -180,13 +207,10 @@ function parseActionsAndPlayers(actionsText: string): { actions: any[], players:
     const playersSet = new Set<string>(); // Use Set to avoid duplicates
 
     // Split by commas to get individual action phrases
-    const actionPhrases = actionsText.split(',').map(phrase => phrase.trim());
+    const actionPhrases = actionsText.split(',').map(phrase => phrase.trim()).filter(phrase => phrase.length > 0);
 
     for (const phrase of actionPhrases) {
       try {
-        // Skip empty phrases
-        if (!phrase) continue;
-
         // Common action patterns
         const patterns = [
           // "Player action" format
@@ -225,7 +249,7 @@ function parseActionsAndPlayers(actionsText: string): { actions: any[], players:
             // Add to collections
             playersSet.add(player);
             actions.push({ player, action });
-            
+
             matched = true;
             console.log(`Parsed action: ${player} ${action}`);
             break;
@@ -249,6 +273,23 @@ function parseActionsAndPlayers(actionsText: string): { actions: any[], players:
       } catch (phraseError) {
         console.warn('Error parsing phrase:', phrase, phraseError);
         continue; // Continue processing other phrases
+      }
+    }
+
+    // If no specific actions found but we have text, create a general action
+    if (actions.length === 0 && actionsText.trim()) {
+      actions.push(`action: ${actionsText.trim()}`);
+    }
+
+    // If no players found, try to extract any capitalized words or assume "player"
+    if (playersSet.size === 0) {
+      const capitalizedWords = actionsText.split(/\s+/).filter(word => 
+        word.length > 0 && word[0] === word[0].toUpperCase()
+      );
+      if (capitalizedWords.length > 0) {
+        capitalizedWords.slice(0, 2).forEach(player => playersSet.add(player.charAt(0).toUpperCase() + player.slice(1).toLowerCase())); // Max 2 players
+      } else if (actionsText.trim()) {
+        playersSet.add('Player1');
       }
     }
 
@@ -288,16 +329,28 @@ function parseBilliardsQuery(command: string): ParsedVoiceData | null {
     }
 
     // Extract numeric filters
-    const roundMatch = command.match(/round\s+(\d+)/i);
-    const tableMatch = command.match(/table\s+(\d+)/i);
-    const gameMatch = command.match(/game\s+(\d+)/i);
+    const roundMatch = command.match(/round\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
+    const tableMatch = command.match(/table\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
+    const gameMatch = command.match(/game\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)/i);
 
-    if (roundMatch) result.round = parseInt(roundMatch[1], 10);
-    if (tableMatch) result.table = parseInt(tableMatch[1], 10);
-    if (gameMatch) result.game = parseInt(gameMatch[1], 10);
+    if (roundMatch) {
+      const numStr = roundMatch[1].toLowerCase();
+      const wordToNum = { 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10 };
+      result.round = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
+    if (tableMatch) {
+      const numStr = tableMatch[1].toLowerCase();
+      const wordToNum = { 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10 };
+      result.table = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
+    if (gameMatch) {
+      const numStr = gameMatch[1].toLowerCase();
+      const wordToNum = { 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10 };
+      result.game = wordToNum[numStr] || parseInt(numStr) || 1;
+    }
 
     // Extract action filters
-    const actions = ['broke', 'racked', 'shot', 'missed', 'made', 'won', 'lost', 'scratched', 'fouled'];
+    const actions = ['broke', 'break', 'makes', 'make', 'misses', 'miss', 'scratches', 'scratch', 'shoots', 'shoot', 'sinks', 'sink', 'pots', 'pot', 'hits', 'hit', 'calls', 'call', 'wins', 'win', 'loses', 'lose', 'fouls', 'foul'];
     for (const action of actions) {
       if (command.includes(action)) {
         result.action = action;

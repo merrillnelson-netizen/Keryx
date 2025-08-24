@@ -11,9 +11,11 @@ export default function VoiceActivation() {
     startListening, 
     stopListening,
     mode,
-    setMode 
+    setMode,
+    processTranscript, // Assuming processTranscript is available from the hook
+    isProcessing // Assuming isProcessing is available from the hook
   } = useSpeechRecognition();
-  
+
   const { speak } = useSpeechSynthesis();
 
   const handleLogMode = () => {
@@ -70,7 +72,7 @@ export default function VoiceActivation() {
             }
           </p>
         </div>
-        
+
         {/* Manual Activation Buttons */}
         <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-4">
           {isListening ? (
@@ -93,7 +95,7 @@ export default function VoiceActivation() {
                 <span className="material-icons mr-2">add_circle</span>
                 <span className="font-medium">Log Mode</span>
               </Button>
-              
+
               <Button 
                 onClick={handleQueryMode}
                 className="bg-accent hover:bg-orange-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
