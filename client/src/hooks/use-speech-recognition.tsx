@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -188,7 +189,297 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // Check if speech recognition is supported in current browser
   const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
 
+  /**
+   * Stop listening for voice commands with proper cleanup
+   * Ensures all resources are properly disposed
+   */
+  const stopListening = useCallback(() => {
+    try {
+      // Clear timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
 
+      if (recognition && isListening) {
+        recognition.stop();
+        setIsListening(false);
+        setMode(null);
+        isProcessingRef.current = false;
+      }
+    } catch (error) {
+      console.error('Error stopping recognition:', error);
+    }
+  }, [recognition, isListening]);
+
+  /**
+   * Handle log command with voice parser integration
+   * Parses voice input and creates log entries in database
+   */
+  const handleLogCommand = useCallback(async (data: string) => {
+    try {
+      console.log('Handling log command with data:', data);
+
+      // Validate we have an active template
+      if (!activeTemplate) {
+        const errorMessage = "No active template found. Please activate a template first.";
+        setLastResponse(errorMessage);
+        setTimeout(() => {
+          if (settings?.voiceResponseEnabled) {
+            speak(errorMessage);
+          }
+        }, 500);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // Set processing flag to prevent interruptions
+      isProcessingRef.current = true;
+
+      // Stop listening during processing to avoid interference
+      if (isListening) {
+        stopListening();
+      }
+
+      // Validate data is provided
+      if (!data || data.trim().length === 0) {
+        throw new Error("No data provided for log command");
+      }
+
+      // For now, let's simplify - just create a basic log entry without complex parsing
+      // This will help us get logging working first
+      const basicParsedData = {
+        command: data.trim(),
+        timestamp: new Date().toISOString(),
+        type: 'simple_log'
+      };
+
+      console.log('Creating basic parsed data:', basicParsedData);
+
+      // Create log entry object with proper structure
+      const logEntry = {
+        templateId: activeTemplate.id,
+        rawCommand: data.trim(),
+        parsedData: basicParsedData,
+        timestamp: new Date(),
+      };
+
+      console.log('Creating log entry:', logEntry);
+
+      // Submit to database using the mutation
+      const result = await logMutation.mutateAsync(logEntry);
+      console.log('Log entry created successfully:', result);
+
+      // Reset transcript for next command
+      setTranscript("");
+
+    } catch (error) {
+      console.error('Error handling log command:', error);
+      isProcessingRef.current = false;
+
+      // Stop listening on error as well
+      if (isListening) {
+        stopListening();
+      }
+
+      // Provide specific error feedback based on error type with delay
+      setTimeout(() => {
+        let response = "Failed to log your command. ";
+        if (error instanceof Error) {
+          if (error.message.includes("No data")) {
+            response += "Please provide data to log.";
+          } else if (error.message.includes("network") || error.message.includes("fetch")) {
+            response += "Network error occurred. Please check your connection and try again.";
+          } else {
+            response += "Please try again with a clearer command.";
+          }
+        } else {
+          response += "Please try again.";
+        }
+
+        setLastResponse(response);
+        if (settings?.voiceResponseEnabled) {
+          speak(response);
+        }
+      }, 500);
+    }
+  }, [activeTemplate, isListening, logMutation, settings, speak, stopListening]);
+
+  /**
+   * Handle query commands with comprehensive error handling
+   * Processes voice queries and returns results
+   */
+  const handleQueryCommand = useCallback(async (command: string) => {
+    try {
+      // Stop listening immediately to prevent interruption
+      if (isListening) {
+        stopListening();
+      }
+
+      // Remove "query" prefix if present and validate template
+      const cleanCommand = command.replace(/^query\s+/i, '').trim();
+      if (!activeTemplate) {
+        const errorMessage = "No active template found. Please activate a template first.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+        isProcessingRef.current = false;
+        return;
+      }
+
+      if (!cleanCommand) {
+        throw new Error("No query provided after 'query' command");
+      }
+
+      // Simple query parsing for now
+      const parsedQuery = {
+        query: cleanCommand,
+        type: 'simple_query'
+      };
+
+      const result = await queryMutation.mutateAsync({
+        templateId: activeTemplate.id,
+        query: parsedQuery,
+      });
+
+      // Process results and generate response with delay
+      setTimeout(() => {
+        const response = result && result.length > 0 ? 
+          `Found ${result.length} matching results` : 
+          "No results found";
+        setLastResponse(response);
+        if (settings?.voiceResponseEnabled) {
+          speak(response);
+        }
+      }, 500);
+
+      // Reset transcript for next command
+      setTranscript("");
+
+    } catch (error) {
+      console.error('Error handling query command:', error);
+      isProcessingRef.current = false;
+
+      // Stop listening on error
+      if (isListening) {
+        stopListening();
+      }
+
+      setTimeout(() => {
+        let response = "Failed to process query. ";
+        if (error instanceof Error && error.message.includes("No query")) {
+          response += "Please provide a query after saying 'query'.";
+        } else {
+          response += "Please try again.";
+        }
+
+        setLastResponse(response);
+        if (settings?.voiceResponseEnabled) {
+          speak(response);
+        }
+      }, 500);
+    }
+  }, [activeTemplate, isListening, queryMutation, settings, speak, stopListening]);
+
+  /**
+   * Handle different types of voice commands
+   * Routes commands to appropriate handlers based on content
+   */
+  const handleCommand = useCallback(async (command: string) => {
+    try {
+      console.log('Processing command:', command);
+
+      // Handle different command types
+      if (command.startsWith('log ')) {
+        await handleLogCommand(command.substring(4)); // Remove 'log ' prefix
+      } else if (command.includes('query') || command.includes('find') || command.includes('show')) {
+        await handleQueryCommand(command);
+      } else {
+        // For billiards template, treat any command as a log command
+        // This allows natural speech like "round 1 table 2 game 1 john breaks steve misses"
+        console.log('Treating as log command:', command);
+        await handleLogCommand(command);
+      }
+    } catch (error) {
+      console.error('Error in handleCommand:', error);
+      isProcessingRef.current = false;
+
+      setTimeout(() => {
+        const errorMessage = "I didn't understand that command. Please try again.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+      }, 500);
+    }
+  }, [handleLogCommand, handleQueryCommand, settings]);
+
+  /**
+   * Process voice transcript and handle different command types
+   * Determines if transcript contains valid commands and routes appropriately
+   */
+  const processTranscript = useCallback(async (transcript: string) => {
+    try {
+      // Prevent processing if already handling a command
+      if (isProcessingRef.current) {
+        console.log("Already processing a command, skipping...");
+        return;
+      }
+
+      // Clean up the transcript - remove extra spaces and normalize
+      const cleanTranscript = transcript.trim().toLowerCase();
+
+      if (!cleanTranscript) {
+        console.log("Empty transcript, ignoring");
+        return;
+      }
+
+      console.log("Processing command:", cleanTranscript, "Mode:", mode, "Active template:", activeTemplate?.name || 'None');
+
+      // Check for activation phrase if we have settings
+      if (settings?.activationPhrase) {
+        const activationPhrase = settings.activationPhrase.toLowerCase();
+
+        if (!cleanTranscript.includes(activationPhrase)) {
+          console.log(`Activation phrase "${activationPhrase}" not found in: "${cleanTranscript}"`);
+          return;
+        }
+
+        // Remove activation phrase from transcript for processing
+        const commandPart = cleanTranscript.replace(activationPhrase, '').trim();
+        if (!commandPart) {
+          console.log("No command found after activation phrase");
+          // Provide feedback that we're listening
+          setLastResponse("I'm listening. What would you like to log?");
+          if (settings?.voiceResponseEnabled) {
+            speak("I'm listening. What would you like to log?");
+          }
+          return;
+        }
+
+        console.log(`Command after activation phrase: "${commandPart}"`);
+
+        // Process the command
+        await handleCommand(commandPart);
+      } else {
+        // No activation phrase set, process directly
+        await handleCommand(cleanTranscript);
+      }
+
+    } catch (error) {
+      console.error('Error processing transcript:', error);
+      isProcessingRef.current = false;
+
+      setTimeout(() => {
+        const errorMessage = "Failed to process your command. Please try again.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+      }, 500);
+    }
+  }, [mode, activeTemplate, settings, speak, handleCommand]);
 
   /**
    * Cleanup function to prevent memory leaks
@@ -390,300 +681,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.error("Error initializing speech recognition:", error);
       setLastResponse("Failed to initialize speech recognition. Please refresh the page.");
     }
-  }, [isSupported, cleanup, settings?.voiceResponseEnabled, speak]);
-
-  /**
-   * Handle log command with voice parser integration
-   * Parses voice input and creates log entries in database
-   */
-  const handleLogCommand = useCallback(async (data: string) => {
-    try {
-      console.log('Handling log command with data:', data);
-
-      // Validate we have an active template
-      if (!activeTemplate) {
-        const errorMessage = "No active template found. Please activate a template first.";
-        setLastResponse(errorMessage);
-        setTimeout(() => {
-          if (settings?.voiceResponseEnabled) {
-            speak(errorMessage);
-          }
-        }, 500);
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Set processing flag to prevent interruptions
-      isProcessingRef.current = true;
-
-      // Stop listening during processing to avoid interference
-      if (isListening) {
-        stopListening();
-      }
-
-      // Validate data is provided
-      if (!data || data.trim().length === 0) {
-        throw new Error("No data provided after 'log' command");
-      }
-
-      // Parse the voice command using the voice parser
-      const parsedData = await parseVoiceCommand(data, activeTemplate, "log");
-      console.log('Parsed voice data:', parsedData);
-
-      // Ensure parsed data is valid
-      if (!parsedData || typeof parsedData !== 'object') {
-        throw new Error("Failed to parse voice command data");
-      }
-
-      // Create log entry object with proper structure
-      const logEntry = {
-        templateId: activeTemplate.id,
-        rawCommand: data.trim(),
-        parsedData: parsedData,
-        timestamp: new Date(),
-      };
-
-      console.log('Creating log entry:', logEntry);
-
-      // Submit to database using the mutation
-      const result = await logMutation.mutateAsync(logEntry);
-      console.log('Log entry created successfully:', result);
-
-      // Reset transcript for next command
-      setTranscript("");
-
-    } catch (error) {
-      console.error('Error handling log command:', error);
-      isProcessingRef.current = false;
-
-      // Stop listening on error as well
-      if (isListening) {
-        stopListening();
-      }
-
-      // Provide specific error feedback based on error type with delay
-      setTimeout(() => {
-        let response = "Failed to log your command. ";
-        if (error instanceof Error) {
-          if (error.message.includes("parse")) {
-            response += "The command format wasn't recognized. Please check the example format and try again.";
-          } else if (error.message.includes("network") || error.message.includes("fetch")) {
-            response += "Network error occurred. Please check your connection and try again.";
-          } else if (error.message.includes("No data")) {
-            response += "Please provide data after saying 'log'.";
-          } else {
-            response += "Please try again with a clearer command.";
-          }
-        } else {
-          response += "Please try again.";
-        }
-
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-    }
-  }, [activeTemplate, isListening, logMutation, settings, speak]);
-
-  /**
-   * Handle query commands with comprehensive error handling
-   * Processes voice queries and returns results
-   * 
-   * @param command - Cleaned voice command text
-   */
-  const handleQueryCommand = useCallback(async (command: string) => {
-    try {
-      // Stop listening immediately to prevent interruption
-      if (isListening) {
-        stopListening();
-      }
-
-      // Remove "query" prefix if present and validate template
-      const cleanCommand = command.replace(/^query\s+/i, '').trim();
-      if (!activeTemplate) {
-        const errorMessage = "No active template found. Please activate a template first.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-        isProcessingRef.current = false;
-        return;
-      }
-
-      if (!cleanCommand) {
-        throw new Error("No query provided after 'query' command");
-      }
-
-      const parsedQuery = await parseVoiceCommand(cleanCommand, activeTemplate, "query");
-
-      const result = await queryMutation.mutateAsync({
-        templateId: activeTemplate.id,
-        query: parsedQuery,
-      });
-
-      // Process results and generate response with delay
-      setTimeout(() => {
-        const response = result && result.length > 0 ? 
-          `Found ${result.length} matching results` : 
-          "No results found";
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-
-      // Reset transcript for next command
-      setTranscript("");
-
-    } catch (error) {
-      console.error('Error handling query command:', error);
-      isProcessingRef.current = false;
-
-      // Stop listening on error
-      if (isListening) {
-        stopListening();
-      }
-
-      setTimeout(() => {
-        let response = "Failed to process query. ";
-        if (error instanceof Error && error.message.includes("No query")) {
-          response += "Please provide a query after saying 'query'.";
-        } else {
-          response += "Please try again.";
-        }
-
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-    }
-  }, [activeTemplate, isListening, queryMutation, settings, speak]);
-
-  /**
-   * Handle different types of voice commands
-   * Routes commands to appropriate handlers based on content
-   */
-  const handleCommand = useCallback(async (command: string) => {
-    try {
-      console.log('Processing command:', command);
-
-      // Handle different command types
-      if (command.startsWith('log ')) {
-        await handleLogCommand(command.substring(4)); // Remove 'log ' prefix
-      } else if (command.includes('query') || command.includes('find') || command.includes('show')) {
-        await handleQueryCommand(command);
-      } else {
-        // For billiards template, treat any command as a log command
-        // This allows natural speech like "round 1 table 2 game 1 john breaks steve misses"
-        console.log('Treating as log command:', command);
-        await handleLogCommand(command);
-      }
-    } catch (error) {
-      console.error('Error in handleCommand:', error);
-      isProcessingRef.current = false;
-
-      setTimeout(() => {
-        const errorMessage = "I didn't understand that command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
-    }
-  }, [handleLogCommand, handleQueryCommand, settings]);
-
-  /**
-   * Process voice transcript and handle different command types
-   * Determines if transcript contains valid commands and routes appropriately
-   */
-  const processTranscript = useCallback(async (transcript: string) => {
-    try {
-      // Prevent processing if already handling a command
-      if (isProcessingRef.current) {
-        console.log("Already processing a command, skipping...");
-        return;
-      }
-
-      // Clean up the transcript - remove extra spaces and normalize
-      const cleanTranscript = transcript.trim().toLowerCase();
-
-      if (!cleanTranscript) {
-        console.log("Empty transcript, ignoring");
-        return;
-      }
-
-      console.log("Processing command:", cleanTranscript, "Mode:", mode, "Active template:", activeTemplate?.name || 'None');
-
-      // Check for activation phrase if we have settings
-      if (settings?.activationPhrase) {
-        const activationPhrase = settings.activationPhrase.toLowerCase();
-
-        if (!cleanTranscript.includes(activationPhrase)) {
-          console.log(`Activation phrase "${activationPhrase}" not found in: "${cleanTranscript}"`);
-          return;
-        }
-
-        // Remove activation phrase from transcript for processing
-        const commandPart = cleanTranscript.replace(activationPhrase, '').trim();
-        if (!commandPart) {
-          console.log("No command found after activation phrase");
-          // Provide feedback that we're listening
-          setLastResponse("I'm listening. What would you like to log?");
-          if (settings?.voiceResponseEnabled) {
-            speak("I'm listening. What would you like to log?");
-          }
-          return;
-        }
-
-        console.log(`Command after activation phrase: "${commandPart}"`);
-
-        // Process the command
-        await handleCommand(commandPart);
-      } else {
-        // No activation phrase set, process directly
-        await handleCommand(cleanTranscript);
-      }
-
-    } catch (error) {
-      console.error('Error processing transcript:', error);
-      isProcessingRef.current = false;
-
-      setTimeout(() => {
-        const errorMessage = "Failed to process your command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
-    }
-  }, [mode, activeTemplate, settings, speak, handleCommand]);
-
-  
-
-  /**
-   * Stop listening for voice commands with proper cleanup
-   * Ensures all resources are properly disposed
-   */
-  const stopListening = useCallback(() => {
-    try {
-      // Clear timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-
-      if (recognition && isListening) {
-        recognition.stop();
-        setIsListening(false);
-        setMode(null);
-        isProcessingRef.current = false;
-      }
-    } catch (error) {
-      console.error('Error stopping recognition:', error);
-    }
-  }, [recognition, isListening]);
+  }, [isSupported, cleanup, settings?.voiceResponseEnabled, speak, processTranscript]);
 
   /**
    * Start listening for voice commands with proper error handling
@@ -736,7 +734,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.error('Error in startListening:', error);
     }
   }, [recognition, isListening, isSupported, speak, settings?.voiceResponseEnabled, stopListening]);
-
 
   // Cleanup on unmount to prevent memory leaks
   useEffect(() => {
