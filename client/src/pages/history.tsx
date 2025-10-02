@@ -39,11 +39,9 @@ export default function History() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: response, isLoading } = useQuery<{ data: LogEntry[] }>({
+  const { data: logEntries, isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
   });
-
-  const logEntries = response?.data || [];
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -140,7 +138,7 @@ export default function History() {
       </div>
 
       <main className="flex-1 overflow-auto p-4 lg:p-6">
-        {logEntries.length === 0 ? (
+        {!logEntries || logEntries.length === 0 ? (
           <Card>
             <CardContent className="text-center py-8">
               <span className="material-icons text-6xl text-muted-foreground mb-4">history</span>
@@ -204,7 +202,7 @@ export default function History() {
                   </div>
                 </CardHeader>
                 
-                {expandedId === entry.id && entry.metadataJson && typeof entry.metadataJson === 'object' && (
+                {expandedId === entry.id && entry.metadataJson && typeof entry.metadataJson === 'object' ? (
                   <CardContent className="pt-0" data-testid={`metadata-details-${entry.id}`}>
                     <div className="border-t border-outline pt-3">
                       <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
@@ -236,7 +234,7 @@ export default function History() {
                       Saved {new Date(entry.timestamp!).toLocaleString()}
                     </p>
                   </CardContent>
-                )}
+                ) : null}
               </Card>
             ))}
           </div>
