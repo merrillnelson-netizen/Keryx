@@ -133,10 +133,25 @@ export async function decomposeQuery(queryText: string): Promise<DecomposedQuery
 1. semanticComponent: The high-level intent/question (e.g., "Who broke" from "Who broke for the first game on table two last Tuesday?")
 2. structuredFilters: All filterable criteria:
    - topicTag: Topic if mentioned (Billiards, Groceries, Meeting, General)
-   - timestampFilter: Date/time constraints (convert relative dates like "last Tuesday" to actual dates)
+   - timestampFilter: Date/time constraints (convert relative dates like "this morning", "today", "last Tuesday" to actual dates)
      - start: ISO date string
      - end: ISO date string
-   - metadataFilters: Specific field values (e.g., {"round": 3, "table": 2, "game": 1})
+   - metadataFilters: Specific field values using EXACT field names from common patterns:
+     
+     For food/meal queries use these EXACT field names:
+     - meal_type: "breakfast" | "lunch" | "dinner" | "snack"
+     - restaurant: name of restaurant
+     - beverage: drink name
+     - beverage_type: "soda" | "coffee" | "tea" | "juice" etc.
+     
+     For Billiards queries:
+     - round, table, game, breaker, racker, winner
+     
+     For Groceries queries:
+     - store, items_list, budget
+     
+     For Meeting queries:
+     - attendees, action_items, meeting_topic
 
 Respond with JSON in this exact format:
 {
