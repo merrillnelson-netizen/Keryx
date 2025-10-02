@@ -14,9 +14,8 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
 
   const navigation = [
     { name: "Voice Control", href: "/", icon: "mic" },
-    { name: "Templates", href: "/templates", icon: "content_copy" },
-    { name: "Log History", href: "/history", icon: "history" },
-    { name: "Query Data", href: "/query", icon: "search" },
+    { name: "Memory History", href: "/history", icon: "history" },
+    { name: "Search Memories", href: "/query", icon: "search" },
     { name: "Settings", href: "/settings", icon: "settings" },
   ];
 

@@ -7,7 +7,6 @@ import { useEffect } from "react";
 import { apiRequest } from "./lib/queryClient";
 
 import VoiceControl from "@/pages/voice-control";
-import Templates from "@/pages/templates";
 import History from "@/pages/history";
 import Query from "@/pages/query";
 import Settings from "@/pages/settings";
@@ -17,7 +16,6 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={VoiceControl} />
-      <Route path="/templates" component={Templates} />
       <Route path="/history" component={History} />
       <Route path="/query" component={Query} />
       <Route path="/settings" component={Settings} />
