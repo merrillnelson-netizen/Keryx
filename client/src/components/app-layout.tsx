@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Mic, History, Settings, Activity } from "lucide-react";
+import { Menu, Mic, History, Settings, Activity, LogOut, User } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -18,8 +19,14 @@ const navigation = [
 export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   const currentPage = navigation.find(item => item.href === location);
+
+  const handleLogout = async () => {
+    await logout();
+    setIsOpen(false);
+  };
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -72,20 +79,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
             })}
           </nav>
           
-          {/* Status Indicator */}
-          <div className="p-4 border-t border-white/10">
+          {/* User Info & Logout */}
+          <div className="p-4 border-t border-white/10 space-y-3">
             <div className="glass-card p-3 rounded-xl">
               <div className="flex items-center gap-2">
-                <div className="relative">
-                  <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-                  <div className="absolute inset-0 w-2 h-2 bg-accent rounded-full animate-ping opacity-75" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                  <User className="w-4 h-4 text-white" />
                 </div>
-                <div>
-                  <span className="text-sm font-medium text-foreground">System Active</span>
-                  <p className="text-xs text-muted-foreground">Voice AI Ready</p>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-foreground block truncate">
+                    {user?.username || 'User'}
+                  </span>
+                  <p className="text-xs text-muted-foreground">Logged in</p>
                 </div>
               </div>
             </div>
+            <Button
+              data-testid="button-logout"
+              onClick={handleLogout}
+              variant="ghost"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </aside>
@@ -146,17 +163,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       })}
                     </nav>
                     
-                    {/* Mobile Status */}
-                    <div className="p-4 border-t border-white/10">
+                    {/* Mobile User Info & Logout */}
+                    <div className="p-4 border-t border-white/10 space-y-3">
                       <div className="glass-card p-3 rounded-xl">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-                          <div>
-                            <span className="text-sm font-medium text-foreground">System Active</span>
-                            <p className="text-xs text-muted-foreground">Voice AI Ready</p>
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                            <User className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-foreground block truncate">
+                              {user?.username || 'User'}
+                            </span>
+                            <p className="text-xs text-muted-foreground">Logged in</p>
                           </div>
                         </div>
                       </div>
+                      <Button
+                        data-testid="button-logout-mobile"
+                        onClick={handleLogout}
+                        variant="ghost"
+                        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </Button>
                     </div>
                   </div>
                 </SheetContent>
