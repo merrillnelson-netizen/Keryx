@@ -1,6 +1,5 @@
 import MobileLayout from "@/components/mobile-layout";
 import VoiceActivation from "@/components/voice-activation";
-import LiveTranscript from "@/components/live-transcript";
 import ActiveTemplate from "@/components/active-template";
 import RecentActivity from "@/components/recent-activity";
 import CommandExamples from "@/components/command-examples";
@@ -34,7 +33,6 @@ export default function VoiceControl() {
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 lg:p-6">
         <VoiceActivation />
-        <LiveTranscript />
         
         {/* Debug Panel - Remove this after voice is working */}
         <SpeechDebug />
