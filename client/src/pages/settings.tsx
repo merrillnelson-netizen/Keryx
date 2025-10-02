@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Settings } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import SpeechDebug from "@/components/speech-debug";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
@@ -113,6 +114,8 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <SpeechDebug />
 
             <div className="flex justify-end">
               <Button 
