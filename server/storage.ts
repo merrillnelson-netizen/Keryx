@@ -13,15 +13,16 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  // Memory/Log Entries
-  getLogEntries(limit?: number): Promise<LogEntry[]>;
-  getLogEntry(id: string): Promise<LogEntry | undefined>;
+  // Memory/Log Entries (user-scoped)
+  getLogEntries(userId: string, limit?: number): Promise<LogEntry[]>;
+  getLogEntry(id: string, userId: string): Promise<LogEntry | undefined>;
   createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry>;
-  updateLogEntry(id: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
-  deleteLogEntry(id: string): Promise<boolean>;
+  updateLogEntry(id: string, userId: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
+  deleteLogEntry(id: string, userId: string): Promise<boolean>;
   
-  // Hybrid Search
+  // Hybrid Search (user-scoped)
   searchMemories(
+    userId: string,
     queryVector: number[],
     topicTag?: string,
     timestampStart?: Date,
@@ -30,9 +31,9 @@ export interface IStorage {
     limit?: number
   ): Promise<Array<LogEntry & { similarity: number }>>;
 
-  // Settings
-  getSettings(): Promise<Settings | undefined>;
-  updateSettings(settings: Partial<InsertSettings>): Promise<Settings>;
+  // Settings (user-scoped)
+  getSettings(userId: string): Promise<Settings | undefined>;
+  updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
 }
 
 /**
@@ -115,14 +116,20 @@ export class DatabaseStorage implements IStorage {
    */
 
   /**
-   * Retrieve all log entries with optional limiting
+   * Retrieve all log entries for a specific user with optional limiting
+   * @param userId User ID to filter entries
    * @param limit Maximum number of entries to return (default: 50)
    * @returns Promise<LogEntry[]> Array of log entries
    * @throws Error if database query fails
    */
-  async getLogEntries(limit = 50): Promise<LogEntry[]> {
+  async getLogEntries(userId: string, limit = 50): Promise<LogEntry[]> {
     try {
-      return await db.select().from(logEntries).orderBy(desc(logEntries.timestamp)).limit(limit);
+      return await db
+        .select()
+        .from(logEntries)
+        .where(eq(logEntries.userId, userId))
+        .orderBy(desc(logEntries.timestamp))
+        .limit(limit);
     } catch (error) {
       console.error('Failed to fetch log entries:', error);
       throw new Error('Database error while fetching log entries');
@@ -130,18 +137,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Retrieve a specific log entry by ID
+   * Retrieve a specific log entry by ID and userId for security
    * @param id Log entry UUID
+   * @param userId User ID to verify ownership
    * @returns Promise<LogEntry | undefined> Log entry if found, undefined otherwise
    * @throws Error if database query fails
    */
-  async getLogEntry(id: string): Promise<LogEntry | undefined> {
+  async getLogEntry(id: string, userId: string): Promise<LogEntry | undefined> {
     try {
-      if (!id || typeof id !== 'string') {
+      if (!id || typeof id !== 'string' || !userId || typeof userId !== 'string') {
         return undefined;
       }
       
-      const result = await db.select().from(logEntries).where(eq(logEntries.id, id));
+      const result = await db
+        .select()
+        .from(logEntries)
+        .where(and(eq(logEntries.id, id), eq(logEntries.userId, userId)));
       return result[0] || undefined;
     } catch (error) {
       console.error(`Failed to fetch log entry ${id}:`, error);
@@ -179,15 +190,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Update an existing log entry
+   * Update an existing log entry with userId verification
    * @param id Log entry UUID to update
+   * @param userId User ID to verify ownership
    * @param logEntry Partial log entry data to update
    * @returns Promise<LogEntry | undefined> Updated log entry or undefined if not found
    * @throws Error if update fails
    */
-  async updateLogEntry(id: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined> {
+  async updateLogEntry(id: string, userId: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined> {
     try {
-      if (!id || typeof id !== 'string') {
+      if (!id || typeof id !== 'string' || !userId || typeof userId !== 'string') {
         return undefined;
       }
 
@@ -198,13 +210,13 @@ export class DatabaseStorage implements IStorage {
 
       if (Object.keys(cleanedLogEntry).length === 0) {
         // No valid updates provided, return existing log entry
-        return this.getLogEntry(id);
+        return this.getLogEntry(id, userId);
       }
 
       const result = await db
         .update(logEntries)
         .set(cleanedLogEntry)
-        .where(eq(logEntries.id, id))
+        .where(and(eq(logEntries.id, id), eq(logEntries.userId, userId)))
         .returning();
       
       return result[0] || undefined;
@@ -215,18 +227,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Delete a log entry from the database
+   * Delete a log entry from the database with userId verification
    * @param id Log entry UUID to delete
+   * @param userId User ID to verify ownership
    * @returns Promise<boolean> True if deleted, false if not found
    * @throws Error if deletion fails
    */
-  async deleteLogEntry(id: string): Promise<boolean> {
+  async deleteLogEntry(id: string, userId: string): Promise<boolean> {
     try {
-      if (!id || typeof id !== 'string') {
+      if (!id || typeof id !== 'string' || !userId || typeof userId !== 'string') {
         return false;
       }
 
-      const result = await db.delete(logEntries).where(eq(logEntries.id, id));
+      const result = await db
+        .delete(logEntries)
+        .where(and(eq(logEntries.id, id), eq(logEntries.userId, userId)));
       
       return (result.rowCount ?? 0) > 0;
     } catch (error) {
@@ -236,7 +251,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Hybrid search: Combine vector similarity with structured filters
+   * Hybrid search: Combine vector similarity with structured filters (user-scoped)
+   * @param userId - User ID to filter results
    * @param queryVector - Embedding vector for semantic search
    * @param topicTag - Optional topic filter
    * @param timestampStart - Optional start time filter
@@ -246,6 +262,7 @@ export class DatabaseStorage implements IStorage {
    * @returns Array of log entries with similarity scores
    */
   async searchMemories(
+    userId: string,
     queryVector: number[],
     topicTag?: string,
     timestampStart?: Date,
@@ -254,8 +271,8 @@ export class DatabaseStorage implements IStorage {
     limit = 10
   ): Promise<Array<LogEntry & { similarity: number }>> {
     try {
-      // Build the WHERE clause conditions
-      const conditions: any[] = [];
+      // Build the WHERE clause conditions - always include userId filter
+      const conditions: any[] = [eq(logEntries.userId, userId)];
 
       if (topicTag) {
         conditions.push(eq(logEntries.topicTag, topicTag));
@@ -281,9 +298,10 @@ export class DatabaseStorage implements IStorage {
       const vectorString = `[${queryVector.join(',')}]`;
 
       // Perform hybrid search: vector similarity + filters
-      const query = db
+      const result = await db
         .select({
           id: logEntries.id,
+          userId: logEntries.userId,
           memoryText: logEntries.memoryText,
           topicTag: logEntries.topicTag,
           metadataJson: logEntries.metadataJson,
@@ -292,17 +310,11 @@ export class DatabaseStorage implements IStorage {
           similarity: sql<number>`1 - (${logEntries.embeddingVector} <=> ${vectorString}::vector)`,
         })
         .from(logEntries)
+        .where(and(...conditions))
         .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
         .limit(limit);
 
-      // Apply filters if any exist
-      if (conditions.length > 0) {
-        const result = await query.where(and(...conditions));
-        return result as Array<LogEntry & { similarity: number }>;
-      } else {
-        const result = await query;
-        return result as Array<LogEntry & { similarity: number }>;
-      }
+      return result as Array<LogEntry & { similarity: number }>;
     } catch (error) {
       console.error('Failed to search memories:', error);
       throw new Error('Database error while searching memories');
@@ -311,12 +323,16 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * SETTINGS METHODS
-   * Handle application settings
+   * Handle application settings (user-scoped)
    */
 
-  async getSettings(): Promise<Settings | undefined> {
+  async getSettings(userId: string): Promise<Settings | undefined> {
     try {
-      const [currentSettings] = await db.select().from(settings).limit(1);
+      const [currentSettings] = await db
+        .select()
+        .from(settings)
+        .where(eq(settings.userId, userId))
+        .limit(1);
       return currentSettings || undefined;
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -324,21 +340,21 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateSettings(newSettings: Partial<InsertSettings>): Promise<Settings> {
+  async updateSettings(userId: string, newSettings: Partial<InsertSettings>): Promise<Settings> {
     try {
-      const existingSettings = await this.getSettings();
+      const existingSettings = await this.getSettings(userId);
       
       if (existingSettings) {
         const [updated] = await db
           .update(settings)
           .set({ ...newSettings, updatedAt: new Date() })
-          .where(eq(settings.id, existingSettings.id))
+          .where(and(eq(settings.id, existingSettings.id), eq(settings.userId, userId)))
           .returning();
         return updated;
       } else {
         const [created] = await db
           .insert(settings)
-          .values(newSettings)
+          .values({ ...newSettings, userId })
           .returning();
         return created;
       }

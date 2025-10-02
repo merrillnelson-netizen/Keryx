@@ -64,6 +64,7 @@ export const logEntries = pgTable("log_entries", {
  */
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   voiceResponseEnabled: boolean("voice_response_enabled").default(true),
   confidenceThreshold: integer("confidence_threshold").default(80), // 0-100
   createdAt: timestamp("created_at").defaultNow(),
@@ -83,6 +84,7 @@ export const insertLogEntrySchema = createInsertSchema(logEntries).omit({
 
 export const insertSettingsSchema = createInsertSchema(settings).omit({
   id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
 });
