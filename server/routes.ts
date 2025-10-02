@@ -256,6 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("Fetching settings");
       const currentSettings = await storage.getSettings();
+      console.log("Settings from database:", JSON.stringify(currentSettings, null, 2));
       
       res.json({
         status: 'success',

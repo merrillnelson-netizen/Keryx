@@ -31,6 +31,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (currentSettings) {
+      console.log("Received settings from API:", currentSettings);
+      console.log("voiceResponseEnabled value:", currentSettings.voiceResponseEnabled);
       setSettings(currentSettings);
     }
   }, [currentSettings]);

@@ -38,7 +38,14 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    const json = await res.json();
+    
+    // If the response has the standard {status, data, ...} structure, extract data
+    if (json && typeof json === 'object' && 'data' in json) {
+      return json.data;
+    }
+    
+    return json;
   };
 
 export const queryClient = new QueryClient({
