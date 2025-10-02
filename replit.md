@@ -6,14 +6,49 @@ MyDigitalMemory (MDM) is an AI-powered mobile-first voice logging and search sys
 
 ## Recent Changes (October 2025)
 
+### UI/UX Modernization (October 2, 2025)
+- **Design System**: Implemented dark glassmorphism design with gradient backgrounds
+  - Electric purple-blue-cyan gradients with modern color palette
+  - Glassmorphic cards with backdrop blur and subtle borders
+  - Smooth animations and micro-interactions throughout
+  - Enhanced Inter font with OpenType features
+- **Navigation Refactor**: Consolidated MobileLayout and Sidebar into unified AppLayout
+  - Adaptive navigation that responds to screen size
+  - Floating sidebar on desktop with glassmorphic styling
+  - Animated menu transitions and hover states
+  - Touch-optimized mobile drawer with slide animations
+- **Component Updates**: Modernized all pages and components
+  - Gradient buttons with hover effects and scale transforms
+  - Modern card designs with glass effects
+  - Enhanced icons using Lucide React
+  - Improved loading states and skeleton screens
+
+### Code Professionalization (October 2, 2025)
+- **Error Handling**: Production-ready error management
+  - React ErrorBoundary component for graceful error recovery
+  - Express error middleware with consistent response formatting
+  - Try/catch blocks throughout async operations
+  - User-friendly error messages with recovery options
+- **Database Optimization**: Performance indexes for production scale
+  - Chronological index on timestamp (DESC) for recent queries
+  - Topic tag index for filtering
+  - HNSW vector index with cosine similarity for semantic search
+  - Composite index (topicTag + timestamp) for common queries
+- **Documentation**: Enhanced JSDoc comments across codebase
+  - Detailed function and component documentation
+  - Parameter descriptions and return type annotations
+  - Usage examples and architectural notes
+
 ### Performance Optimizations
 - **Query Speed**: Switched query decomposition from GPT-5 (o1-mini) to GPT-4o-mini for 5x faster processing (7s → 1.5s)
 - **Parallel Processing**: Embedding generation and query decomposition now run simultaneously
 - **Expected Query Time**: Reduced from ~15 seconds to ~2 seconds
+- **Database Indexes**: Optimized query performance with strategic indexing
 
 ### Bug Fixes
 - **Voice Response Settings**: Fixed persistence issue - queryFn now correctly extracts data field from API responses
-- **History Page Display**: Fixed data extraction bug where memories weren't showing - queryFn already extracts the data field from wrapped API responses
+- **History Page Display**: Fixed data extraction bug where memories weren't showing
+- **Query Interface**: Removed redundant Query Interface page - voice query on main page works perfectly
 
 ### API Response Pattern
 All API endpoints follow standardized response format:
@@ -29,75 +64,85 @@ The default queryFn in queryClient automatically extracts the `data` field, so c
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
-Mobile-first design: Prioritize mobile experience with sliding sidebar navigation and responsive layouts.
-Code Quality: Comprehensive error handling, proper try/catch blocks, memory management, and detailed code comments for maintainability.
+Mobile-first design: Prioritize mobile experience with responsive layouts and touch-friendly interactions.
+Code Quality: Production-ready with comprehensive error handling, memory management, and performance optimization.
 
 ## System Architecture
 
 ### Frontend Architecture
 - **Framework**: React 18 with TypeScript using Vite as the build tool
-- **UI Framework**: Tailwind CSS with shadcn/ui component library for Material Design-inspired interface
-- **Mobile Layout**: Custom mobile-first responsive design with sliding sidebar navigation using Sheet component
+- **UI Framework**: Tailwind CSS with shadcn/ui component library
+- **Design System**: Modern glassmorphism with gradient backgrounds
+  - Inter font family with OpenType features
+  - Dark/light theme support via CSS variables
+  - Custom animations and transitions
+- **Layout**: Unified AppLayout component for responsive navigation
+  - Glassmorphic floating sidebar on desktop
+  - Slide-out drawer on mobile
+  - Adaptive navigation with smooth transitions
 - **Routing**: Wouter for lightweight client-side routing
 - **State Management**: TanStack Query (React Query) for server state management and caching
-- **Speech APIs**: Browser's native Web Speech API for both recognition (SpeechRecognition) and synthesis (SpeechSynthesis)
+- **Error Handling**: React ErrorBoundary for graceful error recovery
+- **Speech APIs**: Browser's native Web Speech API for both recognition and synthesis
 
 ### Backend Architecture
 - **Runtime**: Node.js with Express.js framework
 - **Language**: TypeScript with ES modules
-- **API Design**: RESTful endpoints following conventional patterns
+- **API Design**: RESTful endpoints with consistent error handling
 - **Database ORM**: Drizzle ORM for type-safe database operations
+- **Error Middleware**: Centralized error handling with proper logging
 - **Session Management**: Express sessions with PostgreSQL store via connect-pg-simple
 
 ### Database Design
 - **Database**: PostgreSQL with Neon serverless deployment
-- **Schema**: Four main entities:
+- **Optimization**: Strategic indexes for production performance
+  - Timestamp index (DESC) for chronological queries
+  - Topic tag index for filtering
+  - HNSW vector index for semantic similarity search
+  - Composite indexes for common query patterns
+- **Schema**: Three main entities:
   - `users`: User authentication and management
-  - `templates`: Define logging formats and field structures
-  - `log_entries`: Store parsed voice command data with JSON fields
-  - `settings`: Application configuration and user preferences
-- **Data Storage**: JSONB fields for flexible schema-less data within structured tables
+  - `log_entries`: Voice memories with AI-extracted metadata and embeddings
+  - `settings`: Application configuration
+- **Data Storage**: JSONB for flexible metadata, vector type for embeddings
 
 ### Voice Processing Pipeline
 - **Speech Recognition**: Browser's SpeechRecognition API with configurable confidence thresholds
-- **Command Parsing**: Custom parser in `voice-parser.ts` that extracts structured data from natural language
-- **Template System**: Flexible templates define expected data structures and parsing rules
+- **AI Processing**: OpenAI GPT-5 for metadata extraction from free-form input
+- **Embedding Generation**: OpenAI text-embedding-3-small for 1536-dimensional vectors
+- **Hybrid Search**: Combines semantic similarity with structured filters
 - **Response Generation**: Text-to-speech feedback using SpeechSynthesis API
 
 ### Application Structure
 - **Monorepo Layout**: Shared schema between client and server in `/shared` directory
-- **Mobile-First Components**: 
-  - `MobileLayout` component handles responsive navigation with sliding sidebar
-  - Desktop shows permanent sidebar, mobile uses hamburger menu with slide-out navigation
-  - All pages wrapped in mobile layout for consistent responsive behavior
-- **Component Architecture**: Modular React components with custom hooks for speech functionality
-- **Type Safety**: Full TypeScript coverage with Zod for runtime validation and custom Speech API types
+- **Modern UI Components**: 
+  - Glassmorphic cards with backdrop blur effects
+  - Gradient buttons with micro-interactions
+  - Animated transitions and loading states
+  - Responsive design for all screen sizes
+- **Component Architecture**: Modular React components with custom hooks
+- **Type Safety**: Full TypeScript coverage with Zod runtime validation
 - **Development Tools**: Vite dev server with hot reload and error overlay
 
 ### Key Features
-- **Multi-mode Operation**: Separate logging and querying modes with different processing logic
-- **Template Management**: Users can create, activate, and manage custom data templates
-- **Real-time Feedback**: Live transcript display and voice response confirmation
-- **Data History**: Complete log history with structured data display
-- **Mobile-First Design**: 
-  - Sliding sidebar navigation that hides on mobile
-  - Touch-friendly voice control buttons
-  - Responsive card layouts that adapt to screen size
-  - Mobile-optimized headers and sticky navigation
-- **Code Quality & Reliability**:
-  - Comprehensive error handling with try/catch blocks throughout codebase
-  - Memory management with proper cleanup of speech recognition instances
-  - Detailed JSDoc comments for all functions and components
-  - Input validation and sanitization at all API endpoints
-  - Graceful error recovery with user-friendly error messages
+- **AI-Powered Voice Input**: Free-form natural language processing
+- **Hybrid Search**: Semantic + structured filtering for powerful queries
+- **Real-time Feedback**: Live voice response with text fallback
+- **Modern UI**: Glassmorphism design with smooth animations
+- **Mobile-First**: Touch-optimized with responsive navigation
+- **Error Recovery**: Graceful error handling with user-friendly messages
+- **Performance**: Optimized with database indexes and parallel processing
+- **Production-Ready**: Comprehensive error handling and memory management
 
 ## External Dependencies
 
 ### Core Technologies
-- **Database**: Neon PostgreSQL serverless database
-- **ORM**: Drizzle ORM with PostgreSQL dialect for database operations
-- **UI Components**: Radix UI primitives via shadcn/ui for accessible component foundation
-- **Styling**: Tailwind CSS for utility-first styling approach
+- **AI**: OpenAI GPT-5 for metadata extraction, GPT-4o-mini for query decomposition, text-embedding-3-small for embeddings
+- **Database**: Neon PostgreSQL serverless with vector extension
+- **ORM**: Drizzle ORM with PostgreSQL dialect
+- **UI Components**: Radix UI primitives via shadcn/ui
+- **Styling**: Tailwind CSS with custom glassmorphism utilities
+- **Icons**: Lucide React for modern iconography
 
 ### Development Tools
 - **Build System**: Vite for fast development and optimized production builds
@@ -105,17 +150,17 @@ Code Quality: Comprehensive error handling, proper try/catch blocks, memory mana
 - **Validation**: Zod for schema validation and type inference
 - **Session Store**: connect-pg-simple for PostgreSQL-backed Express sessions
 - **Code Quality**: 
-  - Comprehensive error handling patterns with specific error types
-  - Memory leak prevention through proper cleanup functions
-  - Detailed logging for debugging and monitoring
-  - Input sanitization and validation at all entry points
+  - Comprehensive error handling with ErrorBoundary
+  - Database indexes for query performance
+  - JSDoc documentation throughout codebase
+  - Memory leak prevention with proper cleanup
 
 ### Browser APIs
-- **Speech Recognition**: Web Speech API (webkit/standard) for voice input processing
+- **Speech Recognition**: Web Speech API (webkit/standard) for voice input
 - **Speech Synthesis**: Web Speech Synthesis API for audio feedback
-- **Media**: Microphone access through getUserMedia for voice input
+- **Media**: Microphone access through getUserMedia
 
 ### Hosting Platform
-- **Platform**: Replit with specialized Vite plugin for development environment
+- **Platform**: Replit with specialized Vite plugin
 - **Environment**: Node.js runtime with automatic database provisioning
-- **Development**: Hot reload and error overlay for enhanced development experience
+- **Development**: Hot reload and error overlay for enhanced DX

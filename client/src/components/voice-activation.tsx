@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
 import { cn } from "@/lib/utils";
+import { Mic, MicOff, Square, Plus, Search, Volume2 } from "lucide-react";
 
 export default function VoiceActivation() {
   const { 
@@ -29,38 +30,49 @@ export default function VoiceActivation() {
 
   if (!isSupported) {
     return (
-      <Card className="bg-surface rounded-xl shadow-sm border border-outline p-8 mb-6">
-        <CardContent className="text-center">
-          <div className="w-32 h-32 bg-gray-300 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="material-icons text-gray-500 text-6xl">mic_off</span>
+      <div className="glass-card p-12 rounded-2xl mb-6 text-center">
+        <CardContent>
+          <div className="w-32 h-32 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-6">
+            <MicOff className="text-destructive w-16 h-16" />
           </div>
-          <h3 className="text-2xl font-medium text-foreground mb-2">Speech Recognition Not Supported</h3>
+          <h3 className="text-2xl font-bold text-foreground mb-3">Speech Recognition Not Supported</h3>
           <p className="text-muted-foreground max-w-md mx-auto">
             Your browser doesn't support speech recognition. Please use a modern browser like Chrome.
           </p>
         </CardContent>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="bg-surface rounded-xl shadow-sm border border-outline p-4 lg:p-8 mb-4 lg:mb-6">
+    <div className="glass-card-strong p-6 lg:p-8 rounded-2xl mb-6 shadow-2xl">
       <CardContent className="text-center">
-        <div className="mb-4 lg:mb-6">
+        <div className="mb-6 lg:mb-8">
           <div 
             className={cn(
-              "w-24 h-24 lg:w-32 lg:h-32 rounded-full flex items-center justify-center mx-auto mb-3 lg:mb-4 shadow-lg transition-all duration-300 hover:shadow-xl",
+              "w-32 h-32 lg:w-40 lg:h-40 rounded-2xl flex items-center justify-center mx-auto mb-4 lg:mb-6 transition-all duration-300 relative overflow-hidden",
               isListening 
-                ? "bg-secondary listening-pulse" 
-                : "bg-primary"
+                ? "bg-gradient-to-br from-secondary to-accent listening-pulse shadow-2xl" 
+                : "bg-gradient-to-br from-primary via-secondary to-accent hover:scale-105 shadow-xl"
             )}
           >
-            <span className="material-icons text-white text-4xl lg:text-6xl">
-              {isListening ? "mic" : "mic_none"}
-            </span>
+            {isListening ? (
+              <Mic className="text-white w-16 h-16 lg:w-20 lg:h-20 animate-pulse" />
+            ) : (
+              <Mic className="text-white w-16 h-16 lg:w-20 lg:h-20" />
+            )}
+            {isListening && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent shimmer"></div>
+            )}
           </div>
-          <h3 className="text-lg lg:text-2xl font-medium text-foreground mb-2">
-            {isListening ? `${mode === "log" ? "Logging" : "Query"} Mode Active` : "Voice Command Ready"}
+          <h3 className="text-xl lg:text-3xl font-bold text-foreground mb-3">
+            {isListening ? (
+              <span className="text-gradient">
+                {mode === "log" ? "Logging" : "Query"} Mode Active
+              </span>
+            ) : (
+              "Voice Command Ready"
+            )}
           </h3>
           <p className="text-sm lg:text-base text-muted-foreground max-w-md mx-auto px-2">
             {isListening 
@@ -76,45 +88,47 @@ export default function VoiceActivation() {
             <Button 
               onClick={stopListening}
               variant="destructive"
-              className="px-4 lg:px-6 py-3 w-full sm:w-auto"
+              className="px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
               size="lg"
               data-testid="button-stop-listening"
             >
-              <span className="material-icons mr-2">stop</span>
-              <span className="font-medium">Stop Listening</span>
+              <Square className="mr-2 w-5 h-5" />
+              <span>Stop Listening</span>
             </Button>
           ) : (
             <>
               <Button 
                 onClick={handleLogMode}
-                className="bg-secondary hover:bg-green-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
+                className="bg-gradient-to-r from-secondary to-secondary/80 hover:from-secondary/90 hover:to-secondary/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
                 size="lg"
                 data-testid="button-log-mode"
               >
-                <span className="material-icons mr-2">add_circle</span>
-                <span className="font-medium">Log Mode</span>
+                <Plus className="mr-2 w-5 h-5" />
+                <span>Log Mode</span>
               </Button>
 
               <Button 
                 onClick={handleQueryMode}
-                className="bg-accent hover:bg-orange-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
+                className="bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
                 size="lg"
                 data-testid="button-query-mode"
               >
-                <span className="material-icons mr-2">search</span>
-                <span className="font-medium">Query Mode</span>
+                <Search className="mr-2 w-5 h-5" />
+                <span>Query Mode</span>
               </Button>
             </>
           )}
         </div>
 
-        {/* Response Display - Always visible when there's a response */}
+        {/* Response Display */}
         {lastResponse && (
-          <div className="mt-4 lg:mt-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+          <div className="mt-6 lg:mt-8 glass-card p-4 lg:p-6 rounded-xl border border-primary/30 animate-slide-in">
             <div className="flex items-start gap-3">
-              <span className="material-icons text-primary mt-0.5">campaign</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-primary mb-1">Response</p>
+              <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                <Volume2 className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-semibold text-primary mb-1">Response</p>
                 <p className="text-sm lg:text-base text-foreground" data-testid="text-response">
                   {lastResponse}
                 </p>
@@ -123,6 +137,6 @@ export default function VoiceActivation() {
           </div>
         )}
       </CardContent>
-    </Card>
+    </div>
   );
 }

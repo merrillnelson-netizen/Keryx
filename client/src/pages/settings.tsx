@@ -1,4 +1,4 @@
-import MobileLayout from "@/components/mobile-layout";
+import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Settings } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import SpeechDebug from "@/components/speech-debug";
+import { Settings as SettingsIcon, Mic, Volume2, Save } from "lucide-react";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
@@ -39,94 +40,130 @@ export default function SettingsPage() {
   }, [currentSettings]);
 
   const handleSave = () => {
+    console.log("Saving settings:", settings);
     updateSettingsMutation.mutate(settings);
   };
 
   if (isLoading) {
     return (
-      <MobileLayout>
-        <div className="flex-1 flex items-center justify-center">
+      <AppLayout>
+        <div className="flex items-center justify-center h-96">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-muted-foreground">Loading settings...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading settings...</p>
           </div>
         </div>
-      </MobileLayout>
+      </AppLayout>
     );
   }
 
   return (
-    <MobileLayout>
-      {/* Desktop Header - Hidden on mobile */}
-      <header className="hidden lg:block bg-surface border-b border-outline px-6 py-4">
-        <div>
-          <h2 className="text-lg font-medium text-foreground">Settings</h2>
-          <p className="text-sm text-muted-foreground">Configure voice recognition and application preferences</p>
-        </div>
-      </header>
-
-      {/* Mobile Header */}
-      <div className="lg:hidden bg-surface border-b border-outline px-4 py-3 sticky top-0 z-10">
-        <p className="text-sm text-muted-foreground">Configure voice recognition and application preferences</p>
-      </div>
-
-      <main className="flex-1 overflow-auto p-4 lg:p-6">
-          <div className="max-w-2xl space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <span className="material-icons mr-2">mic</span>
-                  Voice Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Voice Response</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Enable spoken responses from the system
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.voiceResponseEnabled || false}
-                    onCheckedChange={(checked) => 
-                      setSettings({ ...settings, voiceResponseEnabled: checked })
-                    }
-                  />
-                </div>
-
-                <div>
-                  <Label>Confidence Threshold: {settings.confidenceThreshold || 80}%</Label>
-                  <Slider
-                    value={[settings.confidenceThreshold || 80]}
-                    onValueChange={(value) => 
-                      setSettings({ ...settings, confidenceThreshold: value[0] })
-                    }
-                    min={50}
-                    max={100}
-                    step={5}
-                    className="mt-2"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>Less Sensitive</span>
-                    <span>More Sensitive</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <SpeechDebug />
-
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleSave}
-                disabled={updateSettingsMutation.isPending}
-              >
-                {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
-              </Button>
+    <AppLayout>
+      <div className="space-y-6 animate-fade-in">
+        {/* Header Section */}
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
+              <SettingsIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Settings</h2>
+              <p className="text-sm text-muted-foreground">Configure your voice assistant</p>
             </div>
           </div>
-        </main>
-    </MobileLayout>
+        </div>
+
+        {/* Settings Cards */}
+        <div className="max-w-2xl space-y-6">
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mic className="w-5 h-5 text-primary" />
+                Voice Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Voice Response</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enable spoken responses from the system
+                  </p>
+                </div>
+                <Switch
+                  data-testid="switch-voice-response"
+                  checked={settings.voiceResponseEnabled || false}
+                  onCheckedChange={(checked) => 
+                    setSettings(prev => ({ ...prev, voiceResponseEnabled: checked }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Confidence Threshold</Label>
+                  <span className="text-sm font-medium text-primary">{settings.confidenceThreshold || 80}%</span>
+                </div>
+                <Slider
+                  data-testid="slider-confidence"
+                  value={[settings.confidenceThreshold || 80]}
+                  onValueChange={(value) => 
+                    setSettings(prev => ({ ...prev, confidenceThreshold: value[0] }))
+                  }
+                  min={50}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum confidence level for voice recognition
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="activation-phrase" className="text-base">Activation Phrase</Label>
+                <Input
+                  id="activation-phrase"
+                  data-testid="input-activation-phrase"
+                  value={settings.activationPhrase || ""}
+                  onChange={(e) => 
+                    setSettings(prev => ({ ...prev, activationPhrase: e.target.value }))
+                  }
+                  placeholder="e.g., Hey M"
+                  className="glass-card border-white/20"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Say this phrase to activate voice commands
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-secondary" />
+                Voice Recognition Debug
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SpeechDebug />
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button
+              data-testid="button-save-settings"
+              onClick={handleSave}
+              disabled={updateSettingsMutation.isPending}
+              className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white font-semibold px-6"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {updateSettingsMutation.isPending ? "Saving..." : "Save Settings"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
   );
 }

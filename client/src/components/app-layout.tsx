@@ -1,0 +1,185 @@
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu, Mic, History, Settings, Activity } from "lucide-react";
+
+interface AppLayoutProps {
+  children: React.ReactNode;
+}
+
+const navigation = [
+  { name: "Voice Control", href: "/", icon: Mic },
+  { name: "Memory History", href: "/history", icon: History },
+  { name: "Settings", href: "/settings", icon: Settings },
+];
+
+export default function AppLayout({ children }: AppLayoutProps) {
+  const [location] = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const currentPage = navigation.find(item => item.href === location);
+
+  return (
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* Desktop Sidebar - Glassmorphic Floating */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:fixed lg:inset-y-0 lg:z-50 m-4 rounded-2xl">
+        <div className="flex flex-col flex-1 glass-card-strong overflow-hidden">
+          {/* Logo & Branding */}
+          <div className="p-6 border-b border-white/10">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
+                <Activity className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">MyDigitalMemory</h1>
+                <p className="text-xs text-muted-foreground">AI Voice Assistant</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+            {navigation.map((item) => {
+              const isActive = location === item.href;
+              const Icon = item.icon;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <button 
+                    data-testid={`nav-${item.href.slice(1) || 'home'}`}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 group relative overflow-hidden",
+                      isActive
+                        ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold shadow-lg"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    )}
+                  >
+                    {isActive && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
+                    )}
+                    <Icon className={cn(
+                      "w-5 h-5 transition-transform duration-200",
+                      isActive ? "scale-110" : "group-hover:scale-110"
+                    )} />
+                    <span className="relative z-10">{item.name}</span>
+                    {isActive && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    )}
+                  </button>
+                </Link>
+              );
+            })}
+          </nav>
+          
+          {/* Status Indicator */}
+          <div className="p-4 border-t border-white/10">
+            <div className="glass-card p-3 rounded-xl">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+                  <div className="absolute inset-0 w-2 h-2 bg-accent rounded-full animate-ping opacity-75" />
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-foreground">System Active</span>
+                  <p className="text-xs text-muted-foreground">Voice AI Ready</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile Top Bar */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 m-2">
+        <div className="glass-card-strong px-4 py-3 rounded-2xl shadow-xl">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                <SheetTrigger asChild>
+                  <Button 
+                    data-testid="button-menu"
+                    variant="ghost" 
+                    size="sm" 
+                    className="p-2 hover:bg-white/10"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-80 p-0 glass-card-strong border-white/20">
+                  <div className="flex flex-col h-full">
+                    {/* Mobile Menu Header */}
+                    <div className="p-6 border-b border-white/10">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
+                          <Activity className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h1 className="text-xl font-bold text-foreground">MyDigitalMemory</h1>
+                          <p className="text-xs text-muted-foreground">AI Voice Assistant</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Mobile Navigation */}
+                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                      {navigation.map((item) => {
+                        const isActive = location === item.href;
+                        const Icon = item.icon;
+                        return (
+                          <Link key={item.href} href={item.href}>
+                            <button 
+                              data-testid={`nav-mobile-${item.href.slice(1) || 'home'}`}
+                              className={cn(
+                                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200",
+                                isActive
+                                  ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                              )}
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <Icon className="w-5 h-5" />
+                              <span>{item.name}</span>
+                            </button>
+                          </Link>
+                        );
+                      })}
+                    </nav>
+                    
+                    {/* Mobile Status */}
+                    <div className="p-4 border-t border-white/10">
+                      <div className="glass-card p-3 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+                          <div>
+                            <span className="text-sm font-medium text-foreground">System Active</span>
+                            <p className="text-xs text-muted-foreground">Voice AI Ready</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+              
+              <div>
+                <h2 className="text-base font-semibold text-foreground">
+                  {currentPage?.name || "MyDigitalMemory"}
+                </h2>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 lg:ml-80 overflow-hidden">
+        <div className="h-full overflow-y-auto pt-20 lg:pt-0 p-4 lg:p-6">
+          <div className="animate-fade-in">
+            {children}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
