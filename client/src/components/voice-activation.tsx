@@ -17,16 +17,12 @@ export default function VoiceActivation() {
   const { speak } = useSpeechSynthesis();
 
   const handleLogMode = () => {
-    console.log('Setting mode to log');
     setMode("log");
-    console.log('Starting listening in log mode');
     startListening();
   };
 
   const handleQueryMode = () => {
-    console.log('Setting mode to query');
     setMode("query");
-    console.log('Starting listening in query mode');
     startListening();
   };
 

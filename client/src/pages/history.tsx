@@ -209,16 +209,24 @@ export default function History() {
                     <div className="border-t border-outline pt-3">
                       <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
                       <div className="bg-muted p-3 rounded-lg">
-                        {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => (
-                          <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
-                            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
-                              {key.replace(/_/g, ' ')}:
-                            </span>
-                            <span className="text-sm text-foreground">
-                              {Array.isArray(value) ? value.join(', ') : String(value)}
-                            </span>
-                          </div>
-                        ))}
+                        {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => {
+                          const displayValue = Array.isArray(value) 
+                            ? value.map(v => String(v)).join(', ') 
+                            : value !== null && value !== undefined 
+                              ? String(value) 
+                              : 'N/A';
+                          
+                          return (
+                            <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
+                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
+                                {key.replace(/_/g, ' ')}:
+                              </span>
+                              <span className="text-sm text-foreground">
+                                {displayValue}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-3">

@@ -49,9 +49,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   // Helper to update both mode state and ref (fixes React closure issue)
   const setMode = useCallback((newMode: "log" | "query" | null) => {
-    console.log('setMode called with:', newMode);
     modeRef.current = newMode;
-    console.log('modeRef.current is now:', modeRef.current);
     setModeState(newMode);
   }, []);
 
