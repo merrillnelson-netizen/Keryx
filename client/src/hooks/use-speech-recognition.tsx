@@ -155,7 +155,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   /**
    * Stop listening for voice commands with proper cleanup
    */
-  const stopListening = useCallback(() => {
+  const stopListening = useCallback((clearMode: boolean = false) => {
     try {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
@@ -165,7 +165,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (recognition && isListening) {
         recognition.stop();
         setIsListening(false);
-        setMode(null);
+        if (clearMode) {
+          setMode(null);
+        }
         isProcessingRef.current = false;
       }
     } catch (error) {
@@ -187,19 +189,21 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       isProcessingRef.current = true;
 
       if (isListening) {
-        stopListening();
+        stopListening(false);
       }
 
       await saveMutation.mutateAsync(memoryText.trim());
       setTranscript("");
+      setMode(null);
 
     } catch (error) {
       console.error('Error handling log command:', error);
       isProcessingRef.current = false;
 
       if (isListening) {
-        stopListening();
+        stopListening(false);
       }
+      setMode(null);
 
       setTimeout(() => {
         const errorMessage = "Failed to log your command. Please try again.";
@@ -219,7 +223,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.log('Handling query command:', queryText);
 
       if (isListening) {
-        stopListening();
+        stopListening(false);
       }
 
       const cleanQuery = queryText.replace(/^query\s+/i, '').trim();
@@ -227,6 +231,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (!cleanQuery) {
         const errorMessage = "Please provide a query.";
         setLastResponse(errorMessage);
+        setMode(null);
         if (settings?.voiceResponseEnabled) {
           speak(errorMessage);
         }
@@ -236,10 +241,12 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       isProcessingRef.current = true;
       await searchMutation.mutateAsync(cleanQuery);
       setTranscript("");
+      setMode(null);
 
     } catch (error) {
       console.error("Error handling query command:", error);
       isProcessingRef.current = false;
+      setMode(null);
 
       setTimeout(() => {
         const errorMessage = "Failed to process your query. Please try again.";
@@ -352,9 +359,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       newRecognition.onerror = (event: SpeechRecognitionErrorEvent) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
-        setMode(null);
         
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          setMode(null);
           const errorMessage = "Voice recognition error. Please try again.";
           setLastResponse(errorMessage);
           if (settings?.voiceResponseEnabled) {
