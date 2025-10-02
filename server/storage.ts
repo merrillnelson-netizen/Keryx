@@ -1,12 +1,11 @@
 import { 
-  users, templates, logEntries, settings,
+  users, logEntries, settings,
   type User, type InsertUser,
-  type Template, type InsertTemplate,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -14,22 +13,22 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  // Templates
-  getTemplates(): Promise<Template[]>;
-  getTemplate(id: string): Promise<Template | undefined>;
-  createTemplate(template: InsertTemplate): Promise<Template>;
-  updateTemplate(id: string, template: Partial<InsertTemplate>): Promise<Template | undefined>;
-  deleteTemplate(id: string): Promise<boolean>;
-  getActiveTemplate(): Promise<Template | undefined>;
-  setActiveTemplate(id: string): Promise<boolean>;
-
-  // Log Entries
-  getLogEntries(templateId?: string, limit?: number): Promise<LogEntry[]>;
+  // Memory/Log Entries
+  getLogEntries(limit?: number): Promise<LogEntry[]>;
   getLogEntry(id: string): Promise<LogEntry | undefined>;
   createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry>;
   updateLogEntry(id: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
   deleteLogEntry(id: string): Promise<boolean>;
-  queryLogEntries(templateId: string, query: any): Promise<LogEntry[]>;
+  
+  // Hybrid Search
+  searchMemories(
+    queryVector: number[],
+    topicTag?: string,
+    timestampStart?: Date,
+    timestampEnd?: Date,
+    metadataFilters?: Record<string, any>,
+    limit?: number
+  ): Promise<Array<LogEntry & { similarity: number }>>;
 
   // Settings
   getSettings(): Promise<Settings | undefined>;
@@ -110,209 +109,20 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Templates
   /**
-   * Retrieve all templates from database ordered by creation date
-   * @returns Promise<Template[]> Array of all templates
-   * @throws Error if database query fails
+   * MEMORY/LOG ENTRY METHODS
+   * Handle memory storage and retrieval
    */
-  async getTemplates(): Promise<Template[]> {
-    try {
-      const result = await db.select().from(templates).orderBy(desc(templates.createdAt));
-      return result;
-    } catch (error) {
-      console.error('Failed to fetch templates:', error);
-      throw new Error('Database error while fetching templates');
-    }
-  }
 
   /**
-   * Retrieve a specific template by ID
-   * @param id Template UUID
-   * @returns Promise<Template | undefined> Template if found, undefined otherwise
-   * @throws Error if database query fails
-   */
-  async getTemplate(id: string): Promise<Template | undefined> {
-    try {
-      if (!id || typeof id !== 'string') {
-        return undefined;
-      }
-      
-      const result = await db.select().from(templates).where(eq(templates.id, id));
-      return result[0] || undefined;
-    } catch (error) {
-      console.error(`Failed to fetch template ${id}:`, error);
-      throw new Error(`Database error while fetching template: ${id}`);
-    }
-  }
-
-  /**
-   * Create a new template in the database
-   * @param template Template data to insert
-   * @returns Promise<Template> Created template with generated ID
-   * @throws Error if creation fails or validation errors occur
-   */
-  async createTemplate(template: InsertTemplate): Promise<Template> {
-    try {
-      // Validate required fields
-      if (!template.name || !template.description || !template.logFormat || !template.queryFormat) {
-        throw new Error('Missing required template fields');
-      }
-
-      // Ensure fields is valid JSON
-      if (!template.fields || !Array.isArray(template.fields)) {
-        throw new Error('Template fields must be a valid array');
-      }
-
-      const result = await db
-        .insert(templates)
-        .values({
-          ...template,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        })
-        .returning();
-      
-      if (!result[0]) {
-        throw new Error('Failed to create template - no data returned');
-      }
-
-      return result[0];
-    } catch (error) {
-      console.error('Failed to create template:', error);
-      throw error instanceof Error ? error : new Error('Database error while creating template');
-    }
-  }
-
-  /**
-   * Update an existing template
-   * @param id Template UUID to update
-   * @param template Partial template data to update
-   * @returns Promise<Template | undefined> Updated template or undefined if not found
-   * @throws Error if update fails
-   */
-  async updateTemplate(id: string, template: Partial<InsertTemplate>): Promise<Template | undefined> {
-    try {
-      if (!id || typeof id !== 'string') {
-        return undefined;
-      }
-
-      // Clean undefined values to avoid database issues
-      const cleanedTemplate = Object.fromEntries(
-        Object.entries(template).filter(([_, value]) => value !== undefined)
-      );
-
-      if (Object.keys(cleanedTemplate).length === 0) {
-        // No valid updates provided, return existing template
-        return this.getTemplate(id);
-      }
-
-      const result = await db
-        .update(templates)
-        .set({ 
-          ...cleanedTemplate, 
-          updatedAt: new Date() 
-        })
-        .where(eq(templates.id, id))
-        .returning();
-      
-      return result[0] || undefined;
-    } catch (error) {
-      console.error(`Failed to update template ${id}:`, error);
-      throw new Error(`Database error while updating template: ${id}`);
-    }
-  }
-
-  /**
-   * Delete a template and all associated log entries
-   * @param id Template UUID to delete
-   * @returns Promise<boolean> True if deleted, false if not found
-   * @throws Error if deletion fails
-   */
-  async deleteTemplate(id: string): Promise<boolean> {
-    try {
-      if (!id || typeof id !== 'string') {
-        return false;
-      }
-
-      // First, delete associated log entries to maintain referential integrity
-      await db.delete(logEntries).where(eq(logEntries.templateId, id));
-      
-      // Then delete the template
-      const result = await db.delete(templates).where(eq(templates.id, id));
-      
-      return (result.rowCount ?? 0) > 0;
-    } catch (error) {
-      console.error(`Failed to delete template ${id}:`, error);
-      throw new Error(`Database error while deleting template: ${id}`);
-    }
-  }
-
-  /**
-   * Get the currently active template
-   * @returns Promise<Template | undefined> Active template or undefined if none set
-   * @throws Error if database query fails
-   */
-  async getActiveTemplate(): Promise<Template | undefined> {
-    try {
-      const result = await db.select().from(templates).where(eq(templates.isActive, true));
-      return result[0] || undefined;
-    } catch (error) {
-      console.error('Failed to fetch active template:', error);
-      throw new Error('Database error while fetching active template');
-    }
-  }
-
-  /**
-   * Set a template as active (deactivates all others)
-   * @param id Template UUID to activate
-   * @returns Promise<boolean> True if successfully activated, false if template not found
-   * @throws Error if database operations fail
-   */
-  async setActiveTemplate(id: string): Promise<boolean> {
-    try {
-      if (!id || typeof id !== 'string') {
-        return false;
-      }
-
-      // Use transaction to ensure atomicity
-      // First, deactivate all templates
-      await db.update(templates).set({ isActive: false });
-      
-      // Then activate the specified template
-      const result = await db
-        .update(templates)
-        .set({ 
-          isActive: true,
-          updatedAt: new Date()
-        })
-        .where(eq(templates.id, id))
-        .returning();
-      
-      return !!result[0];
-    } catch (error) {
-      console.error(`Failed to set active template ${id}:`, error);
-      throw new Error(`Database error while setting active template: ${id}`);
-    }
-  }
-
-  // Log Entries
-  /**
-   * Retrieve all log entries with optional filtering and limiting
-   * @param templateId Optional template ID to filter by
+   * Retrieve all log entries with optional limiting
    * @param limit Maximum number of entries to return (default: 50)
    * @returns Promise<LogEntry[]> Array of log entries
    * @throws Error if database query fails
    */
-  async getLogEntries(templateId?: string, limit = 50): Promise<LogEntry[]> {
+  async getLogEntries(limit = 50): Promise<LogEntry[]> {
     try {
-      const query = db.select().from(logEntries).orderBy(desc(logEntries.timestamp)).limit(limit);
-      
-      if (templateId) {
-        return await query.where(eq(logEntries.templateId, templateId));
-      }
-      
-      return await query;
+      return await db.select().from(logEntries).orderBy(desc(logEntries.timestamp)).limit(limit);
     } catch (error) {
       console.error('Failed to fetch log entries:', error);
       throw new Error('Database error while fetching log entries');
@@ -348,7 +158,7 @@ export class DatabaseStorage implements IStorage {
   async createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry> {
     try {
       // Validate required fields
-      if (!logEntry.templateId || !logEntry.rawCommand || !logEntry.parsedData) {
+      if (!logEntry.memoryText || !logEntry.topicTag || !logEntry.metadataJson) {
         throw new Error('Missing required log entry fields');
       }
 
@@ -425,36 +235,116 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async queryLogEntries(templateId: string, query: any): Promise<LogEntry[]> {
-    // This would implement natural language query parsing
-    // For now, return all entries for the template
-    return await db.select().from(logEntries)
-      .where(eq(logEntries.templateId, templateId))
-      .orderBy(desc(logEntries.timestamp));
+  /**
+   * Hybrid search: Combine vector similarity with structured filters
+   * @param queryVector - Embedding vector for semantic search
+   * @param topicTag - Optional topic filter
+   * @param timestampStart - Optional start time filter
+   * @param timestampEnd - Optional end time filter
+   * @param metadataFilters - Optional metadata JSON filters
+   * @param limit - Maximum results to return (default: 10)
+   * @returns Array of log entries with similarity scores
+   */
+  async searchMemories(
+    queryVector: number[],
+    topicTag?: string,
+    timestampStart?: Date,
+    timestampEnd?: Date,
+    metadataFilters?: Record<string, any>,
+    limit = 10
+  ): Promise<Array<LogEntry & { similarity: number }>> {
+    try {
+      // Build the WHERE clause conditions
+      const conditions: any[] = [];
+
+      if (topicTag) {
+        conditions.push(eq(logEntries.topicTag, topicTag));
+      }
+
+      if (timestampStart) {
+        conditions.push(gte(logEntries.timestamp, timestampStart));
+      }
+
+      if (timestampEnd) {
+        conditions.push(lte(logEntries.timestamp, timestampEnd));
+      }
+
+      // Build metadata JSON filter conditions
+      if (metadataFilters && Object.keys(metadataFilters).length > 0) {
+        for (const [key, value] of Object.entries(metadataFilters)) {
+          // Use jsonb contains operator for filtering
+          conditions.push(sql`${logEntries.metadataJson}->>'${sql.raw(key)}' = ${value}`);
+        }
+      }
+
+      // Convert query vector to pgvector format
+      const vectorString = `[${queryVector.join(',')}]`;
+
+      // Perform hybrid search: vector similarity + filters
+      const query = db
+        .select({
+          id: logEntries.id,
+          memoryText: logEntries.memoryText,
+          topicTag: logEntries.topicTag,
+          metadataJson: logEntries.metadataJson,
+          embeddingVector: logEntries.embeddingVector,
+          timestamp: logEntries.timestamp,
+          similarity: sql<number>`1 - (${logEntries.embeddingVector} <=> ${vectorString}::vector)`,
+        })
+        .from(logEntries)
+        .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
+        .limit(limit);
+
+      // Apply filters if any exist
+      if (conditions.length > 0) {
+        const result = await query.where(and(...conditions));
+        return result as Array<LogEntry & { similarity: number }>;
+      } else {
+        const result = await query;
+        return result as Array<LogEntry & { similarity: number }>;
+      }
+    } catch (error) {
+      console.error('Failed to search memories:', error);
+      throw new Error('Database error while searching memories');
+    }
   }
 
-  // Settings
+  /**
+   * SETTINGS METHODS
+   * Handle application settings
+   */
+
   async getSettings(): Promise<Settings | undefined> {
-    const [currentSettings] = await db.select().from(settings).limit(1);
-    return currentSettings || undefined;
+    try {
+      const [currentSettings] = await db.select().from(settings).limit(1);
+      return currentSettings || undefined;
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+      throw new Error('Database error while fetching settings');
+    }
   }
 
   async updateSettings(newSettings: Partial<InsertSettings>): Promise<Settings> {
-    const existingSettings = await this.getSettings();
-    
-    if (existingSettings) {
-      const [updated] = await db
-        .update(settings)
-        .set({ ...newSettings, updatedAt: new Date() })
-        .where(eq(settings.id, existingSettings.id))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db
-        .insert(settings)
-        .values(newSettings)
-        .returning();
-      return created;
+    try {
+      const existingSettings = await this.getSettings();
+      
+      if (existingSettings) {
+        const [updated] = await db
+          .update(settings)
+          .set({ ...newSettings, updatedAt: new Date() })
+          .where(eq(settings.id, existingSettings.id))
+          .returning();
+        return updated;
+      } else {
+        const [created] = await db
+          .insert(settings)
+          .values(newSettings)
+          .returning();
+        return created;
+      }
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+      throw new Error('Database error while updating settings');
     }
   }
 }

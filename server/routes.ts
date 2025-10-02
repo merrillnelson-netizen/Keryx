@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTemplateSchema, insertLogEntrySchema, insertSettingsSchema } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema } from "@shared/schema";
 import { z } from "zod";
+import { extractMetadata, generateEmbedding, decomposeQuery } from "./ai-service";
 
 /**
  * API Routes Registration with Comprehensive Error Handling
@@ -42,349 +43,200 @@ function sendErrorResponse(res: any, statusCode: number, message: string, error?
 export async function registerRoutes(app: Express): Promise<Server> {
   
   /**
-   * TEMPLATE MANAGEMENT ROUTES
-   * Handle template CRUD operations with validation and error handling
+   * MEMORY/LOG ENTRY ROUTES
+   * Handle memory storage with AI-powered metadata extraction
    */
   
   /**
-   * GET /api/templates - Retrieve all templates
-   * Returns array of template objects ordered by creation date
+   * POST /api/memories - Save a new memory with AI extraction
+   * Accepts raw voice text, extracts metadata and embeddings automatically
    */
-  app.get("/api/templates", async (_req, res) => {
+  app.post("/api/memories", async (req, res) => {
     try {
-      console.log("Fetching all templates");
-      const templates = await storage.getTemplates();
+      const { memoryText } = req.body;
       
-      res.json({
-        status: 'success',
-        data: templates,
-        count: templates.length,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to fetch templates", error);
-    }
-  });
-
-  /**
-   * GET /api/templates/active - Get currently active template
-   * Returns the template marked as active for voice command processing
-   */
-  app.get("/api/templates/active", async (_req, res) => {
-    try {
-      console.log("Fetching active template");
-      const template = await storage.getActiveTemplate();
-      
-      if (!template) {
-        return sendErrorResponse(res, 404, "No active template found. Please activate a template first.");
+      if (!memoryText || typeof memoryText !== 'string') {
+        return sendErrorResponse(res, 400, "memoryText is required");
       }
-      
-      res.json({
-        status: 'success',
-        data: template,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to fetch active template", error);
-    }
-  });
 
-  /**
-   * POST /api/templates - Create new template
-   * Validates input data and creates template with proper error handling
-   */
-  app.post("/api/templates", async (req, res) => {
-    try {
-      console.log("Creating new template:", req.body);
-      
-      // Validate input data using Zod schema
-      const template = insertTemplateSchema.parse(req.body);
-      
-      // Check for duplicate template names
-      const existingTemplates = await storage.getTemplates();
-      const duplicate = existingTemplates.find(t => t.name.toLowerCase() === template.name.toLowerCase());
-      
-      if (duplicate) {
-        return sendErrorResponse(res, 409, `Template with name "${template.name}" already exists`);
-      }
-      
-      // Create the template
-      const newTemplate = await storage.createTemplate(template);
-      console.log("Template created successfully:", newTemplate.id);
-      
+      console.log("Saving memory:", memoryText);
+
+      // Use AI to extract metadata and topic
+      const { topicTag, metadataJson } = await extractMetadata(memoryText);
+      console.log("Extracted metadata:", { topicTag, metadataJson });
+
+      // Generate embedding vector for semantic search
+      const embeddingVector = await generateEmbedding(memoryText);
+      console.log("Generated embedding vector with", embeddingVector.length, "dimensions");
+
+      // Save to database
+      const logEntry = await storage.createLogEntry({
+        memoryText,
+        topicTag,
+        metadataJson,
+        embeddingVector,
+      });
+
       res.status(201).json({
         status: 'success',
-        data: newTemplate,
-        message: `Template "${newTemplate.name}" created successfully`,
+        data: logEntry,
+        message: 'Memory saved successfully',
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Invalid template data", 
-          errors: error.errors,
-          status: 'error',
-          timestamp: new Date().toISOString()
-        });
-      }
-      sendErrorResponse(res, 500, "Failed to create template", error);
+      console.error("Failed to save memory:", error);
+      sendErrorResponse(res, 500, "Failed to save memory", error);
     }
   });
 
   /**
-   * PUT /api/templates/:id - Update existing template
-   * Validates input and handles partial updates with proper error responses
+   * POST /api/memories/search - Hybrid search for memories
+   * Combines semantic search with structured filters
    */
-  app.put("/api/templates/:id", async (req, res) => {
+  app.post("/api/memories/search", async (req, res) => {
     try {
-      const { id } = req.params;
-      console.log(`Updating template ${id}:`, req.body);
-
-      // Validate UUID format
-      if (!id || typeof id !== 'string' || id.length < 32) {
-        return sendErrorResponse(res, 400, "Invalid template ID format");
-      }
-
-      // Parse and validate partial template data
-      const template = insertTemplateSchema.partial().parse(req.body);
+      const { queryText } = req.body;
       
-      // Check if template exists before updating
-      const existingTemplate = await storage.getTemplate(id);
-      if (!existingTemplate) {
-        return sendErrorResponse(res, 404, "Template not found");
+      if (!queryText || typeof queryText !== 'string') {
+        return sendErrorResponse(res, 400, "queryText is required");
       }
 
-      // Perform update
-      const updated = await storage.updateTemplate(id, template);
-      if (!updated) {
-        return sendErrorResponse(res, 500, "Update operation failed");
-      }
+      console.log("Searching memories with query:", queryText);
 
-      console.log(`Template ${id} updated successfully`);
+      // Decompose query into semantic and structured components
+      const { semanticComponent, structuredFilters } = await decomposeQuery(queryText);
+      console.log("Decomposed query:", { semanticComponent, structuredFilters });
+
+      // Generate embedding for semantic search
+      const queryVector = await generateEmbedding(semanticComponent);
+
+      // Perform hybrid search
+      const results = await storage.searchMemories(
+        queryVector,
+        structuredFilters.topicTag,
+        structuredFilters.timestampFilter?.start,
+        structuredFilters.timestampFilter?.end,
+        structuredFilters.metadataFilters,
+        10 // limit to top 10 results
+      );
+
       res.json({
         status: 'success',
-        data: updated,
-        message: `Template "${updated.name}" updated successfully`,
+        data: results,
+        query: {
+          original: queryText,
+          semantic: semanticComponent,
+          filters: structuredFilters,
+        },
+        count: results.length,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Invalid template data", 
-          errors: error.errors,
-          status: 'error',
-          timestamp: new Date().toISOString()
-        });
-      }
-      sendErrorResponse(res, 500, "Failed to update template", error);
+      console.error("Failed to search memories:", error);
+      sendErrorResponse(res, 500, "Failed to search memories", error);
     }
   });
 
   /**
-   * POST /api/templates/:id/activate - Set template as active
-   * Deactivates all other templates and activates the specified one
+   * GET /api/logs - Get recent memories/log entries
+   * Returns recent memories ordered by timestamp
    */
-  app.post("/api/templates/:id/activate", async (req, res) => {
-    try {
-      const { id } = req.params;
-      console.log(`Activating template ${id}`);
-
-      // Validate UUID format
-      if (!id || typeof id !== 'string' || id.length < 32) {
-        return sendErrorResponse(res, 400, "Invalid template ID format");
-      }
-
-      // Check if template exists before activating
-      const existingTemplate = await storage.getTemplate(id);
-      if (!existingTemplate) {
-        return sendErrorResponse(res, 404, "Template not found");
-      }
-
-      // Activate the template
-      const success = await storage.setActiveTemplate(id);
-      if (!success) {
-        return sendErrorResponse(res, 500, "Failed to activate template");
-      }
-
-      console.log(`Template ${id} activated successfully`);
-      res.json({
-        status: 'success',
-        message: `Template "${existingTemplate.name}" activated successfully`,
-        data: { templateId: id, templateName: existingTemplate.name },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to activate template", error);
-    }
-  });
-
-  /**
-   * DELETE /api/templates/:id - Delete template and associated data
-   * Removes template and all related log entries with proper cleanup
-   */
-  app.delete("/api/templates/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      console.log(`Deleting template ${id}`);
-
-      // Validate UUID format
-      if (!id || typeof id !== 'string' || id.length < 32) {
-        return sendErrorResponse(res, 400, "Invalid template ID format");
-      }
-
-      // Check if template exists and get name for response
-      const existingTemplate = await storage.getTemplate(id);
-      if (!existingTemplate) {
-        return sendErrorResponse(res, 404, "Template not found");
-      }
-
-      // Prevent deletion of active template without explicit confirmation
-      if (existingTemplate.isActive) {
-        return sendErrorResponse(res, 409, "Cannot delete active template. Please activate another template first.");
-      }
-
-      // Perform deletion (includes cleanup of associated log entries)
-      const success = await storage.deleteTemplate(id);
-      if (!success) {
-        return sendErrorResponse(res, 500, "Delete operation failed");
-      }
-
-      console.log(`Template ${id} deleted successfully`);
-      res.json({
-        status: 'success',
-        message: `Template "${existingTemplate.name}" deleted successfully`,
-        data: { deletedTemplateId: id, deletedTemplateName: existingTemplate.name },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to delete template", error);
-    }
-  });
-
-  // Log entries routes
   app.get("/api/logs", async (req, res) => {
     try {
-      const templateId = req.query.templateId as string;
-      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-      const logs = await storage.getLogEntries(templateId, limit);
-      res.json(logs);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch log entries" });
-    }
-  });
-
-  app.post("/api/logs", async (req, res) => {
-    try {
-      console.log("Creating log entry with data:", req.body);
+      const limit = parseInt(req.query.limit as string) || 50;
+      console.log(`Fetching recent ${limit} log entries`);
       
-      const logEntry = insertLogEntrySchema.parse(req.body);
-      console.log("Validated log entry:", logEntry);
+      const entries = await storage.getLogEntries(limit);
       
-      const newEntry = await storage.createLogEntry(logEntry);
-      console.log("Log entry created successfully:", newEntry.id);
-      
-      res.status(201).json({
+      res.json({
         status: 'success',
-        data: newEntry,
-        message: 'Log entry created successfully',
+        data: entries,
+        count: entries.length,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to create log entry:", error);
-      
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          status: 'error',
-          message: "Invalid log entry data", 
-          errors: error.errors,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      sendErrorResponse(res, 500, "Failed to create log entry", error);
+      sendErrorResponse(res, 500, "Failed to fetch log entries", error);
     }
   });
 
   /**
-   * PUT /api/logs/:id - Update existing log entry
-   * Validates input and handles partial updates with proper error responses
+   * GET /api/logs/:id - Get specific log entry
    */
-  app.put("/api/logs/:id", async (req, res) => {
+  app.get("/api/logs/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      console.log(`Updating log entry ${id}:`, req.body);
-
-      // Validate UUID format
-      if (!id || typeof id !== 'string' || id.length < 32) {
-        return sendErrorResponse(res, 400, "Invalid log entry ID format");
-      }
-
-      // Parse and validate partial log entry data
-      const logEntry = insertLogEntrySchema.partial().parse(req.body);
       
-      // Check if log entry exists before updating
-      const existingEntry = await storage.getLogEntry(id);
-      if (!existingEntry) {
+      if (!id) {
+        return sendErrorResponse(res, 400, "Log entry ID is required");
+      }
+      
+      const entry = await storage.getLogEntry(id);
+      
+      if (!entry) {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
-
-      // Perform update
-      const updated = await storage.updateLogEntry(id, logEntry);
-      if (!updated) {
-        return sendErrorResponse(res, 500, "Update operation failed");
-      }
-
-      console.log(`Log entry ${id} updated successfully`);
+      
       res.json({
         status: 'success',
-        data: updated,
-        message: "Log entry updated successfully",
+        data: entry,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Invalid log entry data", 
-          errors: error.errors,
-          status: 'error',
-          timestamp: new Date().toISOString()
-        });
+      sendErrorResponse(res, 500, "Failed to fetch log entry", error);
+    }
+  });
+
+  /**
+   * PATCH /api/logs/:id - Update log entry
+   */
+  app.patch("/api/logs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        return sendErrorResponse(res, 400, "Log entry ID is required");
       }
+
+      // Validate update data (partial schema)
+      const updateData = req.body;
+      
+      const updated = await storage.updateLogEntry(id, updateData);
+      
+      if (!updated) {
+        return sendErrorResponse(res, 404, "Log entry not found");
+      }
+      
+      res.json({
+        status: 'success',
+        data: updated,
+        message: 'Log entry updated successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
       sendErrorResponse(res, 500, "Failed to update log entry", error);
     }
   });
 
   /**
    * DELETE /api/logs/:id - Delete log entry
-   * Removes log entry with proper cleanup and error handling
    */
   app.delete("/api/logs/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      console.log(`Deleting log entry ${id}`);
-
-      // Validate UUID format
-      if (!id || typeof id !== 'string' || id.length < 32) {
-        return sendErrorResponse(res, 400, "Invalid log entry ID format");
+      
+      if (!id) {
+        return sendErrorResponse(res, 400, "Log entry ID is required");
       }
-
-      // Check if log entry exists and get data for response
-      const existingEntry = await storage.getLogEntry(id);
-      if (!existingEntry) {
+      
+      const deleted = await storage.deleteLogEntry(id);
+      
+      if (!deleted) {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
-
-      // Perform deletion
-      const success = await storage.deleteLogEntry(id);
-      if (!success) {
-        return sendErrorResponse(res, 500, "Delete operation failed");
-      }
-
-      console.log(`Log entry ${id} deleted successfully`);
+      
       res.json({
         status: 'success',
-        message: "Log entry deleted successfully",
-        data: { deletedLogId: id, deletedCommand: existingEntry.rawCommand },
+        message: 'Log entry deleted successfully',
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -392,72 +244,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/logs/query", async (req, res) => {
-    try {
-      const { templateId, query } = req.body;
-      const results = await storage.queryLogEntries(templateId, query);
-      res.json(results);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to query log entries" });
-    }
-  });
-
-  // Settings routes
+  /**
+   * SETTINGS ROUTES
+   * Handle application settings management
+   */
+  
+  /**
+   * GET /api/settings - Get current settings
+   */
   app.get("/api/settings", async (_req, res) => {
     try {
-      const settings = await storage.getSettings();
-      res.json(settings);
+      console.log("Fetching settings");
+      const currentSettings = await storage.getSettings();
+      
+      res.json({
+        status: 'success',
+        data: currentSettings,
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch settings" });
+      sendErrorResponse(res, 500, "Failed to fetch settings", error);
     }
   });
 
-  app.put("/api/settings", async (req, res) => {
+  /**
+   * PATCH /api/settings - Update settings
+   */
+  app.patch("/api/settings", async (req, res) => {
     try {
-      const settings = insertSettingsSchema.partial().parse(req.body);
-      const updated = await storage.updateSettings(settings);
-      res.json(updated);
+      console.log("Updating settings:", req.body);
+      
+      const settingsData = insertSettingsSchema.partial().parse(req.body);
+      const updated = await storage.updateSettings(settingsData);
+      
+      res.json({
+        status: 'success',
+        data: updated,
+        message: 'Settings updated successfully',
+        timestamp: new Date().toISOString()
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid settings data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to update settings" });
-    }
-  });
-
-  // Initialize default data
-  app.post("/api/initialize", async (_req, res) => {
-    try {
-      // Create default billiards template
-      const existingTemplate = await storage.getActiveTemplate();
-      if (!existingTemplate) {
-        const billiardsTemplate = await storage.createTemplate({
-          name: "Billiards League",
-          description: "Pool/billiards game logging",
-          logFormat: "Round [#] / Table [#] / Game [#] - [Player] [Action], [Player] [Action]",
-          queryFormat: "Who [Action] on Round [#] / Table [#] / Game [#]",
-          fields: [
-            { name: "round", type: "number", required: true },
-            { name: "table", type: "number", required: true },
-            { name: "game", type: "number", required: true },
-            { name: "players", type: "array", required: true },
-            { name: "actions", type: "array", required: true }
-          ],
-          isActive: true,
-        });
-
-        // Create default settings
-        await storage.updateSettings({
-          activationPhrase: "Hey M",
-          voiceResponseEnabled: true,
-          confidenceThreshold: 80,
-          currentTemplateId: billiardsTemplate.id,
+        return res.status(400).json({ 
+          message: "Invalid settings data", 
+          errors: error.errors,
+          timestamp: new Date().toISOString()
         });
       }
-
-      res.json({ message: "Application initialized successfully" });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to initialize application" });
+      
+      sendErrorResponse(res, 500, "Failed to update settings", error);
     }
   });
 
