@@ -37,7 +37,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // State management for speech recognition
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [mode, setMode] = useState<"log" | "query" | null>(null);
+  const [mode, setModeState] = useState<"log" | "query" | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [lastResponse, setLastResponse] = useState("");
 
@@ -45,6 +45,15 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
+  const modeRef = useRef<"log" | "query" | null>(null);
+
+  // Helper to update both mode state and ref (fixes React closure issue)
+  const setMode = useCallback((newMode: "log" | "query" | null) => {
+    console.log('setMode called with:', newMode);
+    modeRef.current = newMode;
+    console.log('modeRef.current is now:', modeRef.current);
+    setModeState(newMode);
+  }, []);
 
   const queryClient = useQueryClient();
   const { speak } = useSpeechSynthesis();
@@ -166,7 +175,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         recognition.stop();
         setIsListening(false);
         if (clearMode) {
-          setMode(null);
+          modeRef.current = null;
+          setModeState(null);
         }
         isProcessingRef.current = false;
       }
@@ -194,7 +204,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
       await saveMutation.mutateAsync(memoryText.trim());
       setTranscript("");
-      setMode(null);
+      modeRef.current = null;
+      setModeState(null);
 
     } catch (error) {
       console.error('Error handling log command:', error);
@@ -203,7 +214,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (isListening) {
         stopListening(false);
       }
-      setMode(null);
+      modeRef.current = null;
+      setModeState(null);
 
       setTimeout(() => {
         const errorMessage = "Failed to log your command. Please try again.";
@@ -231,7 +243,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       if (!cleanQuery) {
         const errorMessage = "Please provide a query.";
         setLastResponse(errorMessage);
-        setMode(null);
+        modeRef.current = null;
+        setModeState(null);
         if (settings?.voiceResponseEnabled) {
           speak(errorMessage);
         }
@@ -241,12 +254,14 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       isProcessingRef.current = true;
       await searchMutation.mutateAsync(cleanQuery);
       setTranscript("");
-      setMode(null);
+      modeRef.current = null;
+      setModeState(null);
 
     } catch (error) {
       console.error("Error handling query command:", error);
       isProcessingRef.current = false;
-      setMode(null);
+      modeRef.current = null;
+      setModeState(null);
 
       setTimeout(() => {
         const errorMessage = "Failed to process your query. Please try again.";
@@ -260,26 +275,29 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   /**
    * Process voice command based on current mode
+   * Uses modeRef to avoid React closure issues with state
    */
   const handleCommand = useCallback(async (command: string) => {
     try {
-      if (!mode) {
+      const currentMode = modeRef.current;
+      
+      if (!currentMode) {
         console.warn('No mode set, ignoring command');
         return;
       }
 
-      console.log(`Processing ${mode} command:`, command);
+      console.log(`Processing ${currentMode} command:`, command);
 
-      if (mode === "log") {
+      if (currentMode === "log") {
         await handleLogCommand(command);
-      } else if (mode === "query") {
+      } else if (currentMode === "query") {
         await handleQueryCommand(command);
       }
     } catch (error) {
       console.error('Error processing command:', error);
       isProcessingRef.current = false;
     }
-  }, [mode, handleLogCommand, handleQueryCommand]);
+  }, [handleLogCommand, handleQueryCommand]);
 
   /**
    * Process transcript when recognition ends
@@ -361,7 +379,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         setIsListening(false);
         
         if (event.error !== 'no-speech' && event.error !== 'aborted') {
-          setMode(null);
+          modeRef.current = null;
+          setModeState(null);
           const errorMessage = "Voice recognition error. Please try again.";
           setLastResponse(errorMessage);
           if (settings?.voiceResponseEnabled) {
