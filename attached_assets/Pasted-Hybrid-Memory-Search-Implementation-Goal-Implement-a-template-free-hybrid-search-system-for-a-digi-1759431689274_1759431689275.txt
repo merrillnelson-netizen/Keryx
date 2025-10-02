@@ -1,0 +1,52 @@
+Hybrid Memory Search Implementation
+Goal: Implement a template-free, hybrid search system for a digital memory app. The system must accept free-form natural language input and queries but internally use structured metadata and vector embeddings for highly relevant, time-aware search results.
+1. Project Context & Current State
+ * Current Setup: The app currently captures voice input and converts it to raw text (memory_text). I was previously using rigid, user-facing templates, which I am now replacing.
+ * Target Architecture: Hybrid Search combining Semantic Search (using vector embeddings) and Structured Filtering (using metadata).
+ * Core Data Requirement: Every saved memory must include a system-generated timestamp.
+2. Database Schema Definition (The New Structure)
+Define the structure of the data to be saved for every memory. This will be the universal schema layer.
+| Field Name | Data Type | Purpose | Notes |
+|---|---|---|---|
+| id | UUID/Integer | Primary key. | Unique identifier for the memory. |
+| timestamp | DATETIME | When the memory was recorded. | Crucial for temporal filtering. |
+| memory_text | TEXT | The raw, original voice-to-text transcription. | Used for display and semantic embedding. |
+| topic_tag | TEXT | High-level category inferred by the AI. | E.g., "Billiards," "Groceries," "General," "Meeting." |
+| metadata_json | JSON/TEXT | Structured data extracted by the AI. | Stores specific fields like round, table, items, etc. |
+| embedding_vector | VECTOR (Float Array) | The numerical representation of memory_text. | Crucial for semantic search. |
+3. AI Functionality: The Two Key Roles
+The AI (LLM or separate model calls) must perform two distinct actions: Extraction (when saving) and Parsing (when querying).
+A. When Saving a Memory (Extraction)
+The AI must execute the following logic when a user saves a new memory_text:
+ * Topic Identification: Analyze the memory_text and assign a single, concise topic_tag (e.g., "Billiards," "Groceries"). Default to "General" if no specific schema matches.
+ * Metadata Extraction: Based on the identified topic_tag, extract specific entities and output them as a JSON object to populate the metadata_json field.
+ * Vector Generation: Generate the embedding_vector for the memory_text.
+ * Save Operation: Bundle the timestamp, memory_text, topic_tag, metadata_json, and embedding_vector and save them to the database.
+| Topic Tag | Required Metadata Fields to Extract (Example Schema) |
+|---|---|
+| Billiards | round, table, game, breaker, racker, winner. |
+| Groceries | store, items_list (as a list), budget. |
+| Meeting | attendees, action_items (as a list), meeting_topic. |
+B. When Querying History (Parsing & Search)
+The AI must execute the following logic when a user submits a free-form query_text:
+ * Query Decomposition: Analyze the query_text to separate it into two parts:
+   * Semantic Component: The high-level intent (e.g., "Who broke," "What was that book").
+   * Structured Component: All filterable criteria (e.g., dates, times, topic tags, and specific metadata values like round 3, table 2).
+ * Filter Construction: Convert all Structured Components into explicit database filters (e.g., "last week" \rightarrow timestamp > 7 days ago; "round 3" \rightarrow metadata_json contains {"round": 3}).
+ * Query Vector Generation: Generate the embedding_vector for the Semantic Component of the query.
+ * Hybrid Search Execution: Perform a search that prioritizes finding memories where the embedding_vector is semantically close to the query_vector AND that satisfy ALL the constructed structured filters.
+4. Implementation Focus
+ * Focus on creating two core functions: save_memory(raw_text) and query_memory(query_text).
+ * Ensure the query_memory function effectively implements the Hybrid Search by combining the vector similarity score with the structured metadata and timestamp filters.
+Example Save Output:
+memory_text: "We had our billiards match tonight. Mark broke on table 2, round 3, game 1."
+topic_tag: "Billiards"
+metadata_json: {"round": 3, "table": 2, "game": 1, "breaker": "Mark"}
+timestamp: 2025-10-02T22:30:00Z
+Example Query Input:
+query_text: "Who broke for the first game on table two last Tuesday?"
+Expected Search Logic:
+ * Vector Search: Find memories semantically similar to "who broke for the first game."
+ * Filter: topic_tag = "Billiards" AND table = 2 AND game = 1 AND timestamp is Tuesday.
+ * Result: Return the single, most relevant memory that passes all filters.
+ * 
