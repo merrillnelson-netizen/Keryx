@@ -8,7 +8,6 @@ import { apiRequest } from "./lib/queryClient";
 
 import VoiceControl from "@/pages/voice-control";
 import History from "@/pages/history";
-import Query from "@/pages/query";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
@@ -17,7 +16,6 @@ function Router() {
     <Switch>
       <Route path="/" component={VoiceControl} />
       <Route path="/history" component={History} />
-      <Route path="/query" component={Query} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

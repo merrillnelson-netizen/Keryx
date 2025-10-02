@@ -7,7 +7,6 @@ export default function Sidebar() {
   const navigation = [
     { name: "Voice Control", href: "/", icon: "mic" },
     { name: "Memory History", href: "/history", icon: "history" },
-    { name: "Search Memories", href: "/query", icon: "search" },
     { name: "Settings", href: "/settings", icon: "settings" },
   ];
 
