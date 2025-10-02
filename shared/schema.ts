@@ -53,7 +53,6 @@ export const logEntries = pgTable("log_entries", {
  */
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  activationPhrase: text("activation_phrase").default("Voice AI"),
   voiceResponseEnabled: boolean("voice_response_enabled").default(true),
   confidenceThreshold: integer("confidence_threshold").default(80), // 0-100
   createdAt: timestamp("created_at").defaultNow(),

@@ -116,23 +116,6 @@ export default function SettingsPage() {
                   Minimum confidence level for voice recognition
                 </p>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="activation-phrase" className="text-base">Activation Phrase</Label>
-                <Input
-                  id="activation-phrase"
-                  data-testid="input-activation-phrase"
-                  value={settings.activationPhrase || ""}
-                  onChange={(e) => 
-                    setSettings(prev => ({ ...prev, activationPhrase: e.target.value }))
-                  }
-                  placeholder="e.g., Hey M"
-                  className="glass-card border-white/20"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Say this phrase to activate voice commands
-                </p>
-              </div>
             </CardContent>
           </Card>
 
