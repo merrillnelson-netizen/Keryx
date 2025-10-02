@@ -28,7 +28,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export default function History() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editTopic, setEditTopic] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -130,18 +132,50 @@ export default function History() {
       <div className="space-y-6 animate-fade-in">
         {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
-              <BookOpen className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
+                <BookOpen className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Memory History</h2>
+                <p className="text-sm text-muted-foreground">All your saved memories</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Memory History</h2>
-              <p className="text-sm text-muted-foreground">All your saved memories</p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "list" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-list"
+              >
+                <LayoutList className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "grid" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-grid"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Memories List */}
+        {/* Memories List - Scrollable Container */}
         {!logEntries || logEntries.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
             <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -149,9 +183,15 @@ export default function History() {
             <p className="text-muted-foreground">Start logging memories to see your activity here</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {logEntries.map((entry) => (
-              <Card key={entry.id} data-testid={`memory-card-${entry.id}`} className="glass-card border-white/20 overflow-hidden hover:shadow-xl transition-all duration-300">
+          <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+            <div className={cn(
+              "gap-4",
+              viewMode === "grid" 
+                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" 
+                : "space-y-4"
+            )}>
+              {logEntries.map((entry) => (
+                <Card key={entry.id} data-testid={`memory-card-${entry.id}`} className="glass-card border-white/20 overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -235,7 +275,8 @@ export default function History() {
                   </CardContent>
                 ) : null}
               </Card>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>
