@@ -209,10 +209,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/memories/search - Hybrid search for memories
    * Combines semantic search with structured filters
+   * Requires authentication
    */
-  app.post("/api/memories/search", async (req, res) => {
+  app.post("/api/memories/search", requireAuth, async (req, res) => {
     try {
       const { queryText } = req.body;
+      const user = req.user as any;
       
       if (!queryText || typeof queryText !== 'string') {
         return sendErrorResponse(res, 400, "queryText is required");
@@ -231,6 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Perform hybrid search
       const results = await storage.searchMemories(
+        user.id,
         queryVector,
         structuredFilters.topicTag,
         structuredFilters.timestampFilter?.start,
@@ -259,13 +262,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/logs - Get recent memories/log entries
    * Returns recent memories ordered by timestamp
+   * Requires authentication
    */
-  app.get("/api/logs", async (req, res) => {
+  app.get("/api/logs", requireAuth, async (req, res) => {
     try {
+      const user = req.user as any;
       const limit = parseInt(req.query.limit as string) || 50;
       console.log(`Fetching recent ${limit} log entries`);
       
-      const entries = await storage.getLogEntries(limit);
+      const entries = await storage.getLogEntries(user.id, limit);
       
       res.json({
         status: 'success',
@@ -280,16 +285,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/logs/:id - Get specific log entry
+   * Requires authentication
    */
-  app.get("/api/logs/:id", async (req, res) => {
+  app.get("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const user = req.user as any;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
       }
       
-      const entry = await storage.getLogEntry(id);
+      const entry = await storage.getLogEntry(id, user.id);
       
       if (!entry) {
         return sendErrorResponse(res, 404, "Log entry not found");
@@ -307,10 +314,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * PATCH /api/logs/:id - Update log entry
+   * Requires authentication
    */
-  app.patch("/api/logs/:id", async (req, res) => {
+  app.patch("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const user = req.user as any;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
@@ -319,7 +328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate update data (partial schema)
       const updateData = req.body;
       
-      const updated = await storage.updateLogEntry(id, updateData);
+      const updated = await storage.updateLogEntry(id, user.id, updateData);
       
       if (!updated) {
         return sendErrorResponse(res, 404, "Log entry not found");
@@ -338,16 +347,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * DELETE /api/logs/:id - Delete log entry
+   * Requires authentication
    */
-  app.delete("/api/logs/:id", async (req, res) => {
+  app.delete("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const user = req.user as any;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
       }
       
-      const deleted = await storage.deleteLogEntry(id);
+      const deleted = await storage.deleteLogEntry(id, user.id);
       
       if (!deleted) {
         return sendErrorResponse(res, 404, "Log entry not found");
@@ -370,11 +381,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   /**
    * GET /api/settings - Get current settings
+   * Requires authentication
    */
-  app.get("/api/settings", async (_req, res) => {
+  app.get("/api/settings", requireAuth, async (req, res) => {
     try {
+      const user = req.user as any;
       console.log("Fetching settings");
-      const currentSettings = await storage.getSettings();
+      const currentSettings = await storage.getSettings(user.id);
       console.log("Settings from database:", JSON.stringify(currentSettings, null, 2));
       
       res.json({
@@ -389,13 +402,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * PUT /api/settings - Update settings
+   * Requires authentication
    */
-  app.put("/api/settings", async (req, res) => {
+  app.put("/api/settings", requireAuth, async (req, res) => {
     try {
+      const user = req.user as any;
       console.log("Updating settings:", req.body);
       
       const settingsData = insertSettingsSchema.partial().parse(req.body);
-      const updated = await storage.updateSettings(settingsData);
+      const updated = await storage.updateSettings(user.id, settingsData);
       
       res.json({
         status: 'success',
