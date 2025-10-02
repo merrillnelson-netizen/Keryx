@@ -11,7 +11,8 @@ export default function VoiceActivation() {
     startListening, 
     stopListening,
     mode,
-    setMode
+    setMode,
+    lastResponse
   } = useSpeechRecognition();
 
   const { speak } = useSpeechSynthesis();
@@ -77,6 +78,7 @@ export default function VoiceActivation() {
               variant="destructive"
               className="px-4 lg:px-6 py-3 w-full sm:w-auto"
               size="lg"
+              data-testid="button-stop-listening"
             >
               <span className="material-icons mr-2">stop</span>
               <span className="font-medium">Stop Listening</span>
@@ -87,6 +89,7 @@ export default function VoiceActivation() {
                 onClick={handleLogMode}
                 className="bg-secondary hover:bg-green-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
                 size="lg"
+                data-testid="button-log-mode"
               >
                 <span className="material-icons mr-2">add_circle</span>
                 <span className="font-medium">Log Mode</span>
@@ -96,6 +99,7 @@ export default function VoiceActivation() {
                 onClick={handleQueryMode}
                 className="bg-accent hover:bg-orange-600 text-white px-4 lg:px-6 py-3 w-full sm:w-auto"
                 size="lg"
+                data-testid="button-query-mode"
               >
                 <span className="material-icons mr-2">search</span>
                 <span className="font-medium">Query Mode</span>
@@ -103,6 +107,21 @@ export default function VoiceActivation() {
             </>
           )}
         </div>
+
+        {/* Response Display - Always visible when there's a response */}
+        {lastResponse && (
+          <div className="mt-4 lg:mt-6 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+            <div className="flex items-start gap-3">
+              <span className="material-icons text-primary mt-0.5">campaign</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-primary mb-1">Response</p>
+                <p className="text-sm lg:text-base text-foreground" data-testid="text-response">
+                  {lastResponse}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
