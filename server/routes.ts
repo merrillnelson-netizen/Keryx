@@ -268,9 +268,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * PATCH /api/settings - Update settings
+   * PUT /api/settings - Update settings
    */
-  app.patch("/api/settings", async (req, res) => {
+  app.put("/api/settings", async (req, res) => {
     try {
       console.log("Updating settings:", req.body);
       
