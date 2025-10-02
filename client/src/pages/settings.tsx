@@ -33,14 +33,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (currentSettings) {
-      console.log("Received settings from API:", currentSettings);
-      console.log("voiceResponseEnabled value:", currentSettings.voiceResponseEnabled);
       setSettings(currentSettings);
     }
   }, [currentSettings]);
 
   const handleSave = () => {
-    console.log("Saving settings:", settings);
     updateSettingsMutation.mutate(settings);
   };
 

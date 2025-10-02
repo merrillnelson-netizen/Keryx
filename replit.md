@@ -49,6 +49,7 @@ MyDigitalMemory (MDM) is an AI-powered mobile-first voice logging and search sys
 - **Voice Response Settings**: Fixed persistence issue - queryFn now correctly extracts data field from API responses
 - **History Page Display**: Fixed data extraction bug where memories weren't showing
 - **Query Interface**: Removed redundant Query Interface page - voice query on main page works perfectly
+- **Settings Persistence**: Fixed slider state update bug by using functional setState (`prev => ({ ...prev, ... })`) to prevent stale closure issues
 
 ### API Response Pattern
 All API endpoints follow standardized response format:
