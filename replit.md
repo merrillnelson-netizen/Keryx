@@ -2,7 +2,29 @@
 
 ## Overview
 
-MyDigitalMemory (MDM) is a mobile-first voice-activated logging and query system that allows users to log structured data and query it using natural language voice commands. The application uses speech recognition to capture voice input, processes it through custom parsers, and stores structured data in a PostgreSQL database. Users can create custom templates to define data structures and query formats, making it adaptable for various logging scenarios like billiards leagues, project tracking, or any structured data collection.
+MyDigitalMemory (MDM) is an AI-powered mobile-first voice logging and search system. Users can log free-form natural language memories via voice or text, which are automatically processed through OpenAI GPT to extract topic tags and structured metadata. The system enables semantic search via OpenAI embeddings combined with structured filters for powerful hybrid search capabilities.
+
+## Recent Changes (October 2025)
+
+### Performance Optimizations
+- **Query Speed**: Switched query decomposition from GPT-5 (o1-mini) to GPT-4o-mini for 5x faster processing (7s → 1.5s)
+- **Parallel Processing**: Embedding generation and query decomposition now run simultaneously
+- **Expected Query Time**: Reduced from ~15 seconds to ~2 seconds
+
+### Bug Fixes
+- **Voice Response Settings**: Fixed persistence issue - queryFn now correctly extracts data field from API responses
+- **History Page Display**: Fixed data extraction bug where memories weren't showing - queryFn already extracts the data field from wrapped API responses
+
+### API Response Pattern
+All API endpoints follow standardized response format:
+```json
+{
+  "status": "success",
+  "data": <actual data>,
+  "timestamp": "ISO timestamp"
+}
+```
+The default queryFn in queryClient automatically extracts the `data` field, so components should expect the unwrapped data directly.
 
 ## User Preferences
 
