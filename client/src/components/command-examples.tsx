@@ -3,13 +3,13 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function CommandExamples() {
   const examples = {
     logCommands: [
-      '"Hey M, Log we had our billiards match tonight. Mark broke on table 2, round 3, game 1"',
-      '"Hey M, Log went to the grocery store. Bought milk, eggs, and bread for 25 dollars"',
+      '"We had our billiards match tonight. Mark broke on table 2, round 3, game 1"',
+      '"Went to the grocery store. Bought milk, eggs, and bread for 25 dollars"',
       '"Just finished our team meeting. We discussed the new project launch and Sarah volunteered to lead it"'
     ],
     queryCommands: [
-      '"Hey M, Query who broke for the first game on table 2?"',
-      '"Hey M, Query what did I buy at the store this week?"',
+      '"Who broke for the first game on table 2?"',
+      '"What did I buy at the store this week?"',
       '"Who volunteered to lead the project?"'
     ]
   };
@@ -59,7 +59,7 @@ export default function CommandExamples() {
         
         <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-800">
-            <span className="font-medium">Tip:</span> No templates needed! Just speak naturally and the AI will understand the context and extract important details automatically.
+            <span className="font-medium">Tip:</span> Press the Log or Query button, then speak naturally. The AI will understand the context and extract important details automatically.
           </p>
         </div>
       </CardContent>

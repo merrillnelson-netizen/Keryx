@@ -70,7 +70,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
                       <div className="w-2 h-2 bg-secondary rounded-full mr-2 animate-pulse"></div>
                       <span className="text-sm text-green-800 font-medium">System Active</span>
                     </div>
-                    <p className="text-xs text-green-600 mt-1">Listening for "Hey M"</p>
+                    <p className="text-xs text-green-600 mt-1">Voice AI Ready</p>
                   </div>
                 </div>
               </div>
@@ -128,7 +128,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
                 <div className="w-2 h-2 bg-secondary rounded-full mr-2 animate-pulse"></div>
                 <span className="text-sm text-green-800 font-medium">System Active</span>
               </div>
-              <p className="text-xs text-green-600 mt-1">Listening for "Hey M"</p>
+              <p className="text-xs text-green-600 mt-1">Voice AI Ready</p>
             </div>
           </div>
         </div>

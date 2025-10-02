@@ -77,19 +77,6 @@ export default function SettingsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="activationPhrase">Activation Phrase</Label>
-                  <Input
-                    id="activationPhrase"
-                    value={settings.activationPhrase || ""}
-                    onChange={(e) => setSettings({ ...settings, activationPhrase: e.target.value })}
-                    placeholder="Hey M"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    The phrase that triggers voice recognition
-                  </p>
-                </div>
-
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Voice Response</Label>

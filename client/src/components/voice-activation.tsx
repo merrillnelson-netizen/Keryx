@@ -66,7 +66,7 @@ export default function VoiceActivation() {
           <p className="text-sm lg:text-base text-muted-foreground max-w-md mx-auto px-2">
             {isListening 
               ? `Listening for ${mode} commands...`
-              : 'Say "Hey M" followed by your logging or query command, or use the buttons below'
+              : 'Press a button below to start logging or querying'
             }
           </p>
         </div>
