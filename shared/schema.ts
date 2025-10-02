@@ -15,19 +15,24 @@ export const users = pgTable("users", {
 /**
  * Log entries table - stores voice memories with AI-extracted metadata and embeddings
  * Optimized with indexes for:
+ * - User isolation (userId)
  * - Chronological retrieval (timestamp)
  * - Topic filtering (topicTag)
  * - Semantic search (embeddingVector with cosine similarity)
- * - Combined filters (topicTag + timestamp)
+ * - Combined filters (userId + timestamp, topicTag + timestamp)
  */
 export const logEntries = pgTable("log_entries", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   memoryText: text("memory_text").notNull(), // Raw voice-to-text transcription
   topicTag: text("topic_tag").notNull(), // AI-extracted topic (e.g., "Billiards", "Groceries")
   metadataJson: jsonb("metadata_json").notNull(), // AI-extracted structured data
   embeddingVector: vector("embedding_vector", { dimensions: 1536 }), // OpenAI text-embedding-3-small creates 1536-dim vectors
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 }, (table) => ({
+  // Index for user-specific queries (critical for data isolation)
+  userIdIdx: index("log_entries_user_id_idx").on(table.userId),
+  
   // Index for chronological queries (recent memories)
   timestampIdx: index("log_entries_timestamp_idx").on(table.timestamp.desc()),
   
@@ -39,6 +44,12 @@ export const logEntries = pgTable("log_entries", {
   embeddingIdx: index("log_entries_embedding_idx").using(
     "hnsw",
     table.embeddingVector.op("vector_cosine_ops")
+  ),
+  
+  // Composite index for common query: user's memories sorted by time
+  userTimestampIdx: index("log_entries_user_timestamp_idx").on(
+    table.userId,
+    table.timestamp.desc()
   ),
   
   // Composite index for common query: filter by topic and sort by time
