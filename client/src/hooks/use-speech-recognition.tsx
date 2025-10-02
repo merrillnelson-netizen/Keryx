@@ -2,9 +2,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { parseVoiceCommand } from "@/lib/voice-parser";
 import { useSpeechSynthesis } from "./use-speech-synthesis";
-import { Template, Settings } from "@shared/schema";
+import { Settings } from "@shared/schema";
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech";
 
 /**
@@ -23,16 +22,16 @@ interface SpeechRecognitionHook {
 }
 
 /**
- * Custom hook for managing speech recognition functionality
- * Handles browser's Web Speech API, voice command processing, and memory cleanup
+ * Custom hook for managing speech recognition functionality with AI-powered free-form input
+ * No longer requires templates - all metadata extraction is handled by AI
  * 
  * Features:
  * - Browser compatibility checking
  * - Automatic memory cleanup on unmount
  * - Error handling for speech recognition failures
- * - Voice command parsing and API integration
+ * - AI-powered metadata extraction
  * - Real-time transcript updates
- * - Comprehensive garbage collection
+ * - Hybrid semantic search
  */
 export function useSpeechRecognition(): SpeechRecognitionHook {
   // State management for speech recognition
@@ -57,132 +56,96 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Query for active template with error handling
-  const { data: activeTemplate } = useQuery<Template>({
-    queryKey: ["/api/templates/active"],
-    retry: 3,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Mutation for logging voice commands with comprehensive error handling
-  const logMutation = useMutation({
-    mutationFn: async (logEntry: any) => {
-      try {
-        console.log('Creating log entry with data:', JSON.stringify(logEntry, null, 2));
-
-        // Validate required fields before sending
-        if (!logEntry.templateId) {
-          throw new Error('Template ID is required');
-        }
-        if (!logEntry.rawCommand) {
-          throw new Error('Raw command is required');
-        }
-        if (!logEntry.parsedData) {
-          throw new Error('Parsed data is required');
-        }
-
-        const response = await apiRequest("POST", "/api/logs", logEntry);
-
-        // Check if response is ok
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('Log entry creation response:', result);
-        return result;
-      } catch (error) {
-        console.error('Error in logMutation:', error);
-        throw error;
+  // Mutation for saving memories with AI extraction
+  const saveMutation = useMutation({
+    mutationFn: async (memoryText: string) => {
+      console.log('Saving memory:', memoryText);
+      const response = await apiRequest("POST", "/api/memories", { memoryText });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      return await response.json();
     },
     onSuccess: (data) => {
-      try {
-        console.log('Log entry created successfully:', data);
-        // Invalidate and refetch log queries to update UI
-        queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      console.log('Memory saved successfully:', data);
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
-        // Clear processing flag
-        isProcessingRef.current = false;
+      isProcessingRef.current = false;
 
-        // Provide success feedback
-        const successMessage = "Log entry saved successfully";
-        setLastResponse(successMessage);
+      const successMessage = `Memory saved as ${data.data.topicTag}`;
+      setLastResponse(successMessage);
 
-        // Delayed speech response to avoid interruption
-        setTimeout(() => {
-          if (settings?.voiceResponseEnabled) {
-            speak(successMessage);
-          }
-        }, 1000);
-
-      } catch (error) {
-        console.error('Error in log success handler:', error);
-      }
+      setTimeout(() => {
+        if (settings?.voiceResponseEnabled) {
+          speak(successMessage);
+        }
+      }, 1000);
     },
     onError: (error) => {
-      try {
-        console.error('Failed to create log entry:', error);
+      console.error('Failed to save memory:', error);
+      isProcessingRef.current = false;
 
-        // Clear processing flag
-        isProcessingRef.current = false;
+      const errorMessage = "Failed to save memory. Please try again.";
+      setLastResponse(errorMessage);
 
-        // Provide detailed error feedback
-        let errorMessage = "Failed to save log entry. ";
-        if (error instanceof Error) {
-          if (error.message.includes('network') || error.message.includes('fetch')) {
-            errorMessage += "Please check your connection and try again.";
-          } else if (error.message.includes('validation')) {
-            errorMessage += "The command format wasn't recognized. Please try again.";
-          } else {
-            errorMessage += "Please try again.";
-          }
+      setTimeout(() => {
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
         }
-
-        setLastResponse(errorMessage);
-
-        // Delayed speech response
-        setTimeout(() => {
-          if (settings?.voiceResponseEnabled) {
-            speak(errorMessage);
-          }
-        }, 500);
-
-      } catch (handlerError) {
-        console.error('Error in log error handler:', handlerError);
-      }
+      }, 500);
     },
   });
 
-  // Mutation for querying log entries with error handling
-  const queryMutation = useMutation({
-    mutationFn: async (query: any) => {
-      try {
-        const response = await apiRequest("POST", "/api/logs/query", query);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return await response.json();
-      } catch (error) {
-        console.error("Query mutation error:", error);
-        throw error;
+  // Mutation for querying memories with hybrid search
+  const searchMutation = useMutation({
+    mutationFn: async (queryText: string) => {
+      console.log('Searching memories:', queryText);
+      const response = await apiRequest("POST", "/api/memories/search", { queryText });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      console.log('Search results:', data);
+      isProcessingRef.current = false;
+
+      const results = data.data || [];
+      let responseMessage = "";
+
+      if (results.length === 0) {
+        responseMessage = "No matching memories found.";
+      } else if (results.length === 1) {
+        const memory = results[0];
+        responseMessage = `Found: ${memory.memoryText}`;
+      } else {
+        responseMessage = `Found ${results.length} matching memories. The most relevant is: ${results[0].memoryText}`;
+      }
+
+      setLastResponse(responseMessage);
+
+      setTimeout(() => {
+        if (settings?.voiceResponseEnabled) {
+          speak(responseMessage);
+        }
+      }, 500);
     },
     onError: (error) => {
-      try {
-        console.error("Failed to process query:", error);
-        isProcessingRef.current = false;
-        const errorMessage = "Failed to process your query. Please try again.";
-        setLastResponse(errorMessage);
+      console.error("Failed to search memories:", error);
+      isProcessingRef.current = false;
+      
+      const errorMessage = "Failed to search memories. Please try again.";
+      setLastResponse(errorMessage);
 
-        setTimeout(() => {
-          if (settings?.voiceResponseEnabled) {
-            speak(errorMessage);
-          }
-        }, 500);
-      } catch (handlerError) {
-        console.error('Error in query error handler:', handlerError);
-      }
+      setTimeout(() => {
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
+      }, 500);
     },
   });
 
@@ -191,11 +154,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   /**
    * Stop listening for voice commands with proper cleanup
-   * Ensures all resources are properly disposed
    */
   const stopListening = useCallback(() => {
     try {
-      // Clear timeout
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
@@ -213,357 +174,162 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   }, [recognition, isListening]);
 
   /**
-   * Handle log command with voice parser integration
-   * Parses voice input and creates log entries in database
+   * Handle log command - save free-form voice input as memory
    */
-  const handleLogCommand = useCallback(async (data: string) => {
+  const handleLogCommand = useCallback(async (memoryText: string) => {
     try {
-      console.log('Handling log command with data:', data);
+      console.log('Handling log command:', memoryText);
 
-      // Validate we have an active template
-      if (!activeTemplate) {
-        const errorMessage = "No active template found. Please activate a template first.";
-        setLastResponse(errorMessage);
-        setTimeout(() => {
-          if (settings?.voiceResponseEnabled) {
-            speak(errorMessage);
-          }
-        }, 500);
-        isProcessingRef.current = false;
-        return;
+      if (!memoryText || memoryText.trim().length === 0) {
+        throw new Error("No data provided for log command");
       }
 
-      // Set processing flag to prevent interruptions
       isProcessingRef.current = true;
 
-      // Stop listening during processing to avoid interference
       if (isListening) {
         stopListening();
       }
 
-      // Validate data is provided
-      if (!data || data.trim().length === 0) {
-        throw new Error("No data provided for log command");
-      }
-
-      // For now, let's simplify - just create a basic log entry without complex parsing
-      // This will help us get logging working first
-      const basicParsedData = {
-        command: data.trim(),
-        timestamp: new Date().toISOString(),
-        type: 'simple_log'
-      };
-
-      console.log('Creating basic parsed data:', basicParsedData);
-
-      // Create log entry object with proper structure
-      const logEntry = {
-        templateId: activeTemplate.id,
-        rawCommand: data.trim(),
-        parsedData: basicParsedData,
-        timestamp: new Date(),
-      };
-
-      console.log('Creating log entry:', logEntry);
-
-      // Submit to database using the mutation
-      const result = await logMutation.mutateAsync(logEntry);
-      console.log('Log entry created successfully:', result);
-
-      // Reset transcript for next command
+      await saveMutation.mutateAsync(memoryText.trim());
       setTranscript("");
 
     } catch (error) {
       console.error('Error handling log command:', error);
       isProcessingRef.current = false;
 
-      // Stop listening on error as well
       if (isListening) {
         stopListening();
       }
 
-      // Provide specific error feedback based on error type with delay
       setTimeout(() => {
-        let response = "Failed to log your command. ";
-        if (error instanceof Error) {
-          if (error.message.includes("No data")) {
-            response += "Please provide data to log.";
-          } else if (error.message.includes("network") || error.message.includes("fetch")) {
-            response += "Network error occurred. Please check your connection and try again.";
-          } else {
-            response += "Please try again with a clearer command.";
-          }
-        } else {
-          response += "Please try again.";
-        }
-
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-    }
-  }, [activeTemplate, isListening, logMutation, settings, speak, stopListening]);
-
-  /**
-   * Handle query commands with comprehensive error handling
-   * Processes voice queries and returns results
-   */
-  const handleQueryCommand = useCallback(async (command: string) => {
-    try {
-      // Stop listening immediately to prevent interruption
-      if (isListening) {
-        stopListening();
-      }
-
-      // Remove "query" prefix if present and validate template
-      const cleanCommand = command.replace(/^query\s+/i, '').trim();
-      if (!activeTemplate) {
-        const errorMessage = "No active template found. Please activate a template first.";
+        const errorMessage = "Failed to log your command. Please try again.";
         setLastResponse(errorMessage);
         if (settings?.voiceResponseEnabled) {
           speak(errorMessage);
         }
-        isProcessingRef.current = false;
+      }, 500);
+    }
+  }, [isListening, saveMutation, settings, speak, stopListening]);
+
+  /**
+   * Handle query command - search memories with hybrid search
+   */
+  const handleQueryCommand = useCallback(async (queryText: string) => {
+    try {
+      console.log('Handling query command:', queryText);
+
+      if (isListening) {
+        stopListening();
+      }
+
+      const cleanQuery = queryText.replace(/^query\s+/i, '').trim();
+      
+      if (!cleanQuery) {
+        const errorMessage = "Please provide a query.";
+        setLastResponse(errorMessage);
+        if (settings?.voiceResponseEnabled) {
+          speak(errorMessage);
+        }
         return;
       }
 
-      if (!cleanCommand) {
-        throw new Error("No query provided after 'query' command");
-      }
-
-      // Simple query parsing for now
-      const parsedQuery = {
-        query: cleanCommand,
-        type: 'simple_query'
-      };
-
-      const result = await queryMutation.mutateAsync({
-        templateId: activeTemplate.id,
-        query: parsedQuery,
-      });
-
-      // Process results and generate response with delay
-      setTimeout(() => {
-        const response = result && result.length > 0 ? 
-          `Found ${result.length} matching results` : 
-          "No results found";
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-
-      // Reset transcript for next command
+      isProcessingRef.current = true;
+      await searchMutation.mutateAsync(cleanQuery);
       setTranscript("");
 
     } catch (error) {
-      console.error('Error handling query command:', error);
-      isProcessingRef.current = false;
-
-      // Stop listening on error
-      if (isListening) {
-        stopListening();
-      }
-
-      setTimeout(() => {
-        let response = "Failed to process query. ";
-        if (error instanceof Error && error.message.includes("No query")) {
-          response += "Please provide a query after saying 'query'.";
-        } else {
-          response += "Please try again.";
-        }
-
-        setLastResponse(response);
-        if (settings?.voiceResponseEnabled) {
-          speak(response);
-        }
-      }, 500);
-    }
-  }, [activeTemplate, isListening, queryMutation, settings, speak, stopListening]);
-
-  /**
-   * Handle different types of voice commands
-   * Routes commands to appropriate handlers based on content
-   */
-  const handleCommand = useCallback(async (command: string) => {
-    try {
-      console.log('Processing command:', command);
-
-      // Handle different command types
-      if (command.startsWith('log ')) {
-        await handleLogCommand(command.substring(4)); // Remove 'log ' prefix
-      } else if (command.includes('query') || command.includes('find') || command.includes('show')) {
-        await handleQueryCommand(command);
-      } else {
-        // For billiards template, treat any command as a log command
-        // This allows natural speech like "round 1 table 2 game 1 john breaks steve misses"
-        console.log('Treating as log command:', command);
-        await handleLogCommand(command);
-      }
-    } catch (error) {
-      console.error('Error in handleCommand:', error);
+      console.error("Error handling query command:", error);
       isProcessingRef.current = false;
 
       setTimeout(() => {
-        const errorMessage = "I didn't understand that command. Please try again.";
+        const errorMessage = "Failed to process your query. Please try again.";
         setLastResponse(errorMessage);
         if (settings?.voiceResponseEnabled) {
           speak(errorMessage);
         }
       }, 500);
     }
-  }, [handleLogCommand, handleQueryCommand, settings]);
+  }, [isListening, searchMutation, settings, speak, stopListening]);
 
   /**
-   * Process voice transcript and handle different command types
-   * Determines if transcript contains valid commands and routes appropriately
+   * Process voice command based on current mode
    */
-  const processTranscript = useCallback(async (transcript: string) => {
+  const handleCommand = useCallback(async (command: string) => {
     try {
-      // Prevent processing if already handling a command
+      if (!mode) {
+        console.warn('No mode set, ignoring command');
+        return;
+      }
+
+      console.log(`Processing ${mode} command:`, command);
+
+      if (mode === "log") {
+        await handleLogCommand(command);
+      } else if (mode === "query") {
+        await handleQueryCommand(command);
+      }
+    } catch (error) {
+      console.error('Error processing command:', error);
+      isProcessingRef.current = false;
+    }
+  }, [mode, handleLogCommand, handleQueryCommand]);
+
+  /**
+   * Process transcript when recognition ends
+   */
+  const processTranscript = useCallback((finalTranscript: string) => {
+    try {
+      if (!finalTranscript || finalTranscript.trim().length === 0) {
+        console.log('Empty transcript, skipping');
+        return;
+      }
+
       if (isProcessingRef.current) {
-        console.log("Already processing a command, skipping...");
+        console.log('Already processing, skipping');
         return;
       }
 
-      // Clean up the transcript - remove extra spaces and normalize
-      const cleanTranscript = transcript.trim().toLowerCase();
-
-      if (!cleanTranscript) {
-        console.log("Empty transcript, ignoring");
-        return;
-      }
-
-      console.log("Processing command:", cleanTranscript, "Mode:", mode, "Active template:", activeTemplate?.name || 'None');
-
-      // Check for activation phrase if we have settings
-      if (settings?.activationPhrase) {
-        const activationPhrase = settings.activationPhrase.toLowerCase();
-
-        if (!cleanTranscript.includes(activationPhrase)) {
-          console.log(`Activation phrase "${activationPhrase}" not found in: "${cleanTranscript}"`);
-          return;
-        }
-
-        // Remove activation phrase from transcript for processing
-        const commandPart = cleanTranscript.replace(activationPhrase, '').trim();
-        if (!commandPart) {
-          console.log("No command found after activation phrase");
-          // Provide feedback that we're listening
-          setLastResponse("I'm listening. What would you like to log?");
-          if (settings?.voiceResponseEnabled) {
-            speak("I'm listening. What would you like to log?");
-          }
-          return;
-        }
-
-        console.log(`Command after activation phrase: "${commandPart}"`);
-
-        // Process the command
-        await handleCommand(commandPart);
-      } else {
-        // No activation phrase set, process directly
-        await handleCommand(cleanTranscript);
-      }
+      console.log('Processing transcript:', finalTranscript);
+      handleCommand(finalTranscript);
 
     } catch (error) {
       console.error('Error processing transcript:', error);
       isProcessingRef.current = false;
-
-      setTimeout(() => {
-        const errorMessage = "Failed to process your command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
     }
-  }, [mode, activeTemplate, settings, speak, handleCommand]);
+  }, [handleCommand]);
 
   /**
-   * Cleanup function to prevent memory leaks
-   * Properly disposes of all resources and event listeners
+   * Start listening for voice commands
    */
-  const cleanup = useCallback(() => {
+  const startListening = useCallback(() => {
     try {
-      // Clear any active timeouts to prevent memory leaks
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-
-      // Stop and cleanup recognition instance
-      if (recognitionRef.current) {
-        try {
-          // Remove event listeners to prevent memory leaks
-          recognitionRef.current.onresult = null;
-          recognitionRef.current.onerror = null;
-          recognitionRef.current.onend = null;
-          recognitionRef.current.onstart = null;
-
-          // Stop recognition
-          if (recognitionRef.current.stop) {
-            recognitionRef.current.stop();
-          }
-          if (recognitionRef.current.abort) {
-            recognitionRef.current.abort();
-          }
-        } catch (cleanupError) {
-          console.warn('Error during recognition cleanup:', cleanupError);
-        }
-
-        // Clear reference for garbage collection
-        recognitionRef.current = null;
-      }
-
-      // Reset state
-      setIsListening(false);
-      setMode(null);
-      isProcessingRef.current = false;
-
-    } catch (error) {
-      console.error("Error during cleanup:", error);
-    }
-  }, []);
-
-  /**
-   * Initialize speech recognition instance with proper error handling
-   * Sets up event listeners and manages memory cleanup
-   */
-  useEffect(() => {
-    if (!isSupported) {
-      console.warn("Speech recognition not supported in this browser");
-      return;
-    }
-
-    try {
-      // Get the appropriate SpeechRecognition constructor
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        console.error("Speech recognition constructor not available");
+      if (!isSupported) {
+        console.error('Speech recognition not supported');
         return;
       }
 
-      // Create new recognition instance with error handling
-      const recognitionInstance = new SpeechRecognition();
+      if (isListening) {
+        console.log('Already listening');
+        return;
+      }
 
-      // Configure recognition settings for optimal performance
-      recognitionInstance.continuous = true;
-      recognitionInstance.interimResults = true;
-      recognitionInstance.lang = 'en-US';
-      recognitionInstance.maxAlternatives = 1;
+      const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const newRecognition = new SpeechRecognitionAPI() as SpeechRecognition;
 
-      /**
-       * Handle speech recognition results with comprehensive error handling
-       * Processes both interim and final results to provide real-time feedback
-       */
-      recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
+      newRecognition.continuous = false;
+      newRecognition.interimResults = true;
+      newRecognition.lang = 'en-US';
+
+      newRecognition.onstart = () => {
+        console.log('Speech recognition started');
+        setIsListening(true);
+      };
+
+      newRecognition.onresult = (event: SpeechRecognitionEvent) => {
         try {
-          let finalTranscript = '';
           let interimTranscript = '';
+          let finalTranscript = '';
 
-          // Extract both final and interim results
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
@@ -573,174 +339,60 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
             }
           }
 
-          // Update transcript with interim results for real-time feedback
-          if (interimTranscript.trim()) {
-            setTranscript(interimTranscript);
-          }
+          setTranscript(finalTranscript || interimTranscript);
 
-          // Process final results with delay to ensure complete speech
-          if (finalTranscript.trim() && !isProcessingRef.current) {
-            isProcessingRef.current = true;
-            setTranscript(finalTranscript);
-
-            // Clear any existing timeout
-            if (timeoutRef.current) {
-              clearTimeout(timeoutRef.current);
-            }
-
-            // Process command with delay to ensure user has finished speaking
-            timeoutRef.current = setTimeout(() => {
-              try {
-                processTranscript(finalTranscript);
-              } catch (error) {
-                console.error("Error processing command:", error);
-                isProcessingRef.current = false;
-              }
-            }, 1200);
+          if (finalTranscript) {
+            processTranscript(finalTranscript);
           }
         } catch (error) {
-          console.error("Error processing speech results:", error);
-          isProcessingRef.current = false;
-          setLastResponse("Error processing speech. Please try again.");
+          console.error('Error processing speech results:', error);
         }
       };
 
-      /**
-       * Handle speech recognition errors with detailed error messages
-       * Provides user-friendly feedback for different error types
-       */
-      recognitionInstance.onerror = (event: SpeechRecognitionErrorEvent) => {
-        try {
-          console.error('Speech recognition error:', event.error);
-          setIsListening(false);
-          isProcessingRef.current = false;
-
-          // Handle no-speech silently to avoid interrupting user
-          if (event.error === 'no-speech') {
-            return;
-          }
-
-          let errorMessage = "Voice recognition error: ";
-
-          // Provide specific error messages based on error type
-          switch (event.error) {
-            case 'not-allowed':
-              errorMessage += "Microphone access denied. Please allow permissions and try again.";
-              break;
-            case 'audio-capture':
-              errorMessage += "Audio capture failed. Please check your microphone.";
-              break;
-            case 'network':
-              errorMessage += "Network error occurred. Please check your connection.";
-              break;
-            case 'service-not-allowed':
-              errorMessage += "Speech recognition service not allowed. Check browser permissions.";
-              break;
-            case 'bad-grammar':
-              errorMessage += "Grammar error in recognition. Please try again.";
-              break;
-            default:
-              errorMessage += `Unexpected error: ${event.error}`;
-          }
-
+      newRecognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        setMode(null);
+        
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          const errorMessage = "Voice recognition error. Please try again.";
           setLastResponse(errorMessage);
-
-          // Add delay before speaking error messages
-          setTimeout(() => {
-            if (settings?.voiceResponseEnabled) {
-              speak(errorMessage);
-            }
-          }, 1000);
-
-        } catch (handlerError) {
-          console.error("Error in speech error handler:", handlerError);
-        }
-      };
-
-      /**
-       * Handle recognition end event
-       * Updates listening state and cleans up resources
-       */
-      recognitionInstance.onend = () => {
-        try {
-          setIsListening(false);
-          isProcessingRef.current = false;
-        } catch (error) {
-          console.error("Error in onend handler:", error);
-        }
-      };
-
-      // Store the recognition instance in both state and ref for cleanup
-      setRecognition(recognitionInstance);
-      recognitionRef.current = recognitionInstance;
-
-      // Cleanup function to prevent memory leaks
-      return cleanup;
-
-    } catch (error) {
-      console.error("Error initializing speech recognition:", error);
-      setLastResponse("Failed to initialize speech recognition. Please refresh the page.");
-    }
-  }, [isSupported, cleanup, settings?.voiceResponseEnabled, speak, processTranscript]);
-
-  /**
-   * Start listening for voice commands with proper error handling
-   * Includes timeout management to prevent infinite listening
-   */
-  const startListening = useCallback(() => {
-    try {
-      if (!isSupported) {
-        const message = "Speech recognition is not supported in this browser. Please try Chrome or Edge.";
-        setLastResponse(message);
-        console.error(message);
-        return;
-      }
-
-      if (recognition && !isListening) {
-        // Reset state
-        setTranscript("");
-        setLastResponse("");
-        isProcessingRef.current = false;
-
-        // Clear any existing timeout
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-
-        try {
-          recognition.start();
-          setIsListening(true);
-          console.log('Speech recognition started');
-
-          // Stop listening after a reasonable timeout to avoid infinite listening
-          timeoutRef.current = setTimeout(() => {
-            if (recognitionRef.current && isListening) {
-              console.log('Stopping recognition due to timeout');
-              stopListening();
-            }
-          }, 30000); // 30 seconds timeout
-
-        } catch (error) {
-          console.error('Failed to start speech recognition:', error);
-          const message = "Could not start voice recognition. Please check microphone permissions.";
-          setLastResponse(message);
           if (settings?.voiceResponseEnabled) {
-            speak(message);
+            speak(errorMessage);
           }
         }
-      }
-    } catch (error) {
-      console.error('Error in startListening:', error);
-    }
-  }, [recognition, isListening, isSupported, speak, settings?.voiceResponseEnabled, stopListening]);
+      };
 
-  // Cleanup on unmount to prevent memory leaks
+      newRecognition.onend = () => {
+        console.log('Speech recognition ended');
+        setIsListening(false);
+      };
+
+      setRecognition(newRecognition);
+      recognitionRef.current = newRecognition;
+      newRecognition.start();
+
+    } catch (error) {
+      console.error('Error starting recognition:', error);
+      setIsListening(false);
+    }
+  }, [isSupported, isListening, processTranscript, settings, speak]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      cleanup();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error('Error stopping recognition on unmount:', error);
+        }
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
-  }, [cleanup]);
+  }, []);
 
   return {
     isListening,

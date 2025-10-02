@@ -37,12 +37,18 @@ export default function RecentActivity() {
   const [editedCommand, setEditedCommand] = useState("");
   const [editedData, setEditedData] = useState("");
 
-  const { data: logEntries = [], isLoading, refetch } = useQuery<LogEntry[]>({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["/api/logs", { limit: 5 }],
-    queryFn: () => fetch("/api/logs?limit=5").then(res => res.json()),
+    queryFn: async () => {
+      const response = await fetch("/api/logs?limit=5");
+      const result = await response.json();
+      return result.data || []; // Extract data array from API response
+    },
     refetchInterval: 5000, // Auto-refresh every 5 seconds
     refetchOnWindowFocus: true, // Refresh when window gets focus
   });
+
+  const logEntries = (data || []) as LogEntry[];
 
   const updateMutation = useMutation({
     mutationFn: async (updatedEntry: Partial<LogEntry>) => {
@@ -87,18 +93,18 @@ export default function RecentActivity() {
 
   const handleEdit = (entry: LogEntry) => {
     setEditingEntry(entry);
-    setEditedCommand(entry.rawCommand);
-    setEditedData(entry.parsedData ? JSON.stringify(entry.parsedData, null, 2) : "");
+    setEditedCommand(entry.memoryText || "");
+    setEditedData(entry.metadataJson ? JSON.stringify(entry.metadataJson, null, 2) : "");
   };
 
   const handleSave = () => {
     if (editingEntry) {
       try {
-        const parsedData = editedData ? JSON.parse(editedData) : null;
+        const metadataJson = editedData ? JSON.parse(editedData) : {};
         updateMutation.mutate({
           id: editingEntry.id,
-          rawCommand: editedCommand,
-          parsedData: parsedData,
+          memoryText: editedCommand,
+          metadataJson: metadataJson,
         });
       } catch (error: any) {
         toast({
@@ -158,19 +164,21 @@ export default function RecentActivity() {
         ) : (
           <div className="space-y-3">
             {logEntries.map((entry, index) => (
-              <div key={entry.id} className="flex items-center justify-between p-3 bg-muted/50 rounded">
+              <div key={entry.id} className="flex items-center justify-between p-3 bg-muted/50 rounded" data-testid={`log-entry-${entry.id}`}>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {entry.rawCommand}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full" data-testid={`topic-tag-${entry.id}`}>
+                      {entry.topicTag}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-foreground truncate" data-testid={`memory-text-${entry.id}`}>
+                    {entry.memoryText}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground" data-testid={`timestamp-${entry.id}`}>
                     {new Date(entry.timestamp!).toLocaleString()}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                    #{index + 1}
-                  </span>
                   <div className="flex gap-1">
                     <Dialog>
                       <DialogTrigger asChild>
@@ -179,6 +187,7 @@ export default function RecentActivity() {
                           size="sm"
                           onClick={() => handleEdit(entry)}
                           className="h-6 w-6 p-0"
+                          data-testid={`button-edit-${entry.id}`}
                         >
                           <span className="material-icons text-xs">edit</span>
                         </Button>
@@ -189,22 +198,24 @@ export default function RecentActivity() {
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid gap-2">
-                            <Label htmlFor="command">Raw Command</Label>
+                            <Label htmlFor="command">Memory Text</Label>
                             <Input
                               id="command"
                               value={editedCommand}
                               onChange={(e) => setEditedCommand(e.target.value)}
-                              placeholder="Enter command..."
+                              placeholder="Enter memory text..."
+                              data-testid="input-memory-text"
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label htmlFor="data">Parsed Data (JSON)</Label>
+                            <Label htmlFor="data">Metadata (JSON)</Label>
                             <Textarea
                               id="data"
                               value={editedData}
                               onChange={(e) => setEditedData(e.target.value)}
-                              placeholder="Enter JSON data..."
+                              placeholder="Enter JSON metadata..."
                               className="min-h-[120px] font-mono text-sm"
+                              data-testid="input-metadata-json"
                             />
                           </div>
                         </div>
@@ -228,9 +239,10 @@ export default function RecentActivity() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(entry.id, entry.rawCommand)}
+                      onClick={() => handleDelete(entry.id, entry.memoryText || "")}
                       disabled={deleteMutation.isPending}
                       className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      data-testid={`button-delete-${entry.id}`}
                     >
                       <span className="material-icons text-xs">delete</span>
                     </Button>
