@@ -44,6 +44,13 @@ export async function extractMetadata(memoryText: string): Promise<ExtractedMeta
    - Groceries: store, items_list (as array), budget
    - Meeting: attendees (as array), action_items (as array), meeting_topic
    - General: any relevant structured data you can extract
+   
+For food/meal-related entries, use these EXACT field names:
+   - meal_type: "breakfast" | "lunch" | "dinner" | "snack"
+   - restaurant: name of restaurant
+   - beverage: drink name
+   - beverage_type: "soda" | "coffee" | "tea" | "juice" etc.
+   - items: array of food items with details
 
 Respond with JSON in this exact format: 
 {
