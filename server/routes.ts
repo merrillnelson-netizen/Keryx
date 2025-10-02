@@ -103,12 +103,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Searching memories with query:", queryText);
 
-      // Decompose query into semantic and structured components
-      const { semanticComponent, structuredFilters } = await decomposeQuery(queryText);
+      // Run query decomposition and embedding generation in parallel for speed
+      const [decomposed, queryVector] = await Promise.all([
+        decomposeQuery(queryText),
+        generateEmbedding(queryText)
+      ]);
+      
+      const { semanticComponent, structuredFilters } = decomposed;
       console.log("Decomposed query:", { semanticComponent, structuredFilters });
-
-      // Generate embedding for semantic search
-      const queryVector = await generateEmbedding(semanticComponent);
 
       // Perform hybrid search
       const results = await storage.searchMemories(

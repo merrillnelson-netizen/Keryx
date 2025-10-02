@@ -124,6 +124,7 @@ export interface DecomposedQuery {
 
 /**
  * Decompose a natural language query into semantic and structured components
+ * Uses gpt-4o-mini for fast query parsing (1-2s vs 7s with gpt-5)
  * 
  * @param queryText - Natural language query from user
  * @returns Promise<DecomposedQuery> - Separated semantic intent and filters
@@ -131,7 +132,7 @@ export interface DecomposedQuery {
 export async function decomposeQuery(queryText: string): Promise<DecomposedQuery> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
