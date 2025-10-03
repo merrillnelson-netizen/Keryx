@@ -1,6 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Mic } from "lucide-react";
 
 export default function SpeechDebug() {
   const isSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
@@ -19,54 +19,46 @@ export default function SpeechDebug() {
   };
 
   return (
-    <Card className="bg-yellow-50 border-yellow-200">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <span className="material-icons mr-2">bug_report</span>
-          Voice Recognition Debug
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <span>Speech Recognition API:</span>
-          <Badge variant={isSupported ? "default" : "destructive"}>
+          <span className="text-foreground">Speech Recognition API:</span>
+          <Badge variant={isSupported ? "default" : "destructive"} data-testid="badge-speech-support">
             {isSupported ? "Supported" : "Not Supported"}
           </Badge>
         </div>
         
         <div className="flex items-center justify-between">
-          <span>Secure Context (HTTPS/localhost):</span>
-          <Badge variant={isSecure ? "default" : "destructive"}>
+          <span className="text-foreground">Secure Context (HTTPS/localhost):</span>
+          <Badge variant={isSecure ? "default" : "destructive"} data-testid="badge-secure-context">
             {isSecure ? "Yes" : "No"}
           </Badge>
         </div>
         
         <div className="flex items-center justify-between">
-          <span>User Agent:</span>
+          <span className="text-foreground">User Agent:</span>
           <span className="text-xs text-muted-foreground max-w-xs truncate">
             {navigator.userAgent.split(' ').slice(-2).join(' ')}
           </span>
         </div>
         
-        <Button onClick={testMicrophone} className="w-full" variant="outline">
-          <span className="material-icons mr-2">mic</span>
+        <Button onClick={testMicrophone} className="w-full" variant="outline" data-testid="button-test-microphone">
+          <Mic className="w-4 h-4 mr-2" />
           Test Microphone Access
         </Button>
         
         {!isSupported && (
-          <div className="text-sm text-orange-700 bg-orange-100 p-3 rounded">
+          <div className="text-sm text-orange-900 dark:text-orange-100 bg-orange-100 dark:bg-orange-900/30 p-3 rounded border border-orange-200 dark:border-orange-800">
             <p className="font-medium">Speech Recognition Not Available</p>
             <p>Please use Chrome, Edge, or Safari browsers for voice features.</p>
           </div>
         )}
         
         {!isSecure && (
-          <div className="text-sm text-red-700 bg-red-100 p-3 rounded">
+          <div className="text-sm text-red-900 dark:text-red-100 bg-red-100 dark:bg-red-900/30 p-3 rounded border border-red-200 dark:border-red-800">
             <p className="font-medium">Insecure Context</p>
             <p>Voice recognition may require HTTPS in production.</p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
   );
 }
