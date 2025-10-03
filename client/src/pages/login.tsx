@@ -63,8 +63,8 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-secondary/5 to-transparent"></div>
       
       <div className="w-full max-w-7xl relative z-10 grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-        {/* Landing Content - Left Side */}
-        <div className="space-y-8 animate-fade-in">
+        {/* Landing Content - Left Side (shown second on mobile, first on desktop) */}
+        <div className="space-y-8 animate-fade-in order-2 lg:order-1">
           {/* Hero Section */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
@@ -128,8 +128,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Login Card - Right Side */}
-        <div className="animate-fade-in" style={{ animationDelay: "200ms" }}>
+        {/* Login Card - Right Side (shown first on mobile, second on desktop) */}
+        <div className="animate-fade-in order-1 lg:order-2" style={{ animationDelay: "200ms" }}>
           <Card className="glass-card-strong border-white/20">
             <CardHeader className="text-center space-y-2">
               <div className="w-16 h-16 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
