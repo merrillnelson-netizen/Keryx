@@ -183,6 +183,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate embedding vector for semantic search
       const embeddingVector = await generateEmbedding(memoryText);
+      const isZeroVector = embeddingVector.every(v => v === 0);
+      if (isZeroVector) {
+        console.warn("Using zero vector fallback - OpenAI embedding may have failed");
+      }
       console.log("Generated embedding vector with", embeddingVector.length, "dimensions");
 
       // Save to database with user ID
@@ -201,8 +205,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to save memory:", error);
-      sendErrorResponse(res, 500, "Failed to save memory", error);
+      console.error("Failed to save memory - Full error:", error);
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
+      sendErrorResponse(res, 500, "Failed to save memory. Please try again.", error);
     }
   });
 

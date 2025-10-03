@@ -90,7 +90,7 @@ If you cannot extract specific metadata, return empty object for metadataJson.`,
  * Uses text-embedding-3-small which produces 1536-dimensional vectors
  * 
  * @param text - Text to generate embedding for
- * @returns Promise<number[]> - 1536-dimensional embedding vector
+ * @returns Promise<number[]> - 1536-dimensional embedding vector (or zero vector fallback)
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
@@ -103,7 +103,11 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     return response.data[0].embedding;
   } catch (error) {
     console.error("Error generating embedding:", error);
-    throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : "Unknown error"}`);
+    console.warn("Falling back to zero vector for embedding");
+    // Return a zero vector of correct dimensions (1536) as fallback
+    // This allows memories to be saved even if OpenAI is unavailable
+    // Semantic search won't work for these entries, but basic filtering will
+    return new Array(1536).fill(0);
   }
 }
 
