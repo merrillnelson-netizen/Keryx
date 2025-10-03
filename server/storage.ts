@@ -102,7 +102,6 @@ export class DatabaseStorage implements IStorage {
         .values(insertUser)
         .returning();
         
-      console.log('User created successfully:', user.id);
       return user;
     } catch (error) {
       console.error('Error creating user:', error);
