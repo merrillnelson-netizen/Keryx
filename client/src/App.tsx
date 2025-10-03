@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { useEffect } from "react";
 import { apiRequest } from "./lib/queryClient";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { ThemeProvider } from "@/components/theme-provider";
 
 import VoiceControl from "@/pages/voice-control";
 import History from "@/pages/history";
@@ -83,16 +84,18 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <TooltipProvider>
-            <div className="font-sans bg-background min-h-screen">
-              <Toaster />
-              <Router />
-            </div>
-          </TooltipProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <TooltipProvider>
+              <div className="font-sans bg-background min-h-screen">
+                <Toaster />
+                <Router />
+              </div>
+            </TooltipProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

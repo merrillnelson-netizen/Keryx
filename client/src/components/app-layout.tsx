@@ -3,8 +3,9 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Mic, History, Settings, Activity, LogOut, User } from "lucide-react";
+import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/components/theme-provider";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const currentPage = navigation.find(item => item.href === location);
 
@@ -94,15 +96,26 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </div>
               </div>
             </div>
-            <Button
-              data-testid="button-logout"
-              onClick={handleLogout}
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                data-testid="button-theme-toggle"
+                onClick={toggleTheme}
+                variant="ghost"
+                className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+              >
+                {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                {theme === "light" ? "Dark" : "Light"}
+              </Button>
+              <Button
+                data-testid="button-logout"
+                onClick={handleLogout}
+                variant="ghost"
+                className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </aside>
@@ -178,15 +191,26 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           </div>
                         </div>
                       </div>
-                      <Button
-                        data-testid="button-logout-mobile"
-                        onClick={handleLogout}
-                        variant="ghost"
-                        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          data-testid="button-theme-toggle-mobile"
+                          onClick={toggleTheme}
+                          variant="ghost"
+                          className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                        >
+                          {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                          {theme === "light" ? "Dark" : "Light"}
+                        </Button>
+                        <Button
+                          data-testid="button-logout-mobile"
+                          onClick={handleLogout}
+                          variant="ghost"
+                          className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Logout
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </SheetContent>
