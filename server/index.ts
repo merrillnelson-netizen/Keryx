@@ -10,6 +10,9 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Trust Replit's reverse proxy for secure cookies in production
+app.set('trust proxy', 1);
+
 // Session configuration with PostgreSQL store
 const PgSession = connectPgSimple(session);
 const sessionStore = new PgSession({
