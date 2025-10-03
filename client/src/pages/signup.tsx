@@ -73,6 +73,7 @@ export default function SignupPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Choose a username"
                 className="glass-card border-white/20"
+                autoComplete="username"
                 required
               />
             </div>
@@ -87,6 +88,7 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Create a password"
                 className="glass-card border-white/20"
+                autoComplete="new-password"
                 required
               />
             </div>
@@ -101,6 +103,7 @@ export default function SignupPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm your password"
                 className="glass-card border-white/20"
+                autoComplete="new-password"
                 required
               />
             </div>
