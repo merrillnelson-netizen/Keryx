@@ -37,6 +37,7 @@ export default function History() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editTopic, setEditTopic] = useState("");
+  const [editMetadata, setEditMetadata] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   
   const queryClient = useQueryClient();
@@ -100,17 +101,28 @@ export default function History() {
     setEditingEntry(entry);
     setEditText(entry.memoryText);
     setEditTopic(entry.topicTag || "");
+    setEditMetadata(entry.metadataJson ? JSON.stringify(entry.metadataJson, null, 2) : "");
   };
 
   const handleSaveEdit = () => {
     if (editingEntry) {
-      updateMutation.mutate({
-        id: editingEntry.id,
-        data: {
-          memoryText: editText,
-          topicTag: editTopic || undefined,
-        },
-      });
+      try {
+        const metadata = editMetadata ? JSON.parse(editMetadata) : null;
+        updateMutation.mutate({
+          id: editingEntry.id,
+          data: {
+            memoryText: editText,
+            topicTag: editTopic || undefined,
+            metadataJson: metadata,
+          },
+        });
+      } catch (error: any) {
+        toast({
+          title: "Invalid JSON",
+          description: `Please check your metadata format: ${error.message}`,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -289,7 +301,7 @@ export default function History() {
               Make changes to your memory. Click save when you're done.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
             <div className="space-y-2">
               <Label htmlFor="edit-topic">Topic Tag</Label>
               <Input
@@ -311,6 +323,18 @@ export default function History() {
                 className="min-h-[100px] glass-card border-white/20"
                 data-testid="input-edit-text"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-metadata">Metadata (JSON)</Label>
+              <Textarea
+                id="edit-metadata"
+                value={editMetadata}
+                onChange={(e) => setEditMetadata(e.target.value)}
+                placeholder='{"key": "value"}'
+                className="min-h-[120px] font-mono text-sm glass-card border-white/20"
+                data-testid="input-edit-metadata"
+              />
+              <p className="text-xs text-muted-foreground">Optional: Edit the AI-extracted metadata in JSON format</p>
             </div>
           </div>
           <DialogFooter>
