@@ -66,22 +66,6 @@ function Router() {
  * Initializes the application on mount
  */
 function App() {
-  useEffect(() => {
-    /**
-     * Initialize application on first load
-     * Creates default settings and prepares database
-     */
-    const initializeApp = async () => {
-      try {
-        await apiRequest("POST", "/api/initialize");
-      } catch (error) {
-        console.error("Failed to initialize application:", error);
-      }
-    };
-
-    initializeApp();
-  }, []);
-
   return (
     <ErrorBoundary>
       <ThemeProvider>
