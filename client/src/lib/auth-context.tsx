@@ -14,9 +14,10 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  signup: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<User>;
+  signup: (username: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  checkAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,16 +44,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string): Promise<User> {
     const response = await apiRequest("POST", "/api/auth/login", { username, password });
     const data = await response.json();
-    setUser(data.data);
+    const userData = data.data;
+    setUser(userData);
+    await checkAuth();
+    return userData;
   }
 
-  async function signup(username: string, password: string) {
+  async function signup(username: string, password: string): Promise<User> {
     const response = await apiRequest("POST", "/api/auth/signup", { username, password });
     const data = await response.json();
-    setUser(data.data);
+    const userData = data.data;
+    setUser(userData);
+    await checkAuth();
+    return userData;
   }
 
   async function logout() {
@@ -61,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

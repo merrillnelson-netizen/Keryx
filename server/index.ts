@@ -19,6 +19,8 @@ app.use(
       tableName: "session",
       createTableIfMissing: true,
     }),
+    // WARNING: Set SESSION_SECRET environment variable in production!
+    // The fallback secret is for development only and is NOT secure for production use
     secret: process.env.SESSION_SECRET || "mydigitalmemory-secret-change-in-production",
     resave: false,
     saveUninitialized: false,
