@@ -208,10 +208,10 @@ export default function History() {
               <Table>
                 <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
                   <TableRow className="border-white/10 hover:bg-transparent">
-                    <TableHead className="w-[140px] text-foreground font-semibold">Date</TableHead>
-                    <TableHead className="w-[120px] text-foreground font-semibold">Topic</TableHead>
-                    <TableHead className="text-foreground font-semibold">Memory</TableHead>
-                    <TableHead className="w-[100px] text-right text-foreground font-semibold">Actions</TableHead>
+                    <TableHead className="w-[110px] text-foreground font-semibold">Date</TableHead>
+                    <TableHead className="w-[110px] text-foreground font-semibold">Topic</TableHead>
+                    <TableHead className="min-w-[400px] text-foreground font-semibold">Memory</TableHead>
+                    <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -221,18 +221,18 @@ export default function History() {
                       data-testid={`memory-row-${entry.id}`}
                       className="border-white/10 hover:bg-white/5 transition-colors"
                     >
-                      <TableCell className="text-sm text-muted-foreground" data-testid={`date-cell-${entry.id}`}>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap" data-testid={`date-cell-${entry.id}`}>
                         {new Date(entry.timestamp!).toLocaleDateString()}
                       </TableCell>
-                      <TableCell data-testid={`topic-cell-${entry.id}`}>
-                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
+                      <TableCell className="whitespace-nowrap" data-testid={`topic-cell-${entry.id}`}>
+                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 text-xs">
                           {entry.topicTag || "General"}
                         </Badge>
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
