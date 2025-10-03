@@ -6,6 +6,14 @@ MyDigitalMemory (MDM) is an AI-powered mobile-first voice logging and search sys
 
 ## Recent Changes (October 2025)
 
+### Production Session Cookie Fix (October 3, 2025)
+- **Cookie Configuration**: Fixed session persistence issues in production
+  - Added `httpOnly: true` to prevent JavaScript access to session cookie (security)
+  - Added `sameSite: 'lax'` for CSRF protection and proper cookie behavior with HTTPS
+  - Resolves logout-on-refresh issue in production environment
+  - Ensures session cookies are properly sent on page navigation
+  - Critical for production HTTPS deployments
+
 ### Multi-User Authentication System (October 3, 2025)
 - **Session-Based Authentication**: Complete authentication system with passport-local
   - PostgreSQL session store using connect-pg-simple
