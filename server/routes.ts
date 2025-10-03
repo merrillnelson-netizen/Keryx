@@ -175,11 +175,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 400, "memoryText is required");
       }
 
-      console.log("Saving memory for user", user.id, ":", memoryText);
-
       // Use AI to extract metadata and topic
       const { topicTag, metadataJson } = await extractMetadata(memoryText);
-      console.log("Extracted metadata:", { topicTag, metadataJson });
 
       // Generate embedding vector for semantic search
       const embeddingVector = await generateEmbedding(memoryText);
@@ -187,7 +184,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isZeroVector) {
         console.warn("Using zero vector fallback - OpenAI embedding may have failed");
       }
-      console.log("Generated embedding vector with", embeddingVector.length, "dimensions");
 
       // Save to database with user ID
       const logEntry = await storage.createLogEntry({
@@ -228,8 +224,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 400, "queryText is required");
       }
 
-      console.log("Searching memories with query:", queryText);
-
       // Run query decomposition and embedding generation in parallel for speed
       const [decomposed, queryVector] = await Promise.all([
         decomposeQuery(queryText),
@@ -237,7 +231,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ]);
       
       const { semanticComponent, structuredFilters } = decomposed;
-      console.log("Decomposed query:", { semanticComponent, structuredFilters });
 
       // Perform hybrid search
       const results = await storage.searchMemories(
@@ -276,7 +269,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as any;
       const limit = parseInt(req.query.limit as string) || 50;
-      console.log(`Fetching recent ${limit} log entries`);
       
       const entries = await storage.getLogEntries(user.id, limit);
       
@@ -430,9 +422,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/settings", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      console.log("Fetching settings");
       const currentSettings = await storage.getSettings(user.id);
-      console.log("Settings from database:", JSON.stringify(currentSettings, null, 2));
       
       res.json({
         status: 'success',
@@ -451,17 +441,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/settings", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      console.log("=== SETTINGS UPDATE START ===");
-      console.log("User ID:", user.id);
-      console.log("Request body:", JSON.stringify(req.body));
-      console.log("NODE_ENV:", process.env.NODE_ENV);
       
       const settingsData = insertSettingsSchema.partial().parse(req.body);
-      console.log("Validated settings data:", JSON.stringify(settingsData));
-      
       const updated = await storage.updateSettings(user.id, settingsData);
-      console.log("Settings updated successfully:", JSON.stringify(updated));
-      console.log("=== SETTINGS UPDATE END ===");
       
       res.json({
         status: 'success',
@@ -470,13 +452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("=== SETTINGS UPDATE FAILED ===");
-      console.error("Error details:", error);
-      if (error instanceof Error) {
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-      }
-      console.error("=== END ERROR ===");
+      console.error("Failed to update settings:", error);
       
       if (error instanceof z.ZodError) {
         return res.status(400).json({ 
