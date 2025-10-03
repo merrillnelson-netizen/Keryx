@@ -26,13 +26,6 @@ sessionStore.on('error', (error) => {
   console.error('Session store error:', error);
 });
 
-console.log('Initializing session with:');
-console.log('- NODE_ENV:', process.env.NODE_ENV);
-console.log('- SESSION_SECRET set:', !!process.env.SESSION_SECRET);
-console.log('- Cookie secure:', process.env.NODE_ENV === "production");
-console.log('- Cookie httpOnly: true');
-console.log('- Cookie sameSite: lax');
-
 app.use(
   session({
     store: sessionStore,
