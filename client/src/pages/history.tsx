@@ -23,12 +23,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, Table as TableIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function History() {
@@ -38,7 +46,7 @@ export default function History() {
   const [editText, setEditText] = useState("");
   const [editTopic, setEditTopic] = useState("");
   const [editMetadata, setEditMetadata] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -158,30 +166,30 @@ export default function History() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setViewMode("list")}
+                onClick={() => setViewMode("cards")}
                 className={cn(
                   "h-9 w-9 p-0 transition-all",
-                  viewMode === "list" 
+                  viewMode === "cards" 
                     ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
                     : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                 )}
-                data-testid="button-view-list"
+                data-testid="button-view-cards"
               >
-                <LayoutList className="w-4 h-4" />
+                <LayoutGrid className="w-4 h-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setViewMode("grid")}
+                onClick={() => setViewMode("table")}
                 className={cn(
                   "h-9 w-9 p-0 transition-all",
-                  viewMode === "grid" 
+                  viewMode === "table" 
                     ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
                     : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                 )}
-                data-testid="button-view-grid"
+                data-testid="button-view-table"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <TableIcon className="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -194,13 +202,67 @@ export default function History() {
             <h3 className="text-lg font-medium text-foreground mb-2">No memories yet</h3>
             <p className="text-muted-foreground">Start logging memories to see your activity here</p>
           </div>
+        ) : viewMode === "table" ? (
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="max-h-[calc(100vh-250px)] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead className="w-[140px] text-foreground font-semibold">Date</TableHead>
+                    <TableHead className="w-[120px] text-foreground font-semibold">Topic</TableHead>
+                    <TableHead className="text-foreground font-semibold">Memory</TableHead>
+                    <TableHead className="w-[100px] text-right text-foreground font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logEntries.map((entry) => (
+                    <TableRow 
+                      key={entry.id} 
+                      data-testid={`memory-row-${entry.id}`}
+                      className="border-white/10 hover:bg-white/5 transition-colors"
+                    >
+                      <TableCell className="text-sm text-muted-foreground" data-testid={`date-cell-${entry.id}`}>
+                        {new Date(entry.timestamp!).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell data-testid={`topic-cell-${entry.id}`}>
+                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
+                          {entry.topicTag || "General"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
+                        {entry.memoryText}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(entry)}
+                            className="h-8 w-8 p-0 hover:bg-white/10"
+                            data-testid={`edit-button-${entry.id}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeletingId(entry.id)}
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                            data-testid={`delete-button-${entry.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         ) : (
           <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
-            <div className={
-              viewMode === "grid" 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" 
-                : "flex flex-col space-y-4"
-            }>
+            <div className="flex flex-col space-y-4">
               {logEntries.map((entry) => (
                 <Card key={entry.id} data-testid={`memory-card-${entry.id}`} className="glass-card border-white/20 overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="pb-3">
