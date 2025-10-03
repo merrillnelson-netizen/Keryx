@@ -196,12 +196,11 @@ export default function History() {
           </div>
         ) : (
           <div className="max-h-[calc(100vh-250px)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
-            <div className={cn(
-              "gap-4",
+            <div className={
               viewMode === "grid" 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" 
-                : "space-y-4"
-            )}>
+                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" 
+                : "flex flex-col space-y-4"
+            }>
               {logEntries.map((entry) => (
                 <Card key={entry.id} data-testid={`memory-card-${entry.id}`} className="glass-card border-white/20 overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="pb-3">

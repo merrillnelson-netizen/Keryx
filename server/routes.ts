@@ -284,6 +284,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * POST /api/logs - Create a log entry directly (without AI processing)
+   * Useful for testing, importing data, or manual creation
+   * Requires authentication
+   */
+  app.post("/api/logs", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { memoryText, topicTag, metadataJson } = req.body;
+      
+      if (!memoryText || typeof memoryText !== 'string') {
+        return sendErrorResponse(res, 400, "memoryText is required");
+      }
+      
+      // Generate embedding for semantic search (if not provided)
+      const embeddingVector = req.body.embeddingVector || await generateEmbedding(memoryText);
+      
+      const logEntry = await storage.createLogEntry({
+        userId: user.id,
+        memoryText,
+        topicTag: topicTag || "General",
+        metadataJson: metadataJson || {},
+        embeddingVector,
+      });
+      
+      res.status(201).json({
+        status: 'success',
+        data: logEntry,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to create log entry:", error);
+      sendErrorResponse(res, 500, "Failed to create log entry", error);
+    }
+  });
+
+  /**
    * GET /api/logs/:id - Get specific log entry
    * Requires authentication
    */
