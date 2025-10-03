@@ -68,22 +68,22 @@ export default function LoginPage() {
           {/* Hero Section */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-xl">
-                <Brain className="w-8 h-8 text-white" />
+              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-2xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-xl flex-shrink-0">
+                <Brain className="w-6 h-6 lg:w-8 lg:h-8 text-white" />
               </div>
-              <div>
-                <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent break-words">
                   MyDigitalMemory
                 </h1>
-                <p className="text-sm text-muted-foreground">AI-Powered Voice Assistant</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">AI-Powered Voice Assistant</p>
               </div>
             </div>
             
-            <h2 className="text-2xl lg:text-3xl font-semibold text-foreground leading-tight">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-foreground leading-tight">
               Your Personal AI Memory Assistant
             </h2>
             
-            <p className="text-lg text-muted-foreground leading-relaxed">
+            <p className="text-base lg:text-lg text-muted-foreground leading-relaxed">
               Capture life's moments through voice, organize with AI, and find memories instantly with intelligent semantic search.
             </p>
           </div>
