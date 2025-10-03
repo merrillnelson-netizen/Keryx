@@ -451,10 +451,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/settings", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      console.log("Updating settings:", req.body);
+      console.log("=== SETTINGS UPDATE START ===");
+      console.log("User ID:", user.id);
+      console.log("Request body:", JSON.stringify(req.body));
+      console.log("NODE_ENV:", process.env.NODE_ENV);
       
       const settingsData = insertSettingsSchema.partial().parse(req.body);
+      console.log("Validated settings data:", JSON.stringify(settingsData));
+      
       const updated = await storage.updateSettings(user.id, settingsData);
+      console.log("Settings updated successfully:", JSON.stringify(updated));
+      console.log("=== SETTINGS UPDATE END ===");
       
       res.json({
         status: 'success',
@@ -463,6 +470,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
+      console.error("=== SETTINGS UPDATE FAILED ===");
+      console.error("Error details:", error);
+      if (error instanceof Error) {
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
+      console.error("=== END ERROR ===");
+      
       if (error instanceof z.ZodError) {
         return res.status(400).json({ 
           message: "Invalid settings data", 

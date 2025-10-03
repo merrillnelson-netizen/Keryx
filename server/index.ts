@@ -12,13 +12,27 @@ app.use(express.urlencoded({ extended: false }));
 
 // Session configuration with PostgreSQL store
 const PgSession = connectPgSimple(session);
+const sessionStore = new PgSession({
+  pool: pool,
+  tableName: "session",
+  createTableIfMissing: true,
+});
+
+// Log session store errors
+sessionStore.on('error', (error) => {
+  console.error('Session store error:', error);
+});
+
+console.log('Initializing session with:');
+console.log('- NODE_ENV:', process.env.NODE_ENV);
+console.log('- SESSION_SECRET set:', !!process.env.SESSION_SECRET);
+console.log('- Cookie secure:', process.env.NODE_ENV === "production");
+console.log('- Cookie httpOnly: true');
+console.log('- Cookie sameSite: lax');
+
 app.use(
   session({
-    store: new PgSession({
-      pool: pool,
-      tableName: "session",
-      createTableIfMissing: true,
-    }),
+    store: sessionStore,
     // WARNING: Set SESSION_SECRET environment variable in production!
     // The fallback secret is for development only and is NOT secure for production use
     secret: process.env.SESSION_SECRET || "mydigitalmemory-secret-change-in-production",
