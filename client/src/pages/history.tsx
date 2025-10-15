@@ -31,6 +31,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +45,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, Table as TableIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const CATEGORIES = ['Billiards', 'Groceries', 'Meeting', 'General'] as const;
 
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -47,6 +56,7 @@ export default function History() {
   const [editTopic, setEditTopic] = useState("");
   const [editMetadata, setEditMetadata] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [quickEditCategoryId, setQuickEditCategoryId] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -100,6 +110,31 @@ export default function History() {
       toast({
         title: "Update failed",
         description: "Failed to update memory. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: async ({ id, topicTag }: { id: string; topicTag: string }) => {
+      const response = await apiRequest("PATCH", `/api/memories/${id}`, { topicTag });
+      if (!response.ok) {
+        throw new Error("Failed to update category");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      toast({
+        title: "Category updated",
+        description: "Memory category has been successfully changed",
+      });
+      setQuickEditCategoryId(null);
+    },
+    onError: () => {
+      toast({
+        title: "Update failed",
+        description: "Failed to update category. Please try again.",
         variant: "destructive",
       });
     },
@@ -225,9 +260,43 @@ export default function History() {
                         {new Date(entry.timestamp!).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="whitespace-nowrap" data-testid={`topic-cell-${entry.id}`}>
-                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 text-xs">
-                          {entry.topicTag || "General"}
-                        </Badge>
+                        {quickEditCategoryId === entry.id ? (
+                          <div className="inline-block" onClick={(e) => e.stopPropagation()}>
+                            <Select 
+                              value={entry.topicTag || 'General'} 
+                              onValueChange={(value) => {
+                                updateCategoryMutation.mutate({ id: entry.id, topicTag: value });
+                              }}
+                            >
+                              <SelectTrigger 
+                                className="h-7 w-auto min-w-[120px] text-xs border-primary/30 bg-primary/20"
+                                data-testid={`category-editor-table-${entry.id}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="glass-card border-primary/20">
+                                {CATEGORIES.map((category) => (
+                                  <SelectItem 
+                                    key={category} 
+                                    value={category}
+                                    data-testid={`quick-option-table-${entry.id}-${category.toLowerCase()}`}
+                                  >
+                                    {category}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <Badge 
+                            variant="secondary" 
+                            className="bg-primary/20 text-primary border-primary/30 text-xs cursor-pointer hover:bg-primary/30 transition-colors"
+                            onClick={() => setQuickEditCategoryId(entry.id)}
+                            title="Click to change category"
+                          >
+                            {entry.topicTag || "General"}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
@@ -269,9 +338,42 @@ export default function History() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {entry.topicTag && (
-                          <Badge variant="secondary" data-testid={`topic-badge-${entry.id}`} className="bg-primary/20 text-primary border-primary/30">
-                            {entry.topicTag}
+                        {quickEditCategoryId === entry.id ? (
+                          <div className="inline-block" onClick={(e) => e.stopPropagation()}>
+                            <Select 
+                              value={entry.topicTag || 'General'} 
+                              onValueChange={(value) => {
+                                updateCategoryMutation.mutate({ id: entry.id, topicTag: value });
+                              }}
+                            >
+                              <SelectTrigger 
+                                className="h-7 w-auto min-w-[120px] text-xs border-primary/30 bg-primary/20"
+                                data-testid={`category-editor-${entry.id}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="glass-card border-primary/20">
+                                {CATEGORIES.map((category) => (
+                                  <SelectItem 
+                                    key={category} 
+                                    value={category}
+                                    data-testid={`quick-option-${entry.id}-${category.toLowerCase()}`}
+                                  >
+                                    {category}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <Badge 
+                            variant="secondary" 
+                            data-testid={`topic-badge-${entry.id}`} 
+                            className="bg-primary/20 text-primary border-primary/30 cursor-pointer hover:bg-primary/30 transition-colors"
+                            onClick={() => setQuickEditCategoryId(entry.id)}
+                            title="Click to change category"
+                          >
+                            {entry.topicTag || 'General'}
                           </Badge>
                         )}
                         <Badge variant="outline" data-testid={`date-badge-${entry.id}`} className="border-white/20">
@@ -364,15 +466,27 @@ export default function History() {
           </DialogHeader>
           <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="edit-topic">Topic Tag</Label>
-              <Input
-                id="edit-topic"
-                value={editTopic}
-                onChange={(e) => setEditTopic(e.target.value)}
-                placeholder="Enter topic tag..."
-                data-testid="input-edit-topic"
-                className="glass-card border-white/20"
-              />
+              <Label htmlFor="edit-topic">Category</Label>
+              <Select value={editTopic} onValueChange={setEditTopic}>
+                <SelectTrigger 
+                  id="edit-topic"
+                  className="glass-card border-white/20"
+                  data-testid="select-edit-category"
+                >
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  {CATEGORIES.map((category) => (
+                    <SelectItem 
+                      key={category} 
+                      value={category}
+                      data-testid={`option-edit-category-${category.toLowerCase()}`}
+                    >
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-text">Memory Text</Label>
