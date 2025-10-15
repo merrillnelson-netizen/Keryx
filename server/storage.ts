@@ -1,8 +1,9 @@
 import { 
-  users, logEntries, settings,
+  users, logEntries, settings, categories,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
-  type Settings, type InsertSettings
+  type Settings, type InsertSettings,
+  type Category, type InsertCategory
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -30,6 +31,11 @@ export interface IStorage {
     metadataFilters?: Record<string, any>,
     limit?: number
   ): Promise<Array<LogEntry & { similarity: number }>>;
+
+  // Categories (user-scoped)
+  getCategories(userId: string): Promise<Category[]>;
+  createCategory(userId: string, name: string): Promise<Category>;
+  createCategoryIfNotExists(userId: string, name: string): Promise<Category>;
 
   // Settings (user-scoped)
   getSettings(userId: string): Promise<Settings | undefined>;
@@ -317,6 +323,58 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to search memories:', error);
       throw new Error('Database error while searching memories');
+    }
+  }
+
+  /**
+   * CATEGORY METHODS
+   * Handle user-defined categories
+   */
+
+  async getCategories(userId: string): Promise<Category[]> {
+    try {
+      return await db
+        .select()
+        .from(categories)
+        .where(eq(categories.userId, userId))
+        .orderBy(desc(categories.createdAt));
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+      throw new Error('Database error while fetching categories');
+    }
+  }
+
+  async createCategory(userId: string, name: string): Promise<Category> {
+    try {
+      const [category] = await db
+        .insert(categories)
+        .values({ userId, name })
+        .returning();
+      return category;
+    } catch (error) {
+      console.error('Failed to create category:', error);
+      throw new Error('Database error while creating category');
+    }
+  }
+
+  async createCategoryIfNotExists(userId: string, name: string): Promise<Category> {
+    try {
+      // Check if category already exists for this user
+      const [existing] = await db
+        .select()
+        .from(categories)
+        .where(and(eq(categories.userId, userId), eq(categories.name, name)))
+        .limit(1);
+      
+      if (existing) {
+        return existing;
+      }
+      
+      // Create new category
+      return await this.createCategory(userId, name);
+    } catch (error) {
+      console.error('Failed to create category if not exists:', error);
+      throw new Error('Database error while creating category');
     }
   }
 

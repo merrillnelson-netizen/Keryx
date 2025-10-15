@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, VALID_CATEGORIES } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -176,9 +176,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 400, "memoryText is required");
       }
 
-      // Validate category if provided
-      if (userProvidedTag && !VALID_CATEGORIES.includes(userProvidedTag as any)) {
-        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+      // Validate category if provided (just ensure it's a non-empty string)
+      if (userProvidedTag && (typeof userProvidedTag !== 'string' || userProvidedTag.trim() === '')) {
+        return sendErrorResponse(res, 400, "Invalid category. Must be a non-empty string");
+      }
+
+      // Auto-create category if user provided one and it doesn't exist
+      if (userProvidedTag) {
+        await storage.createCategoryIfNotExists(user.id, userProvidedTag);
       }
 
       // Use user-provided category or AI extraction
@@ -243,14 +248,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 400, "Memory ID is required");
       }
 
-      if (!topicTag || typeof topicTag !== 'string') {
-        return sendErrorResponse(res, 400, "topicTag is required");
+      if (!topicTag || typeof topicTag !== 'string' || topicTag.trim() === '') {
+        return sendErrorResponse(res, 400, "topicTag is required and must be a non-empty string");
       }
 
-      // Validate category
-      if (!VALID_CATEGORIES.includes(topicTag as any)) {
-        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
-      }
+      // Auto-create category if it doesn't exist
+      await storage.createCategoryIfNotExists(user.id, topicTag);
 
       // Update the memory (with user ownership verification)
       const updatedEntry = await storage.updateLogEntry(id, user.id, { topicTag });
@@ -524,6 +527,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       sendErrorResponse(res, 500, "Failed to update settings", error);
+    }
+  });
+
+  /**
+   * CATEGORY ROUTES
+   * Handle user-defined categories
+   */
+  
+  /**
+   * GET /api/categories - Get all categories for the user
+   * Requires authentication
+   */
+  app.get("/api/categories", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userCategories = await storage.getCategories(user.id);
+      
+      res.json({
+        status: 'success',
+        data: userCategories,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch categories", error);
+    }
+  });
+
+  /**
+   * POST /api/categories - Create a new category
+   * Requires authentication
+   */
+  app.post("/api/categories", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { name } = insertCategorySchema.parse(req.body);
+      
+      if (!name || typeof name !== 'string' || name.trim() === '') {
+        return sendErrorResponse(res, 400, "Category name is required and must be non-empty");
+      }
+      
+      const category = await storage.createCategoryIfNotExists(user.id, name.trim());
+      
+      res.status(201).json({
+        status: 'success',
+        data: category,
+        message: 'Category created successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to create category:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid category data", 
+          errors: error.errors,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      sendErrorResponse(res, 500, "Failed to create category", error);
     }
   });
 

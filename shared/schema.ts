@@ -4,13 +4,6 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 /**
- * Shared constants - Memory categories
- * Single source of truth for all category values used across the application
- */
-export const VALID_CATEGORIES = ['Billiards', 'Groceries', 'Meeting', 'General'] as const;
-export type Category = typeof VALID_CATEGORIES[number];
-
-/**
  * Users table - authentication and user management
  */
 export const users = pgTable("users", {
@@ -18,6 +11,22 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
+
+/**
+ * Categories table - user-defined memory categories
+ * Each user can create custom categories for organizing their memories
+ */
+export const categories = pgTable("categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Index for user-specific category queries
+  userIdIdx: index("categories_user_id_idx").on(table.userId),
+  // Unique constraint: each user can only have one category with a given name
+  uniqueUserCategory: index("categories_user_name_idx").on(table.userId, table.name),
+}));
 
 /**
  * Log entries table - stores voice memories with AI-extracted metadata and embeddings
@@ -96,6 +105,12 @@ export const insertSettingsSchema = createInsertSchema(settings).omit({
   updatedAt: true,
 });
 
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
 // TypeScript types inferred from schemas
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -105,3 +120,6 @@ export type LogEntry = typeof logEntries.$inferSelect;
 
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 export type Settings = typeof settings.$inferSelect;
+
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
+export type Category = typeof categories.$inferSelect;
