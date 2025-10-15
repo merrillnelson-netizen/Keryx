@@ -162,21 +162,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   
   /**
-   * POST /api/memories - Save a new memory with AI extraction
-   * Accepts raw voice text, extracts metadata and embeddings automatically
+   * POST /api/memories - Save a new memory with optional manual category
+   * Accepts raw voice text and optional topicTag
+   * If topicTag provided, uses it; otherwise extracts metadata with AI
    * Requires authentication
    */
   app.post("/api/memories", requireAuth, async (req, res) => {
     try {
-      const { memoryText } = req.body;
+      const { memoryText, topicTag: userProvidedTag } = req.body;
       const user = req.user as any;
       
       if (!memoryText || typeof memoryText !== 'string') {
         return sendErrorResponse(res, 400, "memoryText is required");
       }
 
-      // Use AI to extract metadata and topic
-      const { topicTag, metadataJson } = await extractMetadata(memoryText);
+      // Validate category if provided
+      const validCategories = ['Billiards', 'Groceries', 'Meeting', 'General'];
+      if (userProvidedTag && !validCategories.includes(userProvidedTag)) {
+        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${validCategories.join(', ')}`);
+      }
+
+      // Use user-provided category or AI extraction
+      let topicTag: string;
+      let metadataJson: Record<string, any>;
+      
+      if (userProvidedTag) {
+        // User manually selected category - skip AI extraction
+        topicTag = userProvidedTag;
+        metadataJson = {}; // No AI-extracted metadata when manually categorized
+      } else {
+        // Use AI to extract metadata and topic
+        const extracted = await extractMetadata(memoryText);
+        topicTag = extracted.topicTag;
+        metadataJson = extracted.metadataJson;
+      }
 
       // Generate embedding vector for semantic search
       const embeddingVector = await generateEmbedding(memoryText);
@@ -207,6 +226,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error stack:", error.stack);
       }
       sendErrorResponse(res, 500, "Failed to save memory. Please try again.", error);
+    }
+  });
+
+  /**
+   * PATCH /api/memories/:id - Update category on existing memory
+   * Allows users to manually change the category of a saved memory
+   * Requires authentication and ownership verification
+   */
+  app.patch("/api/memories/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { topicTag } = req.body;
+      const user = req.user as any;
+
+      if (!id || typeof id !== 'string') {
+        return sendErrorResponse(res, 400, "Memory ID is required");
+      }
+
+      if (!topicTag || typeof topicTag !== 'string') {
+        return sendErrorResponse(res, 400, "topicTag is required");
+      }
+
+      // Validate category
+      const validCategories = ['Billiards', 'Groceries', 'Meeting', 'General'];
+      if (!validCategories.includes(topicTag)) {
+        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${validCategories.join(', ')}`);
+      }
+
+      // Update the memory (with user ownership verification)
+      const updatedEntry = await storage.updateLogEntry(id, user.id, { topicTag });
+
+      if (!updatedEntry) {
+        return sendErrorResponse(res, 404, "Memory not found or you don't have permission to edit it");
+      }
+
+      res.json({
+        status: 'success',
+        data: updatedEntry,
+        message: 'Category updated successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to update memory category:", error);
+      sendErrorResponse(res, 500, "Failed to update memory category", error);
     }
   });
 
