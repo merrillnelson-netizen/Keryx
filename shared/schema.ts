@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, vector, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, vector, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -25,7 +25,7 @@ export const categories = pgTable("categories", {
   // Index for user-specific category queries
   userIdIdx: index("categories_user_id_idx").on(table.userId),
   // Unique constraint: each user can only have one category with a given name
-  uniqueUserCategory: index("categories_user_name_idx").on(table.userId, table.name),
+  uniqueUserCategory: uniqueIndex("categories_user_name_idx").on(table.userId, table.name),
 }));
 
 /**
