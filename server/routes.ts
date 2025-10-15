@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, VALID_CATEGORIES } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -177,9 +177,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate category if provided
-      const validCategories = ['Billiards', 'Groceries', 'Meeting', 'General'];
-      if (userProvidedTag && !validCategories.includes(userProvidedTag)) {
-        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${validCategories.join(', ')}`);
+      if (userProvidedTag && !VALID_CATEGORIES.includes(userProvidedTag as any)) {
+        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
       }
 
       // Use user-provided category or AI extraction
@@ -249,9 +248,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate category
-      const validCategories = ['Billiards', 'Groceries', 'Meeting', 'General'];
-      if (!validCategories.includes(topicTag)) {
-        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${validCategories.join(', ')}`);
+      if (!VALID_CATEGORIES.includes(topicTag as any)) {
+        return sendErrorResponse(res, 400, `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
       }
 
       // Update the memory (with user ownership verification)

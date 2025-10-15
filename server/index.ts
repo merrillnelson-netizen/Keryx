@@ -6,6 +6,37 @@ import { setupVite, serveStatic, log } from "./vite";
 import passport from "./auth";
 import { pool } from "./db";
 
+/**
+ * Validate required environment variables on startup
+ * Exits process if critical variables are missing
+ */
+function validateEnvironment() {
+  const required = ['OPENAI_API_KEY', 'SESSION_SECRET', 'DATABASE_URL'];
+  const missing: string[] = [];
+
+  for (const envVar of required) {
+    if (!process.env[envVar]) {
+      missing.push(envVar);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('\n❌ CRITICAL: Missing required environment variables:');
+    missing.forEach(envVar => {
+      console.error(`   - ${envVar}`);
+    });
+    console.error('\nPlease set these environment variables before starting the application.');
+    console.error('For local development, you can use a .env file.');
+    console.error('For production, set them in your deployment environment.\n');
+    process.exit(1);
+  }
+
+  console.log('✅ All required environment variables are configured');
+}
+
+// Validate environment before initializing app
+validateEnvironment();
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -29,9 +60,8 @@ sessionStore.on('error', (error) => {
 app.use(
   session({
     store: sessionStore,
-    // WARNING: Set SESSION_SECRET environment variable in production!
-    // The fallback secret is for development only and is NOT secure for production use
-    secret: process.env.SESSION_SECRET || "mydigitalmemory-secret-change-in-production",
+    // SESSION_SECRET is validated on startup - no fallback for security
+    secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
     cookie: {

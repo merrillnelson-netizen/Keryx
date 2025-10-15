@@ -4,6 +4,13 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 /**
+ * Shared constants - Memory categories
+ * Single source of truth for all category values used across the application
+ */
+export const VALID_CATEGORIES = ['Billiards', 'Groceries', 'Meeting', 'General'] as const;
+export type Category = typeof VALID_CATEGORIES[number];
+
+/**
  * Users table - authentication and user management
  */
 export const users = pgTable("users", {

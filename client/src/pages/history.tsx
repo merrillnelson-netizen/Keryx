@@ -45,8 +45,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, Table as TableIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VALID_CATEGORIES } from "@shared/schema";
 
-const CATEGORIES = ['Billiards', 'Groceries', 'Meeting', 'General'] as const;
+const CATEGORIES = VALID_CATEGORIES;
 
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);

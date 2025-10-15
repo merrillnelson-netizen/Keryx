@@ -7,8 +7,9 @@ import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
 import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Plus, Search, Volume2, Tag } from "lucide-react";
 import { useState } from "react";
+import { VALID_CATEGORIES } from "@shared/schema";
 
-const CATEGORIES = ['Auto (AI)', 'Billiards', 'Groceries', 'Meeting', 'General'] as const;
+const CATEGORIES = ['Auto (AI)', ...VALID_CATEGORIES] as const;
 
 export default function VoiceActivation() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Auto (AI)');
