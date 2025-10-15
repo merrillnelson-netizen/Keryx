@@ -19,6 +19,7 @@ interface SpeechRecognitionHook {
   mode: "log" | "query" | null;
   setMode: (mode: "log" | "query" | null) => void;
   lastResponse: string;
+  setManualCategory: (category: string | null) => void;
 }
 
 /**
@@ -40,6 +41,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [mode, setModeState] = useState<"log" | "query" | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [lastResponse, setLastResponse] = useState("");
+  const [manualCategory, setManualCategory] = useState<string | null>(null);
 
   // Use refs to prevent memory leaks and ensure proper cleanup
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -63,11 +65,18 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Mutation for saving memories with AI extraction
+  // Mutation for saving memories with AI extraction or manual category
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
-      console.log('Saving memory:', memoryText);
-      const response = await apiRequest("POST", "/api/memories", { memoryText });
+      console.log('Saving memory:', memoryText, 'with category:', manualCategory || 'Auto (AI)');
+      const body: { memoryText: string; topicTag?: string } = { memoryText };
+      
+      // Include topicTag if user manually selected a category
+      if (manualCategory) {
+        body.topicTag = manualCategory;
+      }
+      
+      const response = await apiRequest("POST", "/api/memories", body);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -427,5 +436,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     mode,
     setMode,
     lastResponse,
+    setManualCategory,
   };
 }

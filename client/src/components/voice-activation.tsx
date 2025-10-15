@@ -1,11 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
 import { cn } from "@/lib/utils";
-import { Mic, MicOff, Square, Plus, Search, Volume2 } from "lucide-react";
+import { Mic, MicOff, Square, Plus, Search, Volume2, Tag } from "lucide-react";
+import { useState } from "react";
+
+const CATEGORIES = ['Auto (AI)', 'Billiards', 'Groceries', 'Meeting', 'General'] as const;
 
 export default function VoiceActivation() {
+  const [selectedCategory, setSelectedCategory] = useState<string>('Auto (AI)');
+  
   const { 
     isListening, 
     isSupported, 
@@ -13,10 +20,18 @@ export default function VoiceActivation() {
     stopListening,
     mode,
     setMode,
-    lastResponse
+    lastResponse,
+    setManualCategory
   } = useSpeechRecognition();
 
   const { speak } = useSpeechSynthesis();
+
+  // Update the hook whenever category changes
+  const handleCategoryChange = (value: string) => {
+    setSelectedCategory(value);
+    // Pass null for Auto (AI), or the actual category name
+    setManualCategory(value === 'Auto (AI)' ? null : value);
+  };
 
   const handleLogMode = () => {
     setMode("log");
@@ -81,6 +96,39 @@ export default function VoiceActivation() {
             }
           </p>
         </div>
+
+        {/* Category Selector */}
+        {!isListening && (
+          <div className="mb-6 max-w-xs mx-auto">
+            <Label htmlFor="category-select" className="flex items-center gap-2 mb-2 text-foreground">
+              <Tag className="w-4 h-4 text-primary" />
+              <span>Memory Category</span>
+            </Label>
+            <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+              <SelectTrigger 
+                id="category-select"
+                className="w-full bg-card/50 backdrop-blur-sm border-primary/20 hover:border-primary/40 transition-colors"
+                data-testid="select-category"
+              >
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent className="glass-card border-primary/20">
+                {CATEGORIES.map((category) => (
+                  <SelectItem 
+                    key={category} 
+                    value={category}
+                    data-testid={`option-category-${category.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                  >
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {selectedCategory === 'Auto (AI)' ? 'AI will detect the category automatically' : `All memories will be saved as ${selectedCategory}`}
+            </p>
+          </div>
+        )}
 
         {/* Manual Activation Buttons */}
         <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-4">
