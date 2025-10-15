@@ -1,18 +1,26 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { useSpeechSynthesis } from "@/hooks/use-speech-synthesis";
 import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Plus, Search, Volume2, Tag } from "lucide-react";
 import { useState } from "react";
-import { VALID_CATEGORIES } from "@shared/schema";
-
-const CATEGORIES = ['Auto (AI)', ...VALID_CATEGORIES] as const;
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Category } from "@shared/schema";
 
 export default function VoiceActivation() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Auto (AI)');
+  const [showNewCategoryDialog, setShowNewCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const { 
     isListening, 
@@ -27,11 +35,52 @@ export default function VoiceActivation() {
 
   const { speak } = useSpeechSynthesis();
 
+  // Fetch user's categories
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  // Create category mutation
+  const createCategoryMutation = useMutation({
+    mutationFn: (name: string) => apiRequest("POST", "/api/categories", { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({ title: "Category created successfully" });
+      setShowNewCategoryDialog(false);
+      setNewCategoryName("");
+    },
+    onError: () => {
+      toast({ 
+        title: "Failed to create category",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Update the hook whenever category changes
   const handleCategoryChange = (value: string) => {
+    if (value === "__add_new__") {
+      setShowNewCategoryDialog(true);
+      return;
+    }
+    
     setSelectedCategory(value);
     // Pass null for Auto (AI), or the actual category name
     setManualCategory(value === 'Auto (AI)' ? null : value);
+  };
+
+  const handleCreateCategory = () => {
+    if (!newCategoryName.trim()) {
+      toast({ 
+        title: "Category name cannot be empty",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    createCategoryMutation.mutate(newCategoryName.trim());
+    setSelectedCategory(newCategoryName.trim());
+    setManualCategory(newCategoryName.trim());
   };
 
   const handleLogMode = () => {
@@ -114,15 +163,24 @@ export default function VoiceActivation() {
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent className="glass-card border-primary/20">
-                {CATEGORIES.map((category) => (
+                <SelectItem value="Auto (AI)" data-testid="option-category-auto-ai">
+                  Auto (AI)
+                </SelectItem>
+                {categories.map((category) => (
                   <SelectItem 
-                    key={category} 
-                    value={category}
-                    data-testid={`option-category-${category.toLowerCase().replace(/[^a-z]/g, '-')}`}
+                    key={category.id} 
+                    value={category.name}
+                    data-testid={`option-category-${category.name.toLowerCase().replace(/[^a-z]/g, '-')}`}
                   >
-                    {category}
+                    {category.name}
                   </SelectItem>
                 ))}
+                <SelectItem value="__add_new__" className="text-primary font-semibold" data-testid="option-add-new-category">
+                  <div className="flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    <span>Add New Category...</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground mt-1">
@@ -186,6 +244,53 @@ export default function VoiceActivation() {
           </div>
         )}
       </CardContent>
+
+      {/* New Category Dialog */}
+      <Dialog open={showNewCategoryDialog} onOpenChange={setShowNewCategoryDialog}>
+        <DialogContent className="glass-card border-primary/20">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Tag className="w-5 h-5 text-primary" />
+              Add New Category
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-category-name" className="text-foreground">Category Name</Label>
+              <Input
+                id="new-category-name"
+                placeholder="e.g., Health, Financial, Travel..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+                className="bg-card/50 backdrop-blur-sm border-primary/20 focus:border-primary/40"
+                data-testid="input-new-category-name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowNewCategoryDialog(false);
+                setNewCategoryName("");
+              }}
+              className="border-primary/20 hover:bg-primary/10"
+              data-testid="button-cancel-new-category"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateCategory}
+              disabled={createCategoryMutation.isPending || !newCategoryName.trim()}
+              className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
+              data-testid="button-create-category"
+            >
+              {createCategoryMutation.isPending ? "Creating..." : "Create Category"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

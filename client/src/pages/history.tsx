@@ -45,9 +45,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, Table as TableIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VALID_CATEGORIES } from "@shared/schema";
-
-const CATEGORIES = VALID_CATEGORIES;
+import { Category } from "@shared/schema";
 
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -64,6 +62,10 @@ export default function History() {
 
   const { data: logEntries, isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
+  });
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
   });
 
   const deleteMutation = useMutation({
@@ -276,13 +278,13 @@ export default function History() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="glass-card border-primary/20">
-                                {CATEGORIES.map((category) => (
+                                {categories.map((category) => (
                                   <SelectItem 
-                                    key={category} 
-                                    value={category}
-                                    data-testid={`quick-option-table-${entry.id}-${category.toLowerCase()}`}
+                                    key={category.id} 
+                                    value={category.name}
+                                    data-testid={`quick-option-table-${entry.id}-${category.name.toLowerCase()}`}
                                   >
-                                    {category}
+                                    {category.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -354,13 +356,13 @@ export default function History() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className="glass-card border-primary/20">
-                                {CATEGORIES.map((category) => (
+                                {categories.map((category) => (
                                   <SelectItem 
-                                    key={category} 
-                                    value={category}
-                                    data-testid={`quick-option-${entry.id}-${category.toLowerCase()}`}
+                                    key={category.id} 
+                                    value={category.name}
+                                    data-testid={`quick-option-${entry.id}-${category.name.toLowerCase()}`}
                                   >
-                                    {category}
+                                    {category.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -477,13 +479,13 @@ export default function History() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
-                  {CATEGORIES.map((category) => (
+                  {categories.map((category) => (
                     <SelectItem 
-                      key={category} 
-                      value={category}
-                      data-testid={`option-edit-category-${category.toLowerCase()}`}
+                      key={category.id} 
+                      value={category.name}
+                      data-testid={`option-edit-category-${category.name.toLowerCase()}`}
                     >
-                      {category}
+                      {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
