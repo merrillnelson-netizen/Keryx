@@ -8,6 +8,8 @@ import { useEffect } from "react";
 import { apiRequest } from "./lib/queryClient";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { initGA } from "./lib/analytics";
+import { useAnalytics } from "./hooks/use-analytics";
 
 import VoiceControl from "@/pages/voice-control";
 import History from "@/pages/history";
@@ -36,6 +38,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function Router() {
+  useAnalytics();
+  
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
@@ -62,10 +66,19 @@ function Router() {
  * - TooltipProvider for UI tooltips
  * - ErrorBoundary for graceful error recovery
  * - Toast notifications for user feedback
+ * - Google Analytics for usage tracking
  * 
  * Initializes the application on mount
  */
 function App() {
+  useEffect(() => {
+    if (!import.meta.env.VITE_GA_MEASUREMENT_ID) {
+      console.warn('Missing Google Analytics Measurement ID');
+    } else {
+      initGA();
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider>

@@ -63,5 +63,11 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Speech Synthesis**: Web Speech Synthesis API.
 - **Media**: `getUserMedia` for microphone access.
 
+### Analytics
+- **Google Analytics 4**: Integrated for user behavior tracking and page views.
+- **Files**: `client/src/lib/analytics.ts` (core functions), `client/src/hooks/use-analytics.tsx` (route tracking hook).
+- **Environment Variable**: `VITE_GA_MEASUREMENT_ID` (required for tracking).
+- **Usage**: Import `trackEvent` from `@/lib/analytics` to track custom events.
+
 ### Hosting Platform
 - **Platform**: Replit.

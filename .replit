@@ -39,6 +39,10 @@ localPort = 35689
 externalPort = 3000
 
 [[ports]]
+localPort = 39317
+externalPort = 8008
+
+[[ports]]
 localPort = 41873
 externalPort = 6800
 
@@ -80,3 +84,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_openai:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+VITE_GA_MEASUREMENT_ID = "G-9K0CTR39SS"
