@@ -84,8 +84,3 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_openai:1.0.0"]
-
-[userenv]
-
-[userenv.shared]
-VITE_GA_MEASUREMENT_ID = "G-9K0CTR39SS"
