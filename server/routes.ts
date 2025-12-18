@@ -874,6 +874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/briefing", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
+      const localHour = parseInt(req.query.localHour as string) || new Date().getHours();
       
       // Get memories from last 7 days
       const sevenDaysAgo = new Date();
@@ -891,7 +892,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           topicTag: m.topicTag,
           detectedPeople: m.detectedPeople || undefined,
         })),
-        user.username
+        user.username,
+        localHour
       );
       
       res.json({

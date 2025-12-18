@@ -94,7 +94,8 @@ export default function Dashboard() {
   const { data: briefingData, isLoading: briefingLoading, refetch: refetchBriefing } = useQuery<BriefingResponse>({
     queryKey: ["/api/briefing"],
     queryFn: async () => {
-      const response = await fetch("/api/briefing", { credentials: "include" });
+      const localHour = new Date().getHours();
+      const response = await fetch(`/api/briefing?localHour=${localHour}`, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
         throw new Error(`${response.status}: ${text}`);

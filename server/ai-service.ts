@@ -352,11 +352,12 @@ export interface MorningBriefing {
  */
 export async function generateMorningBriefing(
   recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[] }>,
-  userName?: string
+  userName?: string,
+  localHour?: number
 ): Promise<MorningBriefing> {
   try {
-    const now = new Date();
-    const timeOfDay = now.getHours() < 12 ? "morning" : now.getHours() < 17 ? "afternoon" : "evening";
+    const hour = localHour ?? new Date().getHours();
+    const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
     
     const memorySummary = recentMemories.map((m, i) => 
       `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
