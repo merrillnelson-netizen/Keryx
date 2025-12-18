@@ -77,22 +77,43 @@ const getAlertStyle = (type: PatternAlert["type"]) => {
   }
 };
 
+interface BriefingResponse {
+  data: MorningBriefing;
+  memoriesAnalyzed: number;
+  generatedAt: string;
+}
+
+interface AlertsResponse {
+  data: PatternAlert[];
+  memoriesAnalyzed: number;
+  periodDays: number;
+}
+
 export default function Dashboard() {
-  const { data: briefingData, isLoading: briefingLoading, refetch: refetchBriefing } = useQuery<{
-    data: MorningBriefing;
-    memoriesAnalyzed: number;
-    generatedAt: string;
-  }>({
+  // Custom queryFn to preserve full response with metadata
+  const { data: briefingData, isLoading: briefingLoading, refetch: refetchBriefing } = useQuery<BriefingResponse>({
     queryKey: ["/api/briefing"],
+    queryFn: async () => {
+      const response = await fetch("/api/briefing", { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
+      return response.json();
+    },
     staleTime: 1000 * 60 * 30, // 30 minutes
   });
 
-  const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useQuery<{
-    data: PatternAlert[];
-    memoriesAnalyzed: number;
-    periodDays: number;
-  }>({
+  const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useQuery<AlertsResponse>({
     queryKey: ["/api/alerts"],
+    queryFn: async () => {
+      const response = await fetch("/api/alerts", { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
+      return response.json();
+    },
     staleTime: 1000 * 60 * 60, // 1 hour
   });
 
