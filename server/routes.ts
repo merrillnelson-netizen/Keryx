@@ -7,6 +7,23 @@ import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicIns
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
+import rateLimit from "express-rate-limit";
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { message: 'Too many attempts, please try again later', status: 'error' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { message: 'Too many signup attempts, please try again later', status: 'error' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * API Routes Registration with Comprehensive Error Handling
@@ -53,7 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/auth/signup - Register a new user
    */
-  app.post("/api/auth/signup", async (req, res) => {
+  app.post("/api/auth/signup", signupLimiter, async (req, res) => {
     try {
       const { username, password } = insertUserSchema.parse(req.body);
       
@@ -98,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/auth/login - Log in an existing user
    */
-  app.post("/api/auth/login", (req, res, next) => {
+  app.post("/api/auth/login", authLimiter, (req, res, next) => {
     passport.authenticate('local', (err: any, user: any, info: any) => {
       if (err) {
         return sendErrorResponse(res, 500, "Login error", err);
