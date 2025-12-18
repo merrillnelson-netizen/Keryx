@@ -11,7 +11,7 @@ import { Settings } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database } from "lucide-react";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
@@ -28,6 +28,28 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "Settings saved successfully" });
+    },
+  });
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/backfill", {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ 
+        title: "AI Analysis Complete", 
+        description: `Processed ${data.entriesProcessed} memories, found mood and people data.`
+      });
+    },
+    onError: () => {
+      toast({ 
+        title: "Analysis Failed", 
+        description: "Could not process memories. Please try again.",
+        variant: "destructive"
+      });
     },
   });
 
@@ -128,6 +150,33 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <SpeechDebug />
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-amber-500" />
+                Data Management
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Re-analyze all your memories to extract mood, emotions, and people mentioned. 
+                  This is useful if you have older memories that were created before these features were added.
+                </p>
+                <Button
+                  data-testid="button-backfill"
+                  onClick={() => backfillMutation.mutate()}
+                  disabled={backfillMutation.isPending}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${backfillMutation.isPending ? 'animate-spin' : ''}`} />
+                  {backfillMutation.isPending ? "Analyzing memories..." : "Re-analyze All Memories"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

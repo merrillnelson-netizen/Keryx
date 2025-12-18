@@ -935,6 +935,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /**
+   * POST /api/backfill - Backfill AI metadata for existing memories
+   * 
+   * Re-processes all memories to extract mood, moodScore, and detectedPeople
+   * that may have been missing from memories created before Phase 1.
+   */
+  app.post("/api/backfill", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      const entries = await storage.getLogEntries(user.id, 500);
+      const entriesNeedingBackfill = entries.filter((e: any) => 
+        !e.mood || !e.detectedPeople || e.detectedPeople.length === 0
+      );
+      
+      let processed = 0;
+      let errors = 0;
+      
+      for (const entry of entriesNeedingBackfill) {
+        try {
+          const metadata = await extractMetadata(entry.memoryText);
+          
+          await storage.updateLogEntry(entry.id, user.id, {
+            mood: metadata.mood,
+            moodScore: metadata.moodScore,
+            detectedPeople: metadata.detectedPeople,
+          });
+          
+          if (metadata.detectedPeople && metadata.detectedPeople.length > 0) {
+            for (const personName of metadata.detectedPeople) {
+              await storage.upsertPerson(user.id, personName);
+            }
+          }
+          
+          processed++;
+        } catch (err) {
+          console.error(`Failed to backfill entry ${entry.id}:`, err);
+          errors++;
+        }
+      }
+      
+      res.json({
+        status: 'success',
+        message: `Backfill complete`,
+        totalEntries: entries.length,
+        entriesProcessed: processed,
+        entriesSkipped: entries.length - entriesNeedingBackfill.length,
+        errors,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to run backfill:", error);
+      sendErrorResponse(res, 500, "Failed to run backfill", error);
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
