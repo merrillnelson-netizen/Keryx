@@ -35,8 +35,9 @@ const aiLimiter = rateLimit({
   keyGenerator: (req) => {
     // Rate limit by user ID if authenticated, otherwise by IP
     const user = req.user as any;
-    return user?.id || req.ip || 'anonymous';
+    return user?.id || 'anonymous';
   },
+  validate: { xForwardedForHeader: false },
 });
 
 /**
