@@ -354,12 +354,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as any;
       const limit = parseInt(req.query.limit as string) || 50;
       
+      console.log(`[DEBUG] /api/logs - User ID: ${user.id}, Limit: ${limit}`);
       const entries = await storage.getLogEntries(user.id, limit);
+      console.log(`[DEBUG] /api/logs - Returned ${entries.length} entries for user ${user.id}`);
       
       res.json({
         status: 'success',
         data: entries,
         count: entries.length,
+        userId: user.id,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
