@@ -55,20 +55,25 @@ function groupEntriesByMonth(entries: LogEntry[]): Map<string, LogEntry[]> {
   return groups;
 }
 
+interface TimeCapsuleResponse {
+  data: LogEntry[];
+  count: number;
+  date: { month: number; day: number };
+  message: string;
+}
+
 export default function Timeline() {
-  const { data: logEntriesResponse, isLoading } = useQuery<{ data: LogEntry[]; count: number }>({
+  const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
   });
 
-  const logEntries = logEntriesResponse?.data;
-
-  const { data: timeCapsuleData, isLoading: timeCapsuleLoading } = useQuery<{ 
-    data: LogEntry[]; 
-    count: number;
-    date: { month: number; day: number };
-    message: string;
-  }>({
+  const { data: timeCapsuleData, isLoading: timeCapsuleLoading } = useQuery<TimeCapsuleResponse>({
     queryKey: ["/api/timecapsule"],
+    queryFn: async () => {
+      const response = await fetch("/api/timecapsule", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch time capsule");
+      return response.json();
+    },
   });
 
   if (isLoading) {
@@ -84,8 +89,7 @@ export default function Timeline() {
     );
   }
 
-  const entries = logEntries || [];
-  const groupedByMonth = groupEntriesByMonth(entries);
+  const groupedByMonth = groupEntriesByMonth(logEntries);
   const timeCapsuleEntries = timeCapsuleData?.data || [];
   const sortedMonths = Array.from(groupedByMonth.entries()).sort((a, b) => 
     new Date(b[0]).getTime() - new Date(a[0]).getTime()
@@ -154,7 +158,7 @@ export default function Timeline() {
           </Card>
         )}
 
-        {entries.length === 0 ? (
+        {logEntries.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
             <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
             <h3 className="text-lg font-medium text-foreground mb-2">No memories yet</h3>

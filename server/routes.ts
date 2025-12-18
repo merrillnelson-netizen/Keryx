@@ -205,15 +205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Always extract metadata with AI (now includes mood and people)
-      console.log("[DEBUG] Calling extractMetadata for:", memoryText.substring(0, 50) + "...");
       const extracted = await extractMetadata(memoryText);
-      console.log("[DEBUG] AI extraction result:", JSON.stringify({
-        topicTag: extracted.topicTag,
-        mood: extracted.mood,
-        moodScore: extracted.moodScore,
-        detectedPeople: extracted.detectedPeople,
-        hasMetadata: Object.keys(extracted.metadataJson || {}).length > 0
-      }));
       
       // Use user-provided category or AI extraction
       const topicTag = userProvidedTag || extracted.topicTag;

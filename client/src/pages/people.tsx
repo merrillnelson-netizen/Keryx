@@ -48,17 +48,20 @@ export default function People() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: peopleData, isLoading } = useQuery<{ data: Person[]; count: number }>({
+  const { data: people = [], isLoading } = useQuery<Person[]>({
     queryKey: ["/api/people"],
   });
 
-  const { data: mentionsData, isLoading: mentionsLoading } = useQuery<{ data: LogEntry[]; count: number }>({
+  const { data: mentions = [], isLoading: mentionsLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/people", selectedPerson?.name, "mentions"],
     queryFn: async () => {
       if (!selectedPerson?.name) throw new Error("No person selected");
-      const response = await fetch(`/api/people/${encodeURIComponent(selectedPerson.name)}/mentions`);
+      const response = await fetch(`/api/people/${encodeURIComponent(selectedPerson.name)}/mentions`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Failed to fetch mentions");
-      return response.json();
+      const json = await response.json();
+      return json.data || [];
     },
     enabled: !!selectedPerson,
   });
@@ -103,8 +106,6 @@ export default function People() {
       });
     }
   };
-
-  const people = peopleData?.data || [];
 
   if (isLoading) {
     return (
@@ -216,7 +217,7 @@ export default function People() {
                 Memories mentioning {selectedPerson.name}
               </CardTitle>
               <CardDescription>
-                {mentionsData?.count || 0} memories found
+                {mentions.length} memories found
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -224,11 +225,11 @@ export default function People() {
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
-              ) : !mentionsData?.data?.length ? (
+              ) : !mentions.length ? (
                 <p className="text-muted-foreground text-center py-8">No memories found</p>
               ) : (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {mentionsData.data.map((entry) => (
+                  {mentions.map((entry: LogEntry) => (
                     <div 
                       key={entry.id} 
                       className="glass-card p-3 rounded-lg"
