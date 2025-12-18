@@ -25,6 +25,20 @@ const signupLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiter for AI-heavy routes to prevent OpenAI quota issues
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute per user
+  message: { message: 'Too many AI requests, please slow down', status: 'error' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Rate limit by user ID if authenticated, otherwise by IP
+    const user = req.user as any;
+    return user?.id || req.ip || 'anonymous';
+  },
+});
+
 /**
  * API Routes Registration with Comprehensive Error Handling
  * 
@@ -185,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Now includes mood detection and people tracking
    * Requires authentication
    */
-  app.post("/api/memories", requireAuth, async (req, res) => {
+  app.post("/api/memories", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { memoryText, topicTag: userProvidedTag } = req.body;
       const user = req.user as any;
@@ -299,7 +313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Combines semantic search with structured filters
    * Requires authentication
    */
-  app.post("/api/memories/search", requireAuth, async (req, res) => {
+  app.post("/api/memories/search", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { queryText } = req.body;
       const user = req.user as any;
@@ -798,7 +812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Body: { question?: string, days?: number }
    * Requires authentication
    */
-  app.post("/api/insights", requireAuth, async (req, res) => {
+  app.post("/api/insights", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as any;
       const { question, days = 30 } = req.body;
@@ -860,7 +874,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Returns an AI-generated summary of recent memories with focus areas,
    * reminders, mood trends, and an encouraging affirmation.
    */
-  app.get("/api/briefing", requireAuth, async (req, res) => {
+  app.get("/api/briefing", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       
@@ -901,7 +915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Analyzes recent memories to detect significant patterns
    * and returns actionable alerts.
    */
-  app.get("/api/alerts", requireAuth, async (req, res) => {
+  app.get("/api/alerts", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 14;
