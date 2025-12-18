@@ -78,8 +78,11 @@ export default function Insights() {
   const { data: moodStats, isLoading: moodLoading } = useQuery<{ data: MoodStat[]; period: string }>({
     queryKey: ["/api/mood/stats", days],
     queryFn: async () => {
-      const response = await fetch(`/api/mood/stats?days=${days}`);
-      if (!response.ok) throw new Error("Failed to fetch mood stats");
+      const response = await fetch(`/api/mood/stats?days=${days}`, { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
       return response.json();
     },
   });

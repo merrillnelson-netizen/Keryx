@@ -59,7 +59,10 @@ export default function People() {
       const response = await fetch(`/api/people/${encodeURIComponent(selectedPerson.name)}/mentions`, {
         credentials: "include",
       });
-      if (!response.ok) throw new Error("Failed to fetch mentions");
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
       const json = await response.json();
       return json.data || [];
     },

@@ -10,7 +10,11 @@ export default function RecentActivity() {
   const { data, isLoading } = useQuery({
     queryKey: ["/api/logs", { limit: 5 }],
     queryFn: async () => {
-      const response = await fetch("/api/logs?limit=5");
+      const response = await fetch("/api/logs?limit=5", { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
       const result = await response.json();
       return result.data || [];
     },
