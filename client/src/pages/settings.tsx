@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   const backfillMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/backfill", {});
+      const response = await apiRequest("POST", "/api/backfill", { force: true });
       return response.json();
     },
     onSuccess: (data) => {

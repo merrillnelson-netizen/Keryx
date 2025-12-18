@@ -944,11 +944,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/backfill", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
+      const forceAll = req.body?.force === true;
       
       const entries = await storage.getLogEntries(user.id, 500);
-      const entriesNeedingBackfill = entries.filter((e: any) => 
-        !e.mood || !e.detectedPeople || e.detectedPeople.length === 0
-      );
+      const entriesNeedingBackfill = forceAll ? entries : entries.filter((e: any) => {
+        const hasMood = e.mood && e.mood.trim() !== '';
+        const hasPeople = Array.isArray(e.detectedPeople) && e.detectedPeople.length > 0;
+        return !hasMood || !hasPeople;
+      });
       
       let processed = 0;
       let errors = 0;
