@@ -324,3 +324,168 @@ Respond with JSON in this format:
     };
   }
 }
+
+/**
+ * Morning briefing result
+ */
+export interface MorningBriefing {
+  greeting: string;
+  summary: string;
+  focusAreas: string[];
+  reminders: string[];
+  moodTrend: string;
+  affirmation: string;
+}
+
+/**
+ * Generate a personalized morning briefing based on recent memories
+ * Provides context-aware daily summary with reminders and insights
+ * 
+ * @param recentMemories - Last 7 days of memories
+ * @param todayMemories - Memories from today (if any)
+ * @param moodStats - Recent mood statistics
+ * @returns Promise<MorningBriefing>
+ */
+export async function generateMorningBriefing(
+  recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[] }>,
+  userName?: string
+): Promise<MorningBriefing> {
+  try {
+    const now = new Date();
+    const timeOfDay = now.getHours() < 12 ? "morning" : now.getHours() < 17 ? "afternoon" : "evening";
+    
+    const memorySummary = recentMemories.map((m, i) => 
+      `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
+    ).join('\n\n');
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
+
+Based on their recent memories, create a personalized briefing that:
+1. GREETING: A warm, personalized greeting mentioning their name if provided
+2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
+3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
+4. REMINDERS: Any follow-ups or things mentioned that might need attention
+5. MOOD_TREND: A supportive observation about their emotional patterns
+6. AFFIRMATION: An encouraging statement or positive affirmation
+
+Be warm but not overly effusive. Be practical and helpful. Focus on actionable insights.
+
+Respond with JSON:
+{
+  "greeting": "personalized greeting",
+  "summary": "what's been happening",
+  "focusAreas": ["area 1", "area 2", ...],
+  "reminders": ["reminder 1", "reminder 2", ...],
+  "moodTrend": "observation about their emotional state",
+  "affirmation": "encouraging statement"
+}`
+        },
+        {
+          role: "user",
+          content: recentMemories.length > 0 
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged. Generate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    return {
+      greeting: result.greeting || `Good ${timeOfDay}!`,
+      summary: result.summary || "Start logging memories to get personalized insights.",
+      focusAreas: Array.isArray(result.focusAreas) ? result.focusAreas : [],
+      reminders: Array.isArray(result.reminders) ? result.reminders : [],
+      moodTrend: result.moodTrend || "Log some memories to track your emotional patterns.",
+      affirmation: result.affirmation || "Every day is a new opportunity.",
+    };
+  } catch (error) {
+    console.error("Error generating morning briefing:", error);
+    return {
+      greeting: "Good day!",
+      summary: "Unable to generate briefing at this time.",
+      focusAreas: [],
+      reminders: [],
+      moodTrend: "Keep tracking your memories!",
+      affirmation: "You're doing great!",
+    };
+  }
+}
+
+/**
+ * Pattern alert result
+ */
+export interface PatternAlert {
+  type: "positive" | "negative" | "neutral" | "insight";
+  title: string;
+  description: string;
+  actionSuggestion?: string;
+}
+
+/**
+ * Detect patterns in memories and generate alerts
+ * 
+ * @param memories - Recent memories to analyze
+ * @returns Promise<PatternAlert[]>
+ */
+export async function detectPatternAlerts(
+  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>
+): Promise<PatternAlert[]> {
+  try {
+    if (memories.length < 5) {
+      return []; // Need sufficient data for pattern detection
+    }
+
+    const memorySummary = memories.map((m) => 
+      `[${m.timestamp.toISOString().split('T')[0]}] ${m.mood || 'neutral'} (${m.moodScore || 0}) | ${m.topicTag}: "${m.memoryText}"`
+    ).join('\n');
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI pattern detector analyzing user memories for significant patterns worth alerting about.
+
+Identify 0-3 notable patterns that the user should know about:
+- POSITIVE: Good habits, improving trends, achievements
+- NEGATIVE: Concerning patterns, declining moods, stress indicators  
+- NEUTRAL: Interesting observations without strong valence
+- INSIGHT: Connections or realizations that might help
+
+For each pattern, provide:
+- type: "positive" | "negative" | "neutral" | "insight"
+- title: Brief label (5-8 words max)
+- description: 1-2 sentence explanation
+- actionSuggestion: Optional recommendation
+
+Only report genuinely significant patterns. Empty array is fine if nothing notable.
+
+Respond with JSON:
+{
+  "alerts": [
+    { "type": "...", "title": "...", "description": "...", "actionSuggestion": "..." }
+  ]
+}`
+        },
+        {
+          role: "user",
+          content: `Analyze these recent memories for patterns:\n\n${memorySummary}`
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+    return Array.isArray(result.alerts) ? result.alerts : [];
+  } catch (error) {
+    console.error("Error detecting patterns:", error);
+    return [];
+  }
+}

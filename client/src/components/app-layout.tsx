@@ -12,8 +12,9 @@ interface AppLayoutProps {
 }
 
 const navigation = [
-  { name: "Voice Control", href: "/", icon: Mic },
-  { name: "Memory History", href: "/history", icon: History },
+  { name: "Dashboard", href: "/", icon: Activity },
+  { name: "Voice Log", href: "/voice", icon: Mic },
+  { name: "History", href: "/history", icon: History },
   { name: "Insights", href: "/insights", icon: Brain },
   { name: "People", href: "/people", icon: Users },
   { name: "Timeline", href: "/timeline", icon: Calendar },
@@ -45,8 +46,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Activity className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">MyDigitalMemory</h1>
-                <p className="text-xs text-muted-foreground">AI Voice Assistant</p>
+                <h1 className="text-xl font-bold text-foreground">Helix</h1>
+                <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
               </div>
             </div>
           </div>
@@ -148,8 +149,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           <Activity className="w-6 h-6 text-white" />
                         </div>
                         <div>
-                          <h1 className="text-xl font-bold text-foreground">MyDigitalMemory</h1>
-                          <p className="text-xs text-muted-foreground">AI Voice Assistant</p>
+                          <h1 className="text-xl font-bold text-foreground">Helix</h1>
+                          <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
                         </div>
                       </div>
                     </div>
@@ -221,7 +222,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               
               <div>
                 <h2 className="text-base font-semibold text-foreground">
-                  {currentPage?.name || "MyDigitalMemory"}
+                  {currentPage?.name || "Helix"}
                 </h2>
               </div>
             </div>

@@ -1,7 +1,7 @@
-# MyDigitalMemory (MDM) - Replit Configuration
+# Helix - Replit Configuration
 
 ## Overview
-MyDigitalMemory (MDM) is an AI-powered mobile-first voice logging and search system. It allows users to log free-form natural language memories via voice or text, which are then processed by OpenAI GPT to extract topic tags and structured metadata. The system features semantic search using OpenAI embeddings combined with structured filters for powerful hybrid search capabilities. The project aims to provide a robust, production-ready application with a modern UI/UX and efficient performance.
+Helix is an AI-powered mobile-first voice logging and search system. It allows users to log free-form natural language memories via voice or text, which are then processed by OpenAI GPT to extract topic tags and structured metadata. The system features semantic search using OpenAI embeddings combined with structured filters for powerful hybrid search capabilities. The project aims to provide a robust, production-ready application with a modern UI/UX and efficient performance.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

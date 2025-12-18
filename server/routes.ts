@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, type User } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -828,6 +828,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to generate insights:", error);
       sendErrorResponse(res, 500, "Failed to generate insights", error);
+    }
+  });
+
+  /**
+   * ==========================================
+   * Phase 2: Proactive Features
+   * ==========================================
+   */
+
+  /**
+   * GET /api/briefing - Generate personalized morning/daily briefing
+   * 
+   * Returns an AI-generated summary of recent memories with focus areas,
+   * reminders, mood trends, and an encouraging affirmation.
+   */
+  app.get("/api/briefing", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      // Get memories from last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const memories = await storage.getLogEntries(user.id, 100);
+      const recentMemories = memories.filter((m: any) => m.timestamp >= sevenDaysAgo);
+      
+      const briefing = await generateMorningBriefing(
+        recentMemories.map((m: any) => ({
+          memoryText: m.memoryText,
+          mood: m.mood || undefined,
+          moodScore: m.moodScore || undefined,
+          timestamp: m.timestamp,
+          topicTag: m.topicTag,
+          detectedPeople: m.detectedPeople || undefined,
+        })),
+        user.username
+      );
+      
+      res.json({
+        status: 'success',
+        data: briefing,
+        memoriesAnalyzed: recentMemories.length,
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to generate briefing:", error);
+      sendErrorResponse(res, 500, "Failed to generate briefing", error);
+    }
+  });
+
+  /**
+   * GET /api/alerts - Get pattern alerts for the user
+   * 
+   * Analyzes recent memories to detect significant patterns
+   * and returns actionable alerts.
+   */
+  app.get("/api/alerts", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const days = parseInt(req.query.days as string) || 14;
+      
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      
+      const memories = await storage.getLogEntries(user.id, 100);
+      const recentMemories = memories.filter((m: any) => m.timestamp >= startDate);
+      
+      const alerts = await detectPatternAlerts(
+        recentMemories.map((m: any) => ({
+          memoryText: m.memoryText,
+          mood: m.mood || undefined,
+          moodScore: m.moodScore || undefined,
+          timestamp: m.timestamp,
+          topicTag: m.topicTag,
+        }))
+      );
+      
+      res.json({
+        status: 'success',
+        data: alerts,
+        memoriesAnalyzed: recentMemories.length,
+        periodDays: days,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to detect patterns:", error);
+      sendErrorResponse(res, 500, "Failed to detect patterns", error);
     }
   });
 

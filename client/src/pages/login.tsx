@@ -73,9 +73,9 @@ export default function LoginPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent break-words">
-                  MyDigitalMemory
+                  Helix
                 </h1>
-                <p className="text-xs sm:text-sm text-muted-foreground">AI-Powered Voice Assistant</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">AI-Powered Memory Assistant</p>
               </div>
             </div>
             
@@ -190,7 +190,7 @@ export default function LoginPage() {
                     <div className="w-full border-t border-white/10"></div>
                   </div>
                   <div className="relative flex justify-center text-xs">
-                    <span className="px-2 glass-card text-muted-foreground">New to MyDigitalMemory?</span>
+                    <span className="px-2 glass-card text-muted-foreground">New to Helix?</span>
                   </div>
                 </div>
                 

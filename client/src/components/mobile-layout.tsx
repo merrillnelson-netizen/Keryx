@@ -34,8 +34,8 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
             <SheetContent side="left" className="w-80 p-0">
               <div className="bg-surface h-full">
                 <div className="p-6 border-b border-outline">
-                  <h1 className="text-xl font-medium text-foreground">MyDigitalMemory</h1>
-                  <p className="text-sm text-muted-foreground mt-1">MDM - Voice Memory System</p>
+                  <h1 className="text-xl font-medium text-foreground">Helix</h1>
+                  <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
                 </div>
                 
                 <nav className="mt-6">
@@ -77,7 +77,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
           </Sheet>
           
           <div>
-            <h2 className="text-lg font-medium text-foreground">{currentPage?.name || "MyDigitalMemory"}</h2>
+            <h2 className="text-lg font-medium text-foreground">{currentPage?.name || "Helix"}</h2>
           </div>
         </div>
         
@@ -93,8 +93,8 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
       <div className="hidden lg:flex h-screen">
         <div className="w-64 bg-surface shadow-lg border-r border-outline">
           <div className="p-6 border-b border-outline">
-            <h1 className="text-xl font-medium text-foreground">MyDigitalMemory</h1>
-            <p className="text-sm text-muted-foreground mt-1">MDM - Voice Memory System</p>
+            <h1 className="text-xl font-medium text-foreground">Helix</h1>
+            <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
           </div>
           
           <nav className="mt-6">
