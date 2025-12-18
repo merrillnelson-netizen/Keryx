@@ -31,9 +31,10 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 ### Database Design
 - **Database**: PostgreSQL with Neon serverless deployment.
 - **Optimization**: Strategic indexes for performance (timestamp, topic tag, HNSW vector, composite indexes).
-- **Schema**: `users`, `log_entries`, `settings` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people` tables.
 - **Data Storage**: JSONB for flexible metadata, vector type for embeddings.
 - **User Data Isolation**: All data filtered by `userId` with foreign key relationships.
+- **Phase 1 Fields**: `log_entries` includes `mood`, `moodScore`, `detectedPeople` for cognitive tracking.
 
 ### Voice Processing Pipeline
 - **Speech Recognition**: Browser's SpeechRecognition API.
@@ -46,6 +47,14 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Monorepo**: Shared schema between client and server in `/shared`.
 - **Type Safety**: Full TypeScript coverage with Zod runtime validation.
 - **Key Features**: AI-powered voice input, manual category selection with inline editing, hybrid search, real-time feedback, mobile-first design, robust error recovery, and optimized performance.
+
+### Phase 1: Cognitive Search & Insights (Completed)
+- **Mood Tracking**: AI extracts mood (emotion word) and moodScore (-100 to +100) from each memory.
+- **People Detection**: AI identifies mentioned people, stored in `detectedPeople` array and tracked in `people` table.
+- **Insights Page** (`/insights`): Mood distribution charts (pie + bar), AI thematic synthesis with custom questions.
+- **People Page** (`/people`): Grid of tracked people with mention counts, relationship editing, view memories by person.
+- **Timeline Page** (`/timeline`): Chronological memories grouped by month, visual mood indicators, "On This Day" time capsule.
+- **Enhanced History**: Mood badges (emoji + score) and people badges on memory cards/table rows.
 
 ## External Dependencies
 
