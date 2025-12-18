@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-// the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
+// Using gpt-4o-mini for fast, cost-effective AI processing
 // This is using OpenAI's API, which points to OpenAI's API servers and requires your own API key.
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY,
@@ -40,7 +40,7 @@ const TOPIC_SCHEMAS = {
 export async function extractMetadata(memoryText: string): Promise<ExtractedMetadata> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -281,7 +281,7 @@ export async function generateThematicInsights(
       : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
