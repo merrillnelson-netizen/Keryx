@@ -56,6 +56,19 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Timeline Page** (`/timeline`): Chronological memories grouped by month, visual mood indicators, "On This Day" time capsule.
 - **Enhanced History**: Mood badges (emoji + score) and people badges on memory cards/table rows.
 
+### Phase 2: Proactive Features (Completed)
+- **Dashboard** (`/`): New landing page with daily briefing and pattern alerts.
+- **Morning Briefing**: AI-generated personalized summary with greeting, focus areas, reminders, mood trend, and affirmation.
+- **Pattern Alerts**: AI detects positive/negative/insight patterns from recent memories, color-coded cards.
+- **API Endpoints**: `/api/briefing` (7-day analysis), `/api/alerts` (14-day pattern detection).
+- **AI Functions**: `generateMorningBriefing()`, `detectPatternAlerts()` in `server/ai-service.ts`.
+- **Navigation**: 7 items - Dashboard, Voice Log, History, Insights, People, Timeline, Settings.
+- **Preparation Mode**: Planned for future (requires calendar/event integration).
+
+### Future Phases
+- **Phase 3 (Life Integration)**: Photos, location tracking, shared memories.
+- **Phase 4 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
+
 ## External Dependencies
 
 ### Core Technologies
