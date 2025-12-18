@@ -68,7 +68,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // Mutation for saving memories with AI extraction or manual category
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
-      console.log('Saving memory:', memoryText, 'with category:', manualCategory || 'Auto (AI)');
       const body: { memoryText: string; topicTag?: string } = { memoryText };
       
       // Include topicTag if user manually selected a category
@@ -85,7 +84,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       return await response.json();
     },
     onSuccess: (data) => {
-      console.log('Memory saved successfully:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
       isProcessingRef.current = false;
@@ -117,7 +115,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // Mutation for querying memories with hybrid search
   const searchMutation = useMutation({
     mutationFn: async (queryText: string) => {
-      console.log('Searching memories:', queryText);
       const response = await apiRequest("POST", "/api/memories/search", { queryText });
       
       if (!response.ok) {
@@ -127,7 +124,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       return await response.json();
     },
     onSuccess: (data) => {
-      console.log('Search results:', data);
       isProcessingRef.current = false;
 
       const results = data.data || [];
@@ -197,8 +193,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
    */
   const handleLogCommand = useCallback(async (memoryText: string) => {
     try {
-      console.log('Handling log command:', memoryText);
-
       if (!memoryText || memoryText.trim().length === 0) {
         throw new Error("No data provided for log command");
       }
@@ -239,8 +233,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
    */
   const handleQueryCommand = useCallback(async (queryText: string) => {
     try {
-      console.log('Handling query command:', queryText);
-
       if (isListening) {
         stopListening(false);
       }
@@ -293,8 +285,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         return;
       }
 
-      console.log(`Processing ${currentMode} command:`, command);
-
       if (currentMode === "log") {
         await handleLogCommand(command);
       } else if (currentMode === "query") {
@@ -312,16 +302,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const processTranscript = useCallback((finalTranscript: string) => {
     try {
       if (!finalTranscript || finalTranscript.trim().length === 0) {
-        console.log('Empty transcript, skipping');
         return;
       }
 
       if (isProcessingRef.current) {
-        console.log('Already processing, skipping');
         return;
       }
 
-      console.log('Processing transcript:', finalTranscript);
       handleCommand(finalTranscript);
 
     } catch (error) {
@@ -341,7 +328,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       }
 
       if (isListening) {
-        console.log('Already listening');
         return;
       }
 
@@ -353,7 +339,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       newRecognition.lang = 'en-US';
 
       newRecognition.onstart = () => {
-        console.log('Speech recognition started');
         setIsListening(true);
       };
 
@@ -397,7 +382,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       };
 
       newRecognition.onend = () => {
-        console.log('Speech recognition ended');
         setIsListening(false);
       };
 

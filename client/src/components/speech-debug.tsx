@@ -9,11 +9,9 @@ export default function SpeechDebug() {
   const testMicrophone = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('Microphone access granted');
       stream.getTracks().forEach(track => track.stop());
       alert('Microphone access granted! Voice recognition should work.');
     } catch (error) {
-      console.error('Microphone access denied:', error);
       alert('Microphone access denied. Please check your browser permissions.');
     }
   };
