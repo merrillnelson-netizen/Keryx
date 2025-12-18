@@ -17,6 +17,9 @@ import Settings from "@/pages/settings";
 import LoginPage from "@/pages/login";
 import SignupPage from "@/pages/signup";
 import NotFound from "@/pages/not-found";
+import Insights from "@/pages/insights";
+import People from "@/pages/people";
+import Timeline from "@/pages/timeline";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -49,6 +52,15 @@ function Router() {
       </Route>
       <Route path="/history">
         {() => <ProtectedRoute component={History} />}
+      </Route>
+      <Route path="/insights">
+        {() => <ProtectedRoute component={Insights} />}
+      </Route>
+      <Route path="/people">
+        {() => <ProtectedRoute component={People} />}
+      </Route>
+      <Route path="/timeline">
+        {() => <ProtectedRoute component={Timeline} />}
       </Route>
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}

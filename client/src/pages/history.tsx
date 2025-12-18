@@ -43,9 +43,90 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, Table as TableIcon } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category } from "@shared/schema";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string }> = {
+  happy: { emoji: "😊", color: "bg-green-500/20 text-green-400 border-green-500/30", label: "Happy" },
+  sad: { emoji: "😢", color: "bg-blue-500/20 text-blue-400 border-blue-500/30", label: "Sad" },
+  anxious: { emoji: "😰", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", label: "Anxious" },
+  excited: { emoji: "🎉", color: "bg-purple-500/20 text-purple-400 border-purple-500/30", label: "Excited" },
+  neutral: { emoji: "😐", color: "bg-gray-500/20 text-gray-400 border-gray-500/30", label: "Neutral" },
+  frustrated: { emoji: "😤", color: "bg-red-500/20 text-red-400 border-red-500/30", label: "Frustrated" },
+  hopeful: { emoji: "🌟", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30", label: "Hopeful" },
+  grateful: { emoji: "🙏", color: "bg-pink-500/20 text-pink-400 border-pink-500/30", label: "Grateful" },
+  stressed: { emoji: "😫", color: "bg-orange-500/20 text-orange-400 border-orange-500/30", label: "Stressed" },
+  peaceful: { emoji: "😌", color: "bg-teal-500/20 text-teal-400 border-teal-500/30", label: "Peaceful" },
+  angry: { emoji: "😠", color: "bg-red-600/20 text-red-500 border-red-600/30", label: "Angry" },
+  confused: { emoji: "😕", color: "bg-amber-500/20 text-amber-400 border-amber-500/30", label: "Confused" },
+  proud: { emoji: "😊", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30", label: "Proud" },
+  nostalgic: { emoji: "🥹", color: "bg-violet-500/20 text-violet-400 border-violet-500/30", label: "Nostalgic" },
+  motivated: { emoji: "💪", color: "bg-lime-500/20 text-lime-400 border-lime-500/30", label: "Motivated" },
+};
+
+function MoodBadge({ mood, score }: { mood?: string | null; score?: number | null }) {
+  if (!mood) return null;
+  const config = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className={cn("cursor-default text-xs", config.color)}
+            data-testid="mood-badge"
+          >
+            <span className="mr-1">{config.emoji}</span>
+            {config.label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Mood: {config.label}</p>
+          {score !== null && score !== undefined && (
+            <p className="text-xs text-muted-foreground">Sentiment score: {score}</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function PeopleBadge({ people }: { people?: string[] | null }) {
+  if (!people || people.length === 0) return null;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className="cursor-default text-xs bg-sky-500/20 text-sky-400 border-sky-500/30"
+            data-testid="people-badge"
+          >
+            <Users className="w-3 h-3 mr-1" />
+            {people.length}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">People mentioned:</p>
+          <ul className="text-sm">
+            {people.map((name, i) => (
+              <li key={i}>{name}</li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -248,7 +329,8 @@ export default function History() {
                   <TableRow className="border-white/10 hover:bg-transparent">
                     <TableHead className="w-[110px] text-foreground font-semibold">Date</TableHead>
                     <TableHead className="w-[110px] text-foreground font-semibold">Topic</TableHead>
-                    <TableHead className="min-w-[400px] text-foreground font-semibold">Memory</TableHead>
+                    <TableHead className="w-[80px] text-foreground font-semibold">Mood</TableHead>
+                    <TableHead className="min-w-[350px] text-foreground font-semibold">Memory</TableHead>
                     <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -300,6 +382,9 @@ export default function History() {
                             {entry.topicTag || "General"}
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`mood-cell-${entry.id}`}>
+                        <MoodBadge mood={entry.mood} score={entry.moodScore} />
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
@@ -382,6 +467,8 @@ export default function History() {
                         <Badge variant="outline" data-testid={`date-badge-${entry.id}`} className="border-white/20">
                           {new Date(entry.timestamp!).toLocaleDateString()}
                         </Badge>
+                        <MoodBadge mood={entry.mood} score={entry.moodScore} />
+                        <PeopleBadge people={entry.detectedPeople} />
                       </div>
                       <CardTitle className="text-base font-normal text-foreground" data-testid={`memory-text-${entry.id}`}>
                         {entry.memoryText}

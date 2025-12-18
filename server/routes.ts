@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -165,6 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/memories - Save a new memory with optional manual category
    * Accepts raw voice text and optional topicTag
    * If topicTag provided, uses it; otherwise extracts metadata with AI
+   * Now includes mood detection and people tracking
    * Requires authentication
    */
   app.post("/api/memories", requireAuth, async (req, res) => {
@@ -186,20 +187,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.createCategoryIfNotExists(user.id, userProvidedTag);
       }
 
-      // Use user-provided category or AI extraction
-      let topicTag: string;
-      let metadataJson: Record<string, any>;
+      // Always extract metadata with AI (now includes mood and people)
+      const extracted = await extractMetadata(memoryText);
       
-      if (userProvidedTag) {
-        // User manually selected category - skip AI extraction
-        topicTag = userProvidedTag;
-        metadataJson = {}; // No AI-extracted metadata when manually categorized
-      } else {
-        // Use AI to extract metadata and topic
-        const extracted = await extractMetadata(memoryText);
-        topicTag = extracted.topicTag;
-        metadataJson = extracted.metadataJson;
-      }
+      // Use user-provided category or AI extraction
+      const topicTag = userProvidedTag || extracted.topicTag;
+      const metadataJson = userProvidedTag ? {} : extracted.metadataJson;
 
       // Generate embedding vector for semantic search
       const embeddingVector = await generateEmbedding(memoryText);
@@ -208,14 +201,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("Using zero vector fallback - OpenAI embedding may have failed");
       }
 
-      // Save to database with user ID
+      // Save to database with user ID, mood, and detected people
       const logEntry = await storage.createLogEntry({
         userId: user.id,
         memoryText,
         topicTag,
         metadataJson,
         embeddingVector,
+        mood: extracted.mood,
+        moodScore: extracted.moodScore,
+        detectedPeople: extracted.detectedPeople,
       });
+
+      // Track people mentions in the people table (non-blocking)
+      if (extracted.detectedPeople.length > 0) {
+        Promise.all(
+          extracted.detectedPeople.map(name => storage.upsertPerson(user.id, name))
+        ).catch(err => console.error("Failed to track people:", err));
+      }
 
       res.status(201).json({
         status: 'success',
@@ -587,6 +590,244 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       sendErrorResponse(res, 500, "Failed to create category", error);
+    }
+  });
+
+  /**
+   * PEOPLE TRACKING ROUTES
+   * Handle people mentioned in memories
+   */
+
+  /**
+   * GET /api/people - Get all tracked people for the user
+   * Requires authentication
+   */
+  app.get("/api/people", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userPeople = await storage.getPeople(user.id);
+      
+      res.json({
+        status: 'success',
+        data: userPeople,
+        count: userPeople.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch people", error);
+    }
+  });
+
+  /**
+   * GET /api/people/:name/mentions - Get all memories mentioning a person
+   * Requires authentication
+   */
+  app.get("/api/people/:name/mentions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { name } = req.params;
+      
+      if (!name) {
+        return sendErrorResponse(res, 400, "Person name is required");
+      }
+      
+      const mentions = await storage.getPersonMentions(user.id, decodeURIComponent(name));
+      
+      res.json({
+        status: 'success',
+        data: mentions,
+        count: mentions.length,
+        personName: decodeURIComponent(name),
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch person mentions", error);
+    }
+  });
+
+  /**
+   * PATCH /api/people/:id - Update a person's details
+   * Requires authentication
+   */
+  app.patch("/api/people/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { id } = req.params;
+      const updateData = insertPersonSchema.partial().parse(req.body);
+      
+      const updated = await storage.updatePerson(user.id, id, updateData);
+      
+      if (!updated) {
+        return sendErrorResponse(res, 404, "Person not found");
+      }
+      
+      res.json({
+        status: 'success',
+        data: updated,
+        message: 'Person updated successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to update person:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid person data", 
+          errors: error.errors,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      sendErrorResponse(res, 500, "Failed to update person", error);
+    }
+  });
+
+  /**
+   * MOOD ANALYTICS ROUTES
+   * Analyze emotional patterns in memories
+   */
+
+  /**
+   * GET /api/mood/stats - Get mood statistics for the user
+   * Query params: days (default 30)
+   * Requires authentication
+   */
+  app.get("/api/mood/stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      const stats = await storage.getMoodStats(user.id, days);
+      
+      res.json({
+        status: 'success',
+        data: stats,
+        period: `Last ${days} days`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch mood stats", error);
+    }
+  });
+
+  /**
+   * GET /api/mood/:mood - Get all memories with a specific mood
+   * Requires authentication
+   */
+  app.get("/api/mood/:mood", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { mood } = req.params;
+      
+      if (!mood) {
+        return sendErrorResponse(res, 400, "Mood is required");
+      }
+      
+      const entries = await storage.getEntriesByMood(user.id, mood);
+      
+      res.json({
+        status: 'success',
+        data: entries,
+        count: entries.length,
+        mood,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch entries by mood", error);
+    }
+  });
+
+  /**
+   * TIME CAPSULE ROUTES
+   * Surface memories from this day in previous years
+   */
+
+  /**
+   * GET /api/timecapsule - Get "On This Day" memories
+   * Requires authentication
+   */
+  app.get("/api/timecapsule", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const memories = await storage.getOnThisDayMemories(user.id);
+      
+      const today = new Date();
+      
+      res.json({
+        status: 'success',
+        data: memories,
+        count: memories.length,
+        date: {
+          month: today.getMonth() + 1,
+          day: today.getDate(),
+        },
+        message: memories.length > 0 
+          ? `Found ${memories.length} memories from this day in previous years`
+          : "No memories from this day in previous years yet",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch time capsule memories", error);
+    }
+  });
+
+  /**
+   * INSIGHTS ROUTES
+   * AI-powered thematic synthesis and pattern analysis
+   */
+
+  /**
+   * POST /api/insights - Generate AI insights from memories
+   * Body: { question?: string, days?: number }
+   * Requires authentication
+   */
+  app.post("/api/insights", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { question, days = 30 } = req.body;
+      
+      // Get recent memories for analysis
+      const memories = await storage.getLogEntries(user.id, 100);
+      
+      // Filter to requested time period
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      const filteredMemories = memories.filter(m => m.timestamp >= startDate);
+      
+      if (filteredMemories.length === 0) {
+        return res.json({
+          status: 'success',
+          data: {
+            summary: "No memories found in the specified time period.",
+            patterns: [],
+            recommendations: ["Try adding more memories to get personalized insights."],
+            timespan: `Last ${days} days`,
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Generate insights
+      const insights = await generateThematicInsights(
+        filteredMemories.map(m => ({
+          memoryText: m.memoryText,
+          mood: m.mood || undefined,
+          moodScore: m.moodScore || undefined,
+          timestamp: m.timestamp,
+          topicTag: m.topicTag,
+        })),
+        question
+      );
+      
+      res.json({
+        status: 'success',
+        data: insights,
+        memoriesAnalyzed: filteredMemories.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to generate insights:", error);
+      sendErrorResponse(res, 500, "Failed to generate insights", error);
     }
   });
 

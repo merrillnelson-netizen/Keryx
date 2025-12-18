@@ -1,9 +1,10 @@
 import { 
-  users, logEntries, settings, categories,
+  users, logEntries, settings, categories, people,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
-  type Category, type InsertCategory
+  type Category, type InsertCategory,
+  type Person, type InsertPerson
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
@@ -40,6 +41,20 @@ export interface IStorage {
   // Settings (user-scoped)
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
+
+  // People tracking (user-scoped)
+  getPeople(userId: string): Promise<Person[]>;
+  getPerson(userId: string, name: string): Promise<Person | undefined>;
+  upsertPerson(userId: string, name: string): Promise<Person>;
+  updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
+  getPersonMentions(userId: string, personName: string): Promise<LogEntry[]>;
+  
+  // Mood analytics (user-scoped)
+  getMoodStats(userId: string, days?: number): Promise<{ mood: string; count: number; avgScore: number }[]>;
+  getEntriesByMood(userId: string, mood: string): Promise<LogEntry[]>;
+  
+  // Time capsule - memories from this day in previous years
+  getOnThisDayMemories(userId: string): Promise<LogEntry[]>;
 }
 
 /**
@@ -418,6 +433,171 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to update settings:', error);
       throw new Error('Database error while updating settings');
+    }
+  }
+
+  /**
+   * PEOPLE TRACKING METHODS
+   * Handle people mentioned in memories
+   */
+
+  async getPeople(userId: string): Promise<Person[]> {
+    try {
+      return await db
+        .select()
+        .from(people)
+        .where(eq(people.userId, userId))
+        .orderBy(desc(people.mentionCount));
+    } catch (error) {
+      console.error('Failed to fetch people:', error);
+      throw new Error('Database error while fetching people');
+    }
+  }
+
+  async getPerson(userId: string, name: string): Promise<Person | undefined> {
+    try {
+      const [person] = await db
+        .select()
+        .from(people)
+        .where(and(eq(people.userId, userId), eq(people.name, name)))
+        .limit(1);
+      return person || undefined;
+    } catch (error) {
+      console.error('Failed to fetch person:', error);
+      throw new Error('Database error while fetching person');
+    }
+  }
+
+  async upsertPerson(userId: string, name: string): Promise<Person> {
+    try {
+      const existing = await this.getPerson(userId, name);
+      
+      if (existing) {
+        const [updated] = await db
+          .update(people)
+          .set({ 
+            mentionCount: sql`${people.mentionCount} + 1`,
+            lastMentioned: new Date()
+          })
+          .where(and(eq(people.userId, userId), eq(people.name, name)))
+          .returning();
+        return updated;
+      } else {
+        const [created] = await db
+          .insert(people)
+          .values({ userId, name, mentionCount: 1 })
+          .returning();
+        return created;
+      }
+    } catch (error) {
+      console.error('Failed to upsert person:', error);
+      throw new Error('Database error while upserting person');
+    }
+  }
+
+  async updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined> {
+    try {
+      const [updated] = await db
+        .update(people)
+        .set(data)
+        .where(and(eq(people.userId, userId), eq(people.id, id)))
+        .returning();
+      return updated || undefined;
+    } catch (error) {
+      console.error('Failed to update person:', error);
+      throw new Error('Database error while updating person');
+    }
+  }
+
+  async getPersonMentions(userId: string, personName: string): Promise<LogEntry[]> {
+    try {
+      return await db
+        .select()
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          sql`${personName} = ANY(${logEntries.detectedPeople})`
+        ))
+        .orderBy(desc(logEntries.timestamp));
+    } catch (error) {
+      console.error('Failed to fetch person mentions:', error);
+      throw new Error('Database error while fetching person mentions');
+    }
+  }
+
+  /**
+   * MOOD ANALYTICS METHODS
+   * Analyze emotional patterns across memories
+   */
+
+  async getMoodStats(userId: string, days = 30): Promise<{ mood: string; count: number; avgScore: number }[]> {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const result = await db
+        .select({
+          mood: logEntries.mood,
+          count: sql<number>`count(*)::int`,
+          avgScore: sql<number>`avg(${logEntries.moodScore})::int`,
+        })
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          gte(logEntries.timestamp, startDate),
+          sql`${logEntries.mood} IS NOT NULL`
+        ))
+        .groupBy(logEntries.mood);
+
+      return result.map(r => ({
+        mood: r.mood || 'neutral',
+        count: r.count,
+        avgScore: r.avgScore || 0,
+      }));
+    } catch (error) {
+      console.error('Failed to fetch mood stats:', error);
+      throw new Error('Database error while fetching mood stats');
+    }
+  }
+
+  async getEntriesByMood(userId: string, mood: string): Promise<LogEntry[]> {
+    try {
+      return await db
+        .select()
+        .from(logEntries)
+        .where(and(eq(logEntries.userId, userId), eq(logEntries.mood, mood)))
+        .orderBy(desc(logEntries.timestamp));
+    } catch (error) {
+      console.error('Failed to fetch entries by mood:', error);
+      throw new Error('Database error while fetching entries by mood');
+    }
+  }
+
+  /**
+   * TIME CAPSULE METHODS
+   * Surface memories from this day in previous years
+   */
+
+  async getOnThisDayMemories(userId: string): Promise<LogEntry[]> {
+    try {
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const day = today.getDate();
+      const currentYear = today.getFullYear();
+
+      return await db
+        .select()
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          sql`EXTRACT(MONTH FROM ${logEntries.timestamp}) = ${month}`,
+          sql`EXTRACT(DAY FROM ${logEntries.timestamp}) = ${day}`,
+          sql`EXTRACT(YEAR FROM ${logEntries.timestamp}) < ${currentYear}`
+        ))
+        .orderBy(desc(logEntries.timestamp));
+    } catch (error) {
+      console.error('Failed to fetch on this day memories:', error);
+      throw new Error('Database error while fetching on this day memories');
     }
   }
 }

@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun } from "lucide-react";
+import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 
@@ -14,6 +14,9 @@ interface AppLayoutProps {
 const navigation = [
   { name: "Voice Control", href: "/", icon: Mic },
   { name: "Memory History", href: "/history", icon: History },
+  { name: "Insights", href: "/insights", icon: Brain },
+  { name: "People", href: "/people", icon: Users },
+  { name: "Timeline", href: "/timeline", icon: Calendar },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

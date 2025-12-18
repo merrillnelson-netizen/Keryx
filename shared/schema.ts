@@ -45,6 +45,10 @@ export const logEntries = pgTable("log_entries", {
   metadataJson: jsonb("metadata_json").notNull(), // AI-extracted structured data
   embeddingVector: vector("embedding_vector", { dimensions: 1536 }), // OpenAI text-embedding-3-small creates 1536-dim vectors
   timestamp: timestamp("timestamp").defaultNow().notNull(),
+  // Phase 1: Cognitive features
+  mood: text("mood"), // AI-detected mood: happy, sad, anxious, excited, neutral, frustrated, hopeful, etc.
+  moodScore: integer("mood_score"), // Sentiment score: -100 (very negative) to +100 (very positive)
+  detectedPeople: text("detected_people").array(), // Array of person names detected in the memory
 }, (table) => ({
   // Index for user-specific queries (critical for data isolation)
   userIdIdx: index("log_entries_user_id_idx").on(table.userId),
@@ -73,6 +77,24 @@ export const logEntries = pgTable("log_entries", {
     table.topicTag,
     table.timestamp.desc()
   ),
+}));
+
+/**
+ * People table - tracks people mentioned across memories
+ * Enables building relationship graphs and context about connections
+ */
+export const people = pgTable("people", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(), // Person's name as detected/entered
+  relationship: text("relationship"), // e.g., "colleague", "friend", "family", "client"
+  notes: text("notes"), // User notes about this person
+  mentionCount: integer("mention_count").default(0), // How many times mentioned
+  firstMentioned: timestamp("first_mentioned").defaultNow().notNull(),
+  lastMentioned: timestamp("last_mentioned").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("people_user_id_idx").on(table.userId),
+  uniqueUserPerson: uniqueIndex("people_user_name_idx").on(table.userId, table.name),
 }));
 
 /**
@@ -111,6 +133,14 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
   createdAt: true,
 });
 
+export const insertPersonSchema = createInsertSchema(people).omit({
+  id: true,
+  userId: true,
+  mentionCount: true,
+  firstMentioned: true,
+  lastMentioned: true,
+});
+
 // TypeScript types inferred from schemas
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -123,3 +153,6 @@ export type Settings = typeof settings.$inferSelect;
 
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Category = typeof categories.$inferSelect;
+
+export type InsertPerson = z.infer<typeof insertPersonSchema>;
+export type Person = typeof people.$inferSelect;

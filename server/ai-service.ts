@@ -10,6 +10,9 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export interface ExtractedMetadata {
   topicTag: string;
   metadataJson: Record<string, any>;
+  mood: string;
+  moodScore: number;
+  detectedPeople: string[];
 }
 
 /**
@@ -37,9 +40,11 @@ export async function extractMetadata(memoryText: string): Promise<ExtractedMeta
       messages: [
         {
           role: "system",
-          content: `You are a metadata extraction expert. Analyze the text and:
-1. Identify the single most relevant topic tag from: Billiards, Groceries, Meeting, General (default to General if unclear)
-2. Extract specific entities based on the topic:
+          content: `You are a metadata extraction expert with emotional intelligence. Analyze the text and extract:
+
+1. TOPIC: Identify the single most relevant topic tag from: Billiards, Groceries, Meeting, General (default to General if unclear)
+
+2. ENTITIES: Extract specific entities based on the topic:
    - Billiards: round, table, game, breaker, racker, winner
    - Groceries: store, items_list (as array), budget
    - Meeting: attendees (as array), action_items (as array), meeting_topic
@@ -52,13 +57,29 @@ For food/meal-related entries, use these EXACT field names:
    - beverage_type: "soda" | "coffee" | "tea" | "juice" etc.
    - items: array of food items with details
 
+3. MOOD: Detect the emotional tone of the entry. Choose ONE from:
+   happy, sad, anxious, excited, neutral, frustrated, hopeful, grateful, stressed, peaceful, angry, confused, proud, nostalgic, motivated
+
+4. MOOD SCORE: Rate the sentiment on a scale from -100 (extremely negative) to +100 (extremely positive). 0 is neutral.
+
+5. PEOPLE: Extract all person names mentioned in the text. Include:
+   - Full names when available
+   - First names only if that's all that's mentioned
+   - Nicknames if used as primary identifier
+   Do NOT include generic references like "my friend" or "someone" - only actual names.
+
 Respond with JSON in this exact format: 
 {
   "topicTag": "string",
-  "metadataJson": { "field1": "value1", "field2": ["array", "values"], ... }
+  "metadataJson": { "field1": "value1", "field2": ["array", "values"], ... },
+  "mood": "string (one of the mood options)",
+  "moodScore": number (-100 to 100),
+  "detectedPeople": ["name1", "name2", ...]
 }
 
-If you cannot extract specific metadata, return empty object for metadataJson.`,
+If you cannot extract specific metadata, return empty object for metadataJson.
+If no clear mood is detected, use "neutral" with moodScore 0.
+If no people are mentioned, return empty array for detectedPeople.`,
         },
         {
           role: "user",
@@ -74,6 +95,9 @@ If you cannot extract specific metadata, return empty object for metadataJson.`,
     return {
       topicTag: result.topicTag || "General",
       metadataJson: result.metadataJson || {},
+      mood: result.mood || "neutral",
+      moodScore: typeof result.moodScore === 'number' ? Math.max(-100, Math.min(100, result.moodScore)) : 0,
+      detectedPeople: Array.isArray(result.detectedPeople) ? result.detectedPeople : [],
     };
   } catch (error) {
     console.error("Error extracting metadata:", error);
@@ -81,6 +105,9 @@ If you cannot extract specific metadata, return empty object for metadataJson.`,
     return {
       topicTag: "General",
       metadataJson: {},
+      mood: "neutral",
+      moodScore: 0,
+      detectedPeople: [],
     };
   }
 }
@@ -213,6 +240,87 @@ Current date for reference: ${new Date().toISOString()}`,
     return {
       semanticComponent: queryText,
       structuredFilters: {},
+    };
+  }
+}
+
+/**
+ * Thematic insights result
+ */
+export interface ThematicInsight {
+  summary: string;
+  patterns: string[];
+  recommendations: string[];
+  timespan: string;
+}
+
+/**
+ * Generate thematic synthesis/insights from a collection of memories
+ * Analyzes patterns, recurring themes, and provides actionable insights
+ * 
+ * @param memories - Array of memory objects with text and metadata
+ * @param question - User's question about their memories (optional)
+ * @returns Promise<ThematicInsight> - Synthesized insights
+ */
+export async function generateThematicInsights(
+  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>,
+  question?: string
+): Promise<ThematicInsight> {
+  try {
+    // Prepare memory summary for context
+    const memorySummary = memories.map((m, i) => 
+      `[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`
+    ).join('\n\n');
+
+    const prompt = question 
+      ? `Based on the following memories, answer this question: "${question}"\n\nMemories:\n${memorySummary}`
+      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert life coach and personal analyst. Analyze the user's memories to identify:
+
+1. SUMMARY: A concise overview of what these memories reveal about the user's life/work during this period
+2. PATTERNS: Recurring themes, behaviors, emotional patterns, or concerns
+3. RECOMMENDATIONS: Actionable suggestions based on the patterns observed
+4. TIMESPAN: Description of the time period covered
+
+Be insightful but compassionate. Focus on constructive observations.
+
+Respond with JSON in this format:
+{
+  "summary": "A 2-3 sentence overview",
+  "patterns": ["pattern 1", "pattern 2", ...],
+  "recommendations": ["suggestion 1", "suggestion 2", ...],
+  "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
+}`,
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+
+    return {
+      summary: result.summary || "Unable to generate summary",
+      patterns: Array.isArray(result.patterns) ? result.patterns : [],
+      recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
+      timespan: result.timespan || "Unknown period",
+    };
+  } catch (error) {
+    console.error("Error generating thematic insights:", error);
+    return {
+      summary: "Unable to analyze memories at this time.",
+      patterns: [],
+      recommendations: [],
+      timespan: "Unknown",
     };
   }
 }
