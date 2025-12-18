@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Check, X } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -17,6 +17,24 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -42,8 +60,11 @@ const RELATIONSHIP_OPTIONS = [
 export default function People() {
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [deletingPerson, setDeletingPerson] = useState<Person | null>(null);
+  const [editName, setEditName] = useState("");
   const [editRelationship, setEditRelationship] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -70,7 +91,7 @@ export default function People() {
   });
 
   const updatePersonMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { relationship?: string; notes?: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { name?: string; relationship?: string; notes?: string } }) => {
       const response = await apiRequest("PATCH", `/api/people/${id}`, data);
       if (!response.ok) throw new Error("Failed to update person");
       return response.json();
@@ -92,8 +113,35 @@ export default function People() {
     },
   });
 
+  const deletePersonMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/people/${id}`, {});
+      if (!response.ok) throw new Error("Failed to delete person");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({
+        title: "Person deleted",
+        description: "Entry has been removed successfully",
+      });
+      setDeletingPerson(null);
+      if (selectedPerson?.id === deletingPerson?.id) {
+        setSelectedPerson(null);
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Delete failed",
+        description: "Failed to delete person. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleEdit = (person: Person) => {
     setEditingPerson(person);
+    setEditName(person.name);
     setEditRelationship(person.relationship || "");
     setEditNotes(person.notes || "");
   };
@@ -103,6 +151,7 @@ export default function People() {
       updatePersonMutation.mutate({
         id: editingPerson.id,
         data: {
+          name: editName !== editingPerson.name ? editName : undefined,
           relationship: editRelationship || undefined,
           notes: editNotes || undefined,
         },
@@ -128,15 +177,47 @@ export default function People() {
       <div className="space-y-6 animate-fade-in">
         {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-500 flex items-center justify-center">
-              <Users className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-500 flex items-center justify-center">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">People in Your Memories</h2>
+                <p className="text-sm text-muted-foreground">
+                  {people.length} people mentioned across your memories
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">People in Your Memories</h2>
-              <p className="text-sm text-muted-foreground">
-                {people.length} people mentioned across your memories
-              </p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("cards")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "cards" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-cards"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "table" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-table"
+              >
+                <TableIcon className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>
@@ -148,6 +229,93 @@ export default function People() {
             <p className="text-muted-foreground">
               When you mention people in your memories, they'll appear here
             </p>
+          </div>
+        ) : viewMode === "table" ? (
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead className="w-[200px] text-foreground font-semibold">Name</TableHead>
+                    <TableHead className="w-[120px] text-foreground font-semibold">Relationship</TableHead>
+                    <TableHead className="w-[100px] text-foreground font-semibold">Mentions</TableHead>
+                    <TableHead className="w-[120px] text-foreground font-semibold">Last Mentioned</TableHead>
+                    <TableHead className="min-w-[200px] text-foreground font-semibold">Notes</TableHead>
+                    <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {people.map((person) => (
+                    <TableRow 
+                      key={person.id} 
+                      data-testid={`person-row-${person.id}`}
+                      className={cn(
+                        "border-white/10 hover:bg-white/5 transition-colors cursor-pointer",
+                        selectedPerson?.id === person.id && "bg-primary/10"
+                      )}
+                      onClick={() => setSelectedPerson(person)}
+                    >
+                      <TableCell className="font-medium" data-testid={`name-cell-${person.id}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                            <User className="w-4 h-4 text-white" />
+                          </div>
+                          {person.name}
+                        </div>
+                      </TableCell>
+                      <TableCell data-testid={`relationship-cell-${person.id}`}>
+                        {person.relationship ? (
+                          <Badge variant="outline" className="text-xs border-primary/30 text-primary">
+                            {person.relationship}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell data-testid={`mentions-cell-${person.id}`}>
+                        <Badge variant="secondary" className="bg-sky-500/20 text-sky-400 border-sky-500/30">
+                          {person.mentionCount}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground" data-testid={`last-mentioned-cell-${person.id}`}>
+                        {new Date(person.lastMentioned).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" data-testid={`notes-cell-${person.id}`}>
+                        {person.notes || "-"}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(person);
+                            }}
+                            className="h-8 w-8 p-0 hover:bg-white/10"
+                            data-testid={`edit-button-${person.id}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingPerson(person);
+                            }}
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                            data-testid={`delete-button-${person.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -176,18 +344,32 @@ export default function People() {
                         )}
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(person);
-                      }}
-                      className="h-8 w-8 p-0 hover:bg-white/10"
-                      data-testid={`edit-person-${person.id}`}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(person);
+                        }}
+                        className="h-8 w-8 p-0 hover:bg-white/10"
+                        data-testid={`edit-person-${person.id}`}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingPerson(person);
+                        }}
+                        className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                        data-testid={`delete-person-${person.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -262,10 +444,21 @@ export default function People() {
           <DialogHeader>
             <DialogTitle>Edit Person Details</DialogTitle>
             <DialogDescription>
-              Add more context about {editingPerson?.name}
+              Update details for {editingPerson?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Person's name"
+                className="glass-card border-white/20"
+                data-testid="input-name"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="relationship">Relationship</Label>
               <Select value={editRelationship} onValueChange={setEditRelationship}>
@@ -303,7 +496,7 @@ export default function People() {
             </Button>
             <Button
               onClick={handleSaveEdit}
-              disabled={updatePersonMutation.isPending}
+              disabled={updatePersonMutation.isPending || !editName.trim()}
               className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
             >
               {updatePersonMutation.isPending ? "Saving..." : "Save"}
@@ -311,6 +504,29 @@ export default function People() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingPerson} onOpenChange={() => setDeletingPerson(null)}>
+        <AlertDialogContent className="glass-card-strong border-white/20">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Person Entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove "{deletingPerson?.name}" from your people list. 
+              This action cannot be undone. The person may reappear if mentioned in future memories.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingPerson && deletePersonMutation.mutate(deletingPerson.id)}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="confirm-delete-person"
+            >
+              {deletePersonMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

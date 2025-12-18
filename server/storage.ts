@@ -47,6 +47,7 @@ export interface IStorage {
   getPerson(userId: string, name: string): Promise<Person | undefined>;
   upsertPerson(userId: string, name: string): Promise<Person>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
+  deletePerson(userId: string, id: string): Promise<boolean>;
   getPersonMentions(userId: string, personName: string): Promise<LogEntry[]>;
   
   // Mood analytics (user-scoped)
@@ -506,6 +507,19 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to update person:', error);
       throw new Error('Database error while updating person');
+    }
+  }
+
+  async deletePerson(userId: string, id: string): Promise<boolean> {
+    try {
+      const deleted = await db
+        .delete(people)
+        .where(and(eq(people.userId, userId), eq(people.id, id)))
+        .returning();
+      return deleted.length > 0;
+    } catch (error) {
+      console.error('Failed to delete person:', error);
+      throw new Error('Database error while deleting person');
     }
   }
 

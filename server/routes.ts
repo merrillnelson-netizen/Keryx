@@ -712,6 +712,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * DELETE /api/people/:id - Delete a person entry
+   * Requires authentication
+   */
+  app.delete("/api/people/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { id } = req.params;
+      
+      const deleted = await storage.deletePerson(user.id, id);
+      
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Person not found");
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Person deleted successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete person", error);
+    }
+  });
+
+  /**
    * MOOD ANALYTICS ROUTES
    * Analyze emotional patterns in memories
    */
