@@ -258,11 +258,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to save memory - Full error:", error);
-      if (error instanceof Error) {
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-      }
+      // Log error for debugging but don't expose details to client
+      console.error("Failed to save memory:", error instanceof Error ? error.message : error);
       sendErrorResponse(res, 500, "Failed to save memory. Please try again.", error);
     }
   });

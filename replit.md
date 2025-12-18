@@ -26,6 +26,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **API Design**: RESTful endpoints with consistent error handling and standardized JSON responses.
 - **Database ORM**: Drizzle ORM for type-safe PostgreSQL operations.
 - **Session Management**: Express sessions with PostgreSQL store via `connect-pg-simple`.
+- **Rate Limiting**: Per-user rate limiting on AI routes (20 req/min) to prevent OpenAI quota issues.
 - **Environment Validation**: Startup validation for critical environment variables (OPENAI_API_KEY, SESSION_SECRET, DATABASE_URL).
 
 ### Database Design
@@ -65,9 +66,24 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Navigation**: 7 items - Dashboard, Voice Log, History, Insights, People, Timeline, Settings.
 - **Preparation Mode**: Planned for future (requires calendar/event integration).
 
+### Phase 3: Hands-Free Activation (Planned)
+- **Wake Word Detection**: "Hey Helix" trigger using Picovoice Porcupine WebAssembly library.
+- **Always-On Listener**: Opt-in background listening with clear privacy controls and visual indicator.
+- **Browser Requirements**: HTTPS, microphone permission, active tab (Safari/iOS limited support).
+- **Implementation**: Web Audio API + Porcupine WASM worker for low-latency, on-device detection.
+- **Custom Wake Word**: Train "Hey Helix" via Picovoice Console (text-to-model).
+
+### Phase 4: Meta Glasses Integration (Planned)
+- **Meta Wearables SDK**: Integration with Meta Wearables Device Access Toolkit (developer preview 2025, GA 2026).
+- **Quick Capture**: Deep link `/quick-capture` for Meta AI routines to launch Helix directly.
+- **Voice Commands**: "Hey Meta, open Helix" routine for hands-free memory logging.
+- **Companion Bridge**: Mobile/PWA intent handler for glasses-to-Helix communication.
+- **Limitations**: Custom Meta AI voice commands not available in initial SDK preview.
+- **Workaround**: GitHub `dcrebbin/meta-glasses-api` for unofficial Messenger-based integration.
+
 ### Future Phases
-- **Phase 3 (Life Integration)**: Photos, location tracking, shared memories.
-- **Phase 4 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
+- **Phase 5 (Life Integration)**: Photos, location tracking, shared memories.
+- **Phase 6 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
 
 ## External Dependencies
 
