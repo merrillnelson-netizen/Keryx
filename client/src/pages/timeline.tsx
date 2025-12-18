@@ -71,7 +71,10 @@ export default function Timeline() {
     queryKey: ["/api/timecapsule"],
     queryFn: async () => {
       const response = await fetch("/api/timecapsule", { credentials: "include" });
-      if (!response.ok) throw new Error("Failed to fetch time capsule");
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
       return response.json();
     },
   });
