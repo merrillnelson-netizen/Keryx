@@ -202,7 +202,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/memories", requireAuth, aiLimiter, async (req, res) => {
     try {
-      const { memoryText, topicTag: userProvidedTag } = req.body;
+      const { 
+        memoryText, 
+        topicTag: userProvidedTag,
+        geoLat,
+        geoLng,
+        geoAccuracyMeters,
+        geoPlaceName,
+      } = req.body;
       const user = req.user as any;
       
       if (!memoryText || typeof memoryText !== 'string') {
@@ -233,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("Using zero vector fallback - OpenAI embedding may have failed");
       }
 
-      // Save to database with user ID, mood, and detected people
+      // Save to database with user ID, mood, detected people, and geolocation
       const logEntry = await storage.createLogEntry({
         userId: user.id,
         memoryText,
@@ -243,6 +250,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mood: extracted.mood,
         moodScore: extracted.moodScore,
         detectedPeople: extracted.detectedPeople,
+        // Geolocation context (optional)
+        geoLat: geoLat !== undefined ? parseFloat(geoLat) : undefined,
+        geoLng: geoLng !== undefined ? parseFloat(geoLng) : undefined,
+        geoAccuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
+        geoPlaceName: geoPlaceName || undefined,
       });
 
       // Track people mentions in the people table (non-blocking)

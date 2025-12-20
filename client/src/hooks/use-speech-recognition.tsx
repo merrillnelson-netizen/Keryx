@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSpeechSynthesis } from "./use-speech-synthesis";
+import { useGeolocation } from "./use-geolocation";
 import { Settings } from "@shared/schema";
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech";
 
@@ -59,6 +60,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
   const queryClient = useQueryClient();
   const { speak } = useSpeechSynthesis();
+  const { requestLocation, isSupported: geoSupported } = useGeolocation();
 
   // Query for application settings with error handling
   const { data: settings } = useQuery<Settings>({
@@ -67,10 +69,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Mutation for saving memories with AI extraction or manual category
+  // Mutation for saving memories with AI extraction, manual category, and geolocation
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
-      const body: { memoryText: string; topicTag?: string } = { memoryText };
+      const body: { 
+        memoryText: string; 
+        topicTag?: string;
+        geoLat?: number;
+        geoLng?: number;
+        geoAccuracyMeters?: number;
+      } = { memoryText };
       
       // Include topicTag if user manually selected a category
       if (manualCategory) {
@@ -80,6 +88,23 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         const sessionCategory = sessionStorage.getItem("helix_session_category");
         if (sessionCategory) {
           body.topicTag = sessionCategory;
+        }
+      }
+      
+      // Capture geolocation if supported (non-blocking - don't wait if it fails)
+      if (geoSupported) {
+        try {
+          const geo = await requestLocation();
+          if (geo.lat && geo.lng) {
+            body.geoLat = geo.lat;
+            body.geoLng = geo.lng;
+            if (geo.accuracy) {
+              body.geoAccuracyMeters = geo.accuracy;
+            }
+          }
+        } catch (geoError) {
+          // Geolocation failed - continue without it
+          console.warn('Geolocation capture failed:', geoError);
         }
       }
       
