@@ -1,44 +1,44 @@
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, Clock, Gift, Sparkles } from "lucide-react";
+import { Calendar, Clock, Gift, Sparkles, LayoutGrid, Table as TableIcon, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-const MOOD_CONFIG: Record<string, { emoji: string; color: string }> = {
-  happy: { emoji: "😊", color: "bg-green-500" },
-  sad: { emoji: "😢", color: "bg-blue-500" },
-  anxious: { emoji: "😰", color: "bg-yellow-500" },
-  excited: { emoji: "🎉", color: "bg-purple-500" },
-  neutral: { emoji: "😐", color: "bg-gray-500" },
-  frustrated: { emoji: "😤", color: "bg-red-500" },
-  hopeful: { emoji: "🌟", color: "bg-cyan-500" },
-  grateful: { emoji: "🙏", color: "bg-pink-500" },
-  stressed: { emoji: "😫", color: "bg-orange-500" },
-  peaceful: { emoji: "😌", color: "bg-teal-500" },
-  angry: { emoji: "😠", color: "bg-red-600" },
-  confused: { emoji: "😕", color: "bg-amber-500" },
-  proud: { emoji: "😊", color: "bg-indigo-500" },
-  nostalgic: { emoji: "🥹", color: "bg-violet-500" },
-  motivated: { emoji: "💪", color: "bg-lime-500" },
+const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string }> = {
+  happy: { emoji: "😊", color: "bg-green-500", label: "Happy" },
+  sad: { emoji: "😢", color: "bg-blue-500", label: "Sad" },
+  anxious: { emoji: "😰", color: "bg-yellow-500", label: "Anxious" },
+  excited: { emoji: "🎉", color: "bg-purple-500", label: "Excited" },
+  neutral: { emoji: "😐", color: "bg-gray-500", label: "Neutral" },
+  frustrated: { emoji: "😤", color: "bg-red-500", label: "Frustrated" },
+  hopeful: { emoji: "🌟", color: "bg-cyan-500", label: "Hopeful" },
+  grateful: { emoji: "🙏", color: "bg-pink-500", label: "Grateful" },
+  stressed: { emoji: "😫", color: "bg-orange-500", label: "Stressed" },
+  peaceful: { emoji: "😌", color: "bg-teal-500", label: "Peaceful" },
+  angry: { emoji: "😠", color: "bg-red-600", label: "Angry" },
+  confused: { emoji: "😕", color: "bg-amber-500", label: "Confused" },
+  proud: { emoji: "😊", color: "bg-indigo-500", label: "Proud" },
+  nostalgic: { emoji: "🥹", color: "bg-violet-500", label: "Nostalgic" },
+  motivated: { emoji: "💪", color: "bg-lime-500", label: "Motivated" },
 };
-
-function groupEntriesByDate(entries: LogEntry[]): Map<string, LogEntry[]> {
-  const groups = new Map<string, LogEntry[]>();
-  entries.forEach((entry) => {
-    const date = new Date(entry.timestamp!).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-    if (!groups.has(date)) {
-      groups.set(date, []);
-    }
-    groups.get(date)!.push(entry);
-  });
-  return groups;
-}
 
 function groupEntriesByMonth(entries: LogEntry[]): Map<string, LogEntry[]> {
   const groups = new Map<string, LogEntry[]>();
@@ -62,7 +62,60 @@ interface TimeCapsuleResponse {
   message: string;
 }
 
+function MoodBadge({ mood, score }: { mood?: string | null; score?: number | null }) {
+  if (!mood) return null;
+  const config = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-default text-lg" title={config.label}>
+            {config.emoji}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{config.label}</p>
+          {score !== null && score !== undefined && (
+            <p className="text-xs text-muted-foreground">Score: {score}</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function PeopleBadge({ people }: { people?: string[] | null }) {
+  if (!people || people.length === 0) return null;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className="cursor-default text-xs bg-sky-500/20 text-sky-400 border-sky-500/30"
+          >
+            <Users className="w-3 h-3 mr-1" />
+            {people.length}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">People mentioned:</p>
+          <ul className="text-sm">
+            {people.map((name, i) => (
+              <li key={i}>{name}</li>
+            ))}
+          </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function Timeline() {
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
   });
@@ -98,18 +151,44 @@ export default function Timeline() {
     new Date(b[0]).getTime() - new Date(a[0]).getTime()
   );
 
+  const sortedEntries = [...logEntries].sort((a, b) => 
+    new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
+  );
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
-              <Calendar className="w-6 h-6 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
+                <Calendar className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Life Timeline</h2>
+                <p className="text-sm text-muted-foreground">Your journey through memories ({logEntries.length} total)</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Life Timeline</h2>
-              <p className="text-sm text-muted-foreground">Your journey through memories</p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "cards" ? "default" : "outline"}
+                size="icon"
+                onClick={() => setViewMode("cards")}
+                data-testid="button-view-cards"
+                title="Card view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="icon"
+                onClick={() => setViewMode("table")}
+                data-testid="button-view-table"
+                title="Table view"
+              >
+                <TableIcon className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>
@@ -167,7 +246,66 @@ export default function Timeline() {
             <h3 className="text-lg font-medium text-foreground mb-2">No memories yet</h3>
             <p className="text-muted-foreground">Start logging memories to see your timeline</p>
           </div>
+        ) : viewMode === "table" ? (
+          /* Table View */
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-white/5">
+                  <TableHead className="text-muted-foreground">Date</TableHead>
+                  <TableHead className="text-muted-foreground">Time</TableHead>
+                  <TableHead className="text-muted-foreground w-[40%]">Memory</TableHead>
+                  <TableHead className="text-muted-foreground">Topic</TableHead>
+                  <TableHead className="text-muted-foreground text-center">Mood</TableHead>
+                  <TableHead className="text-muted-foreground text-center">People</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedEntries.map((entry) => {
+                  const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
+                  const entryDate = new Date(entry.timestamp!);
+                  
+                  return (
+                    <TableRow 
+                      key={entry.id}
+                      className="border-white/10 hover:bg-white/5"
+                      data-testid={`timeline-row-${entry.id}`}
+                    >
+                      <TableCell className="font-medium">
+                        {entryDate.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {entryDate.toLocaleTimeString([], { 
+                          hour: "2-digit", 
+                          minute: "2-digit" 
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <p className="line-clamp-2">{entry.memoryText}</p>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
+                          {entry.topicTag}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <MoodBadge mood={entry.mood} score={entry.moodScore} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <PeopleBadge people={entry.detectedPeople} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         ) : (
+          /* Card View with Timeline */
           <div className="relative">
             {/* Timeline Line */}
             <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-secondary to-accent" />
