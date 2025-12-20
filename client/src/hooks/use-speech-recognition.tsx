@@ -20,6 +20,8 @@ interface SpeechRecognitionHook {
   setMode: (mode: "log" | "query" | null) => void;
   lastResponse: string;
   setManualCategory: (category: string | null) => void;
+  submitText: (text: string, textMode: "log" | "query") => Promise<void>;
+  isProcessing: boolean;
 }
 
 /**
@@ -411,6 +413,19 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     };
   }, []);
 
+  /**
+   * Submit text directly (for typed input, bypassing voice)
+   */
+  const submitText = useCallback(async (text: string, textMode: "log" | "query") => {
+    if (!text.trim()) return;
+    
+    if (textMode === "log") {
+      await handleLogCommand(text.trim());
+    } else {
+      await handleQueryCommand(text.trim());
+    }
+  }, [handleLogCommand, handleQueryCommand]);
+
   return {
     isListening,
     isSupported,
@@ -421,5 +436,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setMode,
     lastResponse,
     setManualCategory,
+    submitText,
+    isProcessing: isProcessingRef.current || saveMutation.isPending || searchMutation.isPending,
   };
 }
