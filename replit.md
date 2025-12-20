@@ -73,20 +73,34 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Session Category**: Power user feature in Settings to auto-tag memories during extended sessions (uses browser session storage, resets on close).
 - **Simplified Auth Pages**: Clean login/signup forms with "Back to home" navigation.
 
-### Phase 3: Hands-Free Activation (Planned)
-- **Wake Word Detection**: "Hey Helix" trigger using Picovoice Porcupine WebAssembly library.
-- **Always-On Listener**: Opt-in background listening with clear privacy controls and visual indicator.
-- **Browser Requirements**: HTTPS, microphone permission, active tab (Safari/iOS limited support).
-- **Implementation**: Web Audio API + Porcupine WASM worker for low-latency, on-device detection.
-- **Custom Wake Word**: Train "Hey Helix" via Picovoice Console (text-to-model).
+### Phase 3: Meta Glasses Integration (In Progress)
+- **Architecture**: Hybrid system - web app (desktop/browser) + React Native companion app (glasses/mobile) sharing Express/PostgreSQL backend.
+- **Companion App**: Located in `/companion-app/`, React Native project with TypeScript.
+- **MCP Protocol**: Model Context Protocol 2025-01 compliant payloads for structured communication.
 
-### Phase 4: Meta Glasses Integration (Planned)
-- **Meta Wearables SDK**: Integration with Meta Wearables Device Access Toolkit (developer preview 2025, GA 2026).
-- **Quick Capture**: Deep link `/quick-capture` for Meta AI routines to launch Helix directly.
-- **Voice Commands**: "Hey Meta, open Helix" routine for hands-free memory logging.
-- **Companion Bridge**: Mobile/PWA intent handler for glasses-to-Helix communication.
-- **Limitations**: Custom Meta AI voice commands not available in initial SDK preview.
-- **Workaround**: GitHub `dcrebbin/meta-glasses-api` for unofficial Messenger-based integration.
+#### Backend API Extensions
+- **New Endpoint**: `POST /api/companion/action` - Unified MCP action handler.
+- **Geolocation Fields**: `geoLat`, `geoLng`, `geoPlaceId`, `geoPlaceName`, `geoAccuracyMeters` on log_entries.
+- **Device Context**: `deviceId`, `deviceType` (oakley-hstn, meta-glasses, phone, web), `deviceConnection` (bluetooth-sco, bluetooth-a2dp, usb, wifi).
+- **Schema Types**: `geoContextSchema`, `deviceContextSchema`, `audioContextSchema`, `mcpPayloadSchema` in `shared/schema.ts`.
+
+#### Companion App Services
+- **Wake Word Detection**: Picovoice Porcupine SDK for "Hey Helix" activation (`src/services/wakeWord.ts`).
+- **Bluetooth SCO**: Audio routing through Meta glasses (`src/services/bluetooth.ts`).
+- **Location Service**: GPS capture + Google Places reverse geocoding (`src/services/location.ts`).
+- **Speech Service**: STT/TTS for voice interactions (`src/services/speech.ts`).
+- **Action Router**: Intent classification (record vs query) and API calls (`src/services/actionRouter.ts`).
+- **API Client**: Helix backend communication (`src/services/api.ts`).
+
+#### Supported Devices
+- Oakley Holbrook Meta (HSTN variant)
+- Ray-Ban Meta Smart Glasses
+- Future Meta Wearables (SDK GA 2026)
+
+#### Setup Requirements
+- Picovoice Access Key (https://console.picovoice.ai)
+- Google Places API Key (optional, for reverse geocoding)
+- Custom "Hey Helix" wake word model (.ppn file)
 
 ### Future Phases
 - **Phase 5 (Life Integration)**: Photos, location tracking, shared memories.
