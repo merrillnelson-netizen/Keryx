@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category } from "@shared/schema";
 import {
@@ -122,6 +122,42 @@ function PeopleBadge({ people }: { people?: string[] | null }) {
               <li key={i}>{name}</li>
             ))}
           </ul>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function LocationBadge({ lat, lng, placeName }: { lat?: number | null; lng?: number | null; placeName?: string | null }) {
+  if (!lat || !lng) return null;
+  
+  const displayText = placeName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a 
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Badge 
+              variant="outline" 
+              className="cursor-pointer text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+              data-testid="location-badge"
+            >
+              <MapPin className="w-3 h-3 mr-1" />
+              {placeName ? placeName.substring(0, 20) + (placeName.length > 20 ? '...' : '') : 'Location'}
+            </Badge>
+          </a>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">Location</p>
+          <p className="text-sm">{displayText}</p>
+          <p className="text-xs text-muted-foreground">Click to open in Maps</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -330,6 +366,7 @@ export default function History() {
                     <TableHead className="w-[110px] text-foreground font-semibold">Date</TableHead>
                     <TableHead className="w-[110px] text-foreground font-semibold">Topic</TableHead>
                     <TableHead className="w-[80px] text-foreground font-semibold">Mood</TableHead>
+                    <TableHead className="w-[100px] text-foreground font-semibold">Location</TableHead>
                     <TableHead className="min-w-[350px] text-foreground font-semibold">Memory</TableHead>
                     <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
                   </TableRow>
@@ -385,6 +422,9 @@ export default function History() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap" data-testid={`mood-cell-${entry.id}`}>
                         <MoodBadge mood={entry.mood} score={entry.moodScore} />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`location-cell-${entry.id}`}>
+                        <LocationBadge lat={entry.geoLat} lng={entry.geoLng} placeName={entry.geoPlaceName} />
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
@@ -469,6 +509,7 @@ export default function History() {
                         </Badge>
                         <MoodBadge mood={entry.mood} score={entry.moodScore} />
                         <PeopleBadge people={entry.detectedPeople} />
+                        <LocationBadge lat={entry.geoLat} lng={entry.geoLng} placeName={entry.geoPlaceName} />
                       </div>
                       <CardTitle className="text-base font-normal text-foreground" data-testid={`memory-text-${entry.id}`}>
                         {entry.memoryText}
