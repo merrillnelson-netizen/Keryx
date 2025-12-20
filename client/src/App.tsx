@@ -105,9 +105,7 @@ function Router() {
  */
 function App() {
   useEffect(() => {
-    if (!import.meta.env.VITE_GA_MEASUREMENT_ID) {
-      console.warn('Missing Google Analytics Measurement ID');
-    } else {
+    if (import.meta.env.VITE_GA_MEASUREMENT_ID) {
       initGA();
     }
   }, []);
