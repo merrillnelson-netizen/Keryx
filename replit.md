@@ -58,13 +58,20 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Enhanced History**: Mood badges (emoji + score) and people badges on memory cards/table rows.
 
 ### Phase 2: Proactive Features (Completed)
-- **Dashboard** (`/`): New landing page with daily briefing and pattern alerts.
+- **Dashboard** (`/` for authenticated users): Daily briefing and pattern alerts.
 - **Morning Briefing**: AI-generated personalized summary with greeting, focus areas, reminders, mood trend, and affirmation.
 - **Pattern Alerts**: AI detects positive/negative/insight patterns from recent memories, color-coded cards.
 - **API Endpoints**: `/api/briefing` (7-day analysis), `/api/alerts` (14-day pattern detection).
 - **AI Functions**: `generateMorningBriefing()`, `detectPatternAlerts()` in `server/ai-service.ts`.
 - **Navigation**: 7 items - Dashboard, Voice Log, History, Insights, People, Timeline, Settings.
 - **Preparation Mode**: Planned for future (requires calendar/event integration).
+
+### Landing Page & Marketing (Completed)
+- **Public Landing Page** (`/` for unauthenticated users): Professional marketing page with animated hero section.
+- **Features**: Hero with gradient text, feature grid (6 capabilities), benefits section, testimonials, CTA sections.
+- **Design**: Glassmorphism cards, Framer Motion animations, responsive mobile-first layout.
+- **Session Category**: Power user feature in Settings to auto-tag memories during extended sessions (uses browser session storage, resets on close).
+- **Simplified Auth Pages**: Clean login/signup forms with "Back to home" navigation.
 
 ### Phase 3: Hands-Free Activation (Planned)
 - **Wake Word Detection**: "Hey Helix" trigger using Picovoice Porcupine WebAssembly library.

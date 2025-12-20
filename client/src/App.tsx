@@ -21,10 +21,10 @@ import Insights from "@/pages/insights";
 import People from "@/pages/people";
 import Timeline from "@/pages/timeline";
 import Dashboard from "@/pages/dashboard";
+import LandingPage from "@/pages/landing";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
-  const [location] = useLocation();
 
   if (loading) {
     return (
@@ -34,11 +34,25 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (!user && location !== "/login" && location !== "/signup") {
+  if (!user) {
     return <Redirect to="/login" />;
   }
 
   return <Component />;
+}
+
+function HomeRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return user ? <Dashboard /> : <LandingPage />;
 }
 
 function Router() {
@@ -49,6 +63,9 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/">
+        {() => <HomeRoute />}
+      </Route>
+      <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
       <Route path="/voice">
