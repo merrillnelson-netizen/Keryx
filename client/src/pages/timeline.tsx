@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, Clock, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import {
@@ -244,6 +244,7 @@ function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) 
 
 export default function Timeline() {
   const [viewMode, setViewMode] = useState<"calendar" | "cards" | "table">("calendar");
+  const [filterMode, setFilterMode] = useState<"all" | "calendar">("all");
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<LogEntry[]>([]);
@@ -252,15 +253,18 @@ export default function Timeline() {
     queryKey: ["/api/logs"],
   });
 
-  const calendarLinkedEntries = useMemo(() => {
-    return logEntries.filter((entry) => entry.calendarEventId);
-  }, [logEntries]);
+  const filteredEntries = useMemo(() => {
+    if (filterMode === "calendar") {
+      return logEntries.filter((entry) => entry.calendarEventId);
+    }
+    return logEntries;
+  }, [logEntries, filterMode]);
 
   const sortedEntries = useMemo(() => {
-    return [...calendarLinkedEntries].sort(
+    return [...filteredEntries].sort(
       (a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
     );
-  }, [calendarLinkedEntries]);
+  }, [filteredEntries]);
 
   const handleDayClick = (date: Date, entries: LogEntry[]) => {
     setSelectedDate(date);
@@ -291,7 +295,7 @@ export default function Timeline() {
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading meeting memories...</p>
+            <p className="mt-4 text-muted-foreground">Loading timeline...</p>
           </div>
         </div>
       </AppLayout>
@@ -305,53 +309,81 @@ export default function Timeline() {
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-violet-500 to-indigo-500 flex items-center justify-center">
-                <CalendarDays className="w-6 h-6 text-white" />
+                <Clock className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Meeting Memories</h2>
+                <h2 className="text-2xl font-bold text-foreground">Timeline</h2>
                 <p className="text-sm text-muted-foreground">
-                  Memories linked to calendar events ({calendarLinkedEntries.length} total)
+                  {filterMode === "all" ? "All memories" : "Calendar-linked memories"} ({filteredEntries.length} total)
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={viewMode === "calendar" ? "default" : "outline"}
-                size="icon"
-                onClick={() => setViewMode("calendar")}
-                data-testid="button-view-calendar"
-                title="Calendar view"
-              >
-                <Calendar className="w-4 h-4" />
-              </Button>
-              <Button
-                variant={viewMode === "cards" ? "default" : "outline"}
-                size="icon"
-                onClick={() => setViewMode("cards")}
-                data-testid="button-view-cards"
-                title="Card view"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "outline"}
-                size="icon"
-                onClick={() => setViewMode("table")}
-                data-testid="button-view-table"
-                title="Table view"
-              >
-                <TableIcon className="w-4 h-4" />
-              </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                <Button
+                  variant={filterMode === "all" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setFilterMode("all")}
+                  data-testid="filter-all"
+                  className="text-xs"
+                >
+                  <Filter className="w-3 h-3 mr-1" />
+                  All
+                </Button>
+                <Button
+                  variant={filterMode === "calendar" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setFilterMode("calendar")}
+                  data-testid="filter-calendar"
+                  className="text-xs"
+                >
+                  <Calendar className="w-3 h-3 mr-1" />
+                  Calendar
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === "calendar" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("calendar")}
+                  data-testid="button-view-calendar"
+                  title="Calendar view"
+                >
+                  <Calendar className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "cards" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("cards")}
+                  data-testid="button-view-cards"
+                  title="Card view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setViewMode("table")}
+                  data-testid="button-view-table"
+                  title="Table view"
+                >
+                  <TableIcon className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
 
-        {calendarLinkedEntries.length === 0 ? (
+        {filteredEntries.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
-            <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No meeting memories yet</h3>
+            <Clock className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              {filterMode === "all" ? "No memories yet" : "No calendar-linked memories"}
+            </h3>
             <p className="text-muted-foreground">
-              When you record memories during calendar events, they'll appear here
+              {filterMode === "all" 
+                ? "Start recording memories to see them here" 
+                : "When you record memories during calendar events, they'll appear here"}
             </p>
           </div>
         ) : viewMode === "calendar" ? (
@@ -392,7 +424,7 @@ export default function Timeline() {
             </div>
 
             <CalendarGrid
-              entries={calendarLinkedEntries}
+              entries={filteredEntries}
               currentMonth={currentMonth}
               onDayClick={handleDayClick}
             />
