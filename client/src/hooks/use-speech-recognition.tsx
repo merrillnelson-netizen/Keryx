@@ -67,14 +67,16 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Mutation for saving memories with AI extraction or manual category
+  // Mutation for saving memories with AI extraction or manual/session category
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
       const body: { memoryText: string; topicTag?: string } = { memoryText };
       
-      // Include topicTag if user manually selected a category
+      // Include topicTag: manual category takes priority, then session category from settings
       if (manualCategory) {
         body.topicTag = manualCategory;
+      } else if (settings?.sessionCategory) {
+        body.topicTag = settings.sessionCategory;
       }
       
       const response = await apiRequest("POST", "/api/memories", body);

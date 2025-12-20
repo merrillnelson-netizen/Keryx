@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Settings } from "@shared/schema";
+import { Settings, Category } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag } from "lucide-react";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
@@ -20,6 +21,10 @@ export default function SettingsPage() {
 
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
   });
 
   const updateSettingsMutation = useMutation({
@@ -150,6 +155,46 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <SpeechDebug />
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-accent" />
+                Session Category
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Set a category to automatically apply to all new memories. Great for extended sessions 
+                  like hobbies or activities where you'll log multiple related memories.
+                </p>
+                <Select
+                  value={settings.sessionCategory || "none"}
+                  onValueChange={(value) => 
+                    setSettings(prev => ({ ...prev, sessionCategory: value === "none" ? null : value }))
+                  }
+                >
+                  <SelectTrigger data-testid="select-session-category">
+                    <SelectValue placeholder="No session category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No session category</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.name}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {settings.sessionCategory && (
+                  <p className="text-xs text-primary">
+                    All new memories will be tagged with "{settings.sessionCategory}"
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
 

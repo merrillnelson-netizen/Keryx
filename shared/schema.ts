@@ -105,6 +105,7 @@ export const settings = pgTable("settings", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   voiceResponseEnabled: boolean("voice_response_enabled").default(true),
   confidenceThreshold: integer("confidence_threshold").default(80), // 0-100
+  sessionCategory: text("session_category"), // Optional category to auto-apply to new memories
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
