@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Template } from "@shared/schema";
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -208,6 +208,7 @@ export default function Templates() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Template</DialogTitle>
+              <DialogDescription>Define a custom template for structured memory logging.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -263,6 +264,7 @@ export default function Templates() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Template</DialogTitle>
+              <DialogDescription>Modify your template settings below.</DialogDescription>
             </DialogHeader>
             {editingTemplate && (
               <div className="space-y-4">
