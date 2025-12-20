@@ -178,7 +178,7 @@ export default function VoiceActivation() {
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="min-h-[120px] bg-card/50 backdrop-blur-sm border-primary/20 focus:border-primary/40 text-foreground placeholder:text-muted-foreground resize-none"
+                className="min-h-[120px] bg-background/80 backdrop-blur-sm border-primary/20 focus:border-primary/40 text-foreground placeholder:text-muted-foreground resize-none"
                 data-testid="textarea-memory-input"
               />
               <p className="text-xs text-muted-foreground mt-2">
