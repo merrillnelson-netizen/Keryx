@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, CheckCircle2, XCircle } from "lucide-react";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
@@ -26,6 +26,10 @@ export default function SettingsPage() {
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+  });
+
+  const { data: calendarStatus } = useQuery<{ connected: boolean; provider: string | null }>({
+    queryKey: ["/api/calendar/status"],
   });
 
   const updateSettingsMutation = useMutation({
@@ -194,6 +198,65 @@ export default function SettingsPage() {
                   </p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-purple-500" />
+                Calendar Integration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Connection Status</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Link memories to calendar events automatically
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {calendarStatus?.connected ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <span className="text-sm text-green-500 font-medium">
+                        {calendarStatus.provider === 'google' ? 'Google Calendar' : 'Connected'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Not connected</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {calendarStatus?.connected && (
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Auto-link Meetings</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically link new memories to current calendar events
+                    </p>
+                  </div>
+                  <Switch
+                    data-testid="switch-calendar-autolink"
+                    checked={settings.calendarAutoLink !== false}
+                    onCheckedChange={(checked) => 
+                      setSettings(prev => ({ ...prev, calendarAutoLink: checked }))
+                    }
+                  />
+                </div>
+              )}
+
+              {!calendarStatus?.connected && (
+                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                  Connect your Google Calendar to automatically link memories to meetings. 
+                  This helps track meeting notes and context.
+                </p>
+              )}
             </CardContent>
           </Card>
 

@@ -101,6 +101,10 @@ export const logEntries = pgTable("log_entries", {
   deviceId: text("device_id"), // Device identifier
   deviceType: text("device_type"), // 'oakley-hstn', 'meta-glasses', 'phone', 'web'
   deviceConnection: text("device_connection"), // 'bluetooth-hfp', 'bluetooth-a2dp', 'wifi', 'direct'
+  // Calendar integration: linked event data
+  calendarEventId: text("calendar_event_id"), // Google Calendar event ID
+  calendarEventTitle: text("calendar_event_title"), // Meeting title from calendar
+  calendarEventAttendees: text("calendar_event_attendees").array(), // Attendee names/emails
 }, (table) => ({
   // Index for user-specific queries (critical for data isolation)
   userIdIdx: index("log_entries_user_id_idx").on(table.userId),
@@ -157,6 +161,8 @@ export const settings = pgTable("settings", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   voiceResponseEnabled: boolean("voice_response_enabled").default(true),
   confidenceThreshold: integer("confidence_threshold").default(80), // 0-100
+  calendarProvider: text("calendar_provider"), // 'google' or 'outlook' - null means disabled
+  calendarAutoLink: boolean("calendar_auto_link").default(true), // Auto-link memories to calendar events
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

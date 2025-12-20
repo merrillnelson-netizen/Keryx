@@ -8,6 +8,7 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
+import { isCalendarConnected, getTodaysEvents, findRelevantEvent, type CalendarEvent } from "./calendar-service";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -240,7 +241,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("Using zero vector fallback - OpenAI embedding may have failed");
       }
 
-      // Save to database with user ID, mood, detected people, and geolocation
+      // Try to link to a calendar event if available
+      let calendarEventId: string | undefined;
+      let calendarEventTitle: string | undefined;
+      let calendarEventAttendees: string[] | undefined;
+      
+      try {
+        const settings = await storage.getSettings(user.id);
+        if (settings?.calendarAutoLink !== false) {
+          const relevantEvent = await findRelevantEvent(new Date());
+          if (relevantEvent) {
+            calendarEventId = relevantEvent.id;
+            calendarEventTitle = relevantEvent.title;
+            calendarEventAttendees = relevantEvent.attendees;
+          }
+        }
+      } catch (calendarError) {
+        // Calendar not connected or error - continue without it
+        console.log('Calendar auto-link skipped:', calendarError instanceof Error ? calendarError.message : 'not connected');
+      }
+
+      // Save to database with user ID, mood, detected people, geolocation, and calendar
       const logEntry = await storage.createLogEntry({
         userId: user.id,
         memoryText,
@@ -255,6 +276,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         geoLng: geoLng !== undefined ? parseFloat(geoLng) : undefined,
         geoAccuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
         geoPlaceName: geoPlaceName || undefined,
+        // Calendar context (optional)
+        calendarEventId,
+        calendarEventTitle,
+        calendarEventAttendees,
       });
 
       // Track people mentions in the people table (non-blocking)
@@ -689,6 +714,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       sendErrorResponse(res, 500, "Failed to update settings", error);
+    }
+  });
+
+  /**
+   * CALENDAR ROUTES
+   * Handle calendar integration
+   */
+
+  /**
+   * GET /api/calendar/status - Check if calendar is connected
+   */
+  app.get("/api/calendar/status", requireAuth, async (req, res) => {
+    try {
+      const connected = await isCalendarConnected();
+      res.json({
+        status: 'success',
+        data: { connected, provider: connected ? 'google' : null },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.json({
+        status: 'success',
+        data: { connected: false, provider: null },
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  /**
+   * GET /api/calendar/events/today - Get today's calendar events
+   */
+  app.get("/api/calendar/events/today", requireAuth, async (req, res) => {
+    try {
+      const events = await getTodaysEvents();
+      res.json({
+        status: 'success',
+        data: events,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to fetch today's events:", error);
+      sendErrorResponse(res, 500, "Failed to fetch calendar events", error);
+    }
+  });
+
+  /**
+   * GET /api/calendar/events/current - Get current/relevant event
+   */
+  app.get("/api/calendar/events/current", requireAuth, async (req, res) => {
+    try {
+      const event = await findRelevantEvent(new Date());
+      res.json({
+        status: 'success',
+        data: event,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to fetch current event:", error);
+      sendErrorResponse(res, 500, "Failed to fetch current event", error);
     }
   });
 

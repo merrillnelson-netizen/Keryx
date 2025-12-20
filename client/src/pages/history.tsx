@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category } from "@shared/schema";
 import {
@@ -158,6 +158,42 @@ function LocationBadge({ lat, lng, placeName }: { lat?: number | null; lng?: num
           <p className="font-medium">Location</p>
           <p className="text-sm">{displayText}</p>
           <p className="text-xs text-muted-foreground">Click to open in Maps</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function CalendarBadge({ eventTitle, attendees }: { eventTitle?: string | null; attendees?: string[] | null }) {
+  if (!eventTitle) return null;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className="cursor-default text-xs bg-purple-500/20 text-purple-400 border-purple-500/30"
+            data-testid="calendar-badge"
+          >
+            <Calendar className="w-3 h-3 mr-1" />
+            {eventTitle.substring(0, 15) + (eventTitle.length > 15 ? '...' : '')}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">Linked Meeting</p>
+          <p className="text-sm">{eventTitle}</p>
+          {attendees && attendees.length > 0 && (
+            <>
+              <p className="font-medium mt-1">Attendees:</p>
+              <ul className="text-xs">
+                {attendees.slice(0, 5).map((name, i) => (
+                  <li key={i}>{name}</li>
+                ))}
+                {attendees.length > 5 && <li>+{attendees.length - 5} more</li>}
+              </ul>
+            </>
+          )}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -367,7 +403,8 @@ export default function History() {
                     <TableHead className="w-[110px] text-foreground font-semibold">Topic</TableHead>
                     <TableHead className="w-[80px] text-foreground font-semibold">Mood</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Location</TableHead>
-                    <TableHead className="min-w-[350px] text-foreground font-semibold">Memory</TableHead>
+                    <TableHead className="w-[100px] text-foreground font-semibold">Meeting</TableHead>
+                    <TableHead className="min-w-[300px] text-foreground font-semibold">Memory</TableHead>
                     <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -425,6 +462,9 @@ export default function History() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap" data-testid={`location-cell-${entry.id}`}>
                         <LocationBadge lat={entry.geoLat} lng={entry.geoLng} placeName={entry.geoPlaceName} />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`calendar-cell-${entry.id}`}>
+                        <CalendarBadge eventTitle={entry.calendarEventTitle} attendees={entry.calendarEventAttendees} />
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
@@ -510,6 +550,7 @@ export default function History() {
                         <MoodBadge mood={entry.mood} score={entry.moodScore} />
                         <PeopleBadge people={entry.detectedPeople} />
                         <LocationBadge lat={entry.geoLat} lng={entry.geoLng} placeName={entry.geoPlaceName} />
+                        <CalendarBadge eventTitle={entry.calendarEventTitle} attendees={entry.calendarEventAttendees} />
                       </div>
                       <CardTitle className="text-base font-normal text-foreground" data-testid={`memory-text-${entry.id}`}>
                         {entry.memoryText}
