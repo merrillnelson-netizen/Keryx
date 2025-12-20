@@ -8,6 +8,15 @@ import { Settings } from "@shared/schema";
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech";
 
 /**
+ * Saved memory data for calendar integration
+ */
+export interface SavedMemoryData {
+  id?: number;
+  memoryText: string;
+  topicTag: string;
+}
+
+/**
  * Interface for the speech recognition hook return values
  * Provides all necessary methods and state for voice interaction
  */
@@ -23,6 +32,8 @@ interface SpeechRecognitionHook {
   setManualCategory: (category: string | null) => void;
   submitText: (text: string, textMode: "log" | "query") => Promise<void>;
   isProcessing: boolean;
+  lastSavedMemory: SavedMemoryData | null;
+  clearLastSavedMemory: () => void;
 }
 
 /**
@@ -45,6 +56,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const [lastResponse, setLastResponse] = useState("");
   const [manualCategory, setManualCategory] = useState<string | null>(null);
+  const [lastSavedMemory, setLastSavedMemory] = useState<SavedMemoryData | null>(null);
 
   // Use refs to prevent memory leaks and ensure proper cleanup
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -91,11 +103,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }
       
-      // Capture geolocation if supported (non-blocking - don't wait if it fails)
+      // Capture geolocation if supported (truly non-blocking with short timeout)
       if (geoSupported) {
         try {
-          const geo = await requestLocation();
-          if (geo.lat && geo.lng) {
+          const geoPromise = requestLocation();
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+          const geo = await Promise.race([geoPromise, timeoutPromise]);
+          if (geo && geo.lat && geo.lng) {
             body.geoLat = geo.lat;
             body.geoLng = geo.lng;
             if (geo.accuracy) {
@@ -116,13 +130,20 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       
       return await response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
       isProcessingRef.current = false;
 
       const successMessage = `Memory saved as ${data.data.topicTag}`;
       setLastResponse(successMessage);
+      
+      // Store saved memory data for calendar event detection
+      setLastSavedMemory({
+        id: data.data.id,
+        memoryText: variables,
+        topicTag: data.data.topicTag,
+      });
 
       setTimeout(() => {
         if (settings?.voiceResponseEnabled) {
@@ -457,6 +478,10 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
   }, [handleLogCommand, handleQueryCommand]);
 
+  const clearLastSavedMemory = useCallback(() => {
+    setLastSavedMemory(null);
+  }, []);
+
   return {
     isListening,
     isSupported,
@@ -469,5 +494,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setManualCategory,
     submitText,
     isProcessing: isProcessingRef.current || saveMutation.isPending || searchMutation.isPending,
+    lastSavedMemory,
+    clearLastSavedMemory,
   };
 }

@@ -20,6 +20,19 @@ export interface ExtractedMetadata {
 }
 
 /**
+ * Detected calendar event from memory text
+ */
+export interface DetectedCalendarEvent {
+  detected: boolean;
+  title?: string;
+  startDateTime?: string;  // ISO 8601 format
+  endDateTime?: string;    // ISO 8601 format
+  attendees?: string[];
+  location?: string;
+  description?: string;
+}
+
+/**
  * Topic-specific metadata schemas for extraction
  * These guide the AI on what fields to extract for each topic
  */
@@ -492,5 +505,82 @@ Respond with JSON:
   } catch (error) {
     console.error("Error detecting patterns:", error);
     return [];
+  }
+}
+
+/**
+ * Detect if memory text describes a future calendar event
+ * Extracts event details if detected
+ * 
+ * @param memoryText - Raw memory text to analyze
+ * @param currentDate - Current date for context (defaults to now)
+ * @returns Promise<DetectedCalendarEvent> - Detected event details or { detected: false }
+ */
+export async function detectCalendarEvent(
+  memoryText: string,
+  currentDate: Date = new Date()
+): Promise<DetectedCalendarEvent> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI assistant that detects future events from natural language.
+Analyze the text to determine if it describes a FUTURE calendar event (meeting, appointment, gathering, call, etc.).
+
+Current date/time context: ${currentDate.toISOString()}
+
+RULES:
+1. Only detect FUTURE events (not past events or general statements)
+2. If dates are relative ("tomorrow", "next Tuesday", "in 2 weeks"), calculate the actual date
+3. If no specific time is mentioned, use reasonable defaults:
+   - Morning meetings: 9:00 AM
+   - Lunch: 12:00 PM  
+   - Afternoon: 2:00 PM
+   - Dinner: 7:00 PM
+   - Default duration: 1 hour
+4. Extract all attendee names mentioned
+5. Extract location if mentioned
+
+Respond with JSON:
+{
+  "detected": true/false,
+  "title": "Event title based on context",
+  "startDateTime": "ISO 8601 datetime string",
+  "endDateTime": "ISO 8601 datetime string", 
+  "attendees": ["name1", "name2"],
+  "location": "location if mentioned",
+  "description": "Brief context from the memory"
+}
+
+If no future event is detected, respond with just: { "detected": false }`
+        },
+        {
+          role: "user",
+          content: memoryText
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+    
+    if (!result.detected) {
+      return { detected: false };
+    }
+
+    return {
+      detected: true,
+      title: result.title || "New Event",
+      startDateTime: result.startDateTime,
+      endDateTime: result.endDateTime,
+      attendees: Array.isArray(result.attendees) ? result.attendees : [],
+      location: result.location || undefined,
+      description: result.description || memoryText.substring(0, 200),
+    };
+  } catch (error) {
+    console.error("Error detecting calendar event:", error);
+    return { detected: false };
   }
 }

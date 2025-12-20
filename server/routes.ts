@@ -8,7 +8,8 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
-import { isCalendarConnected, getTodaysEvents, findRelevantEvent, type CalendarEvent } from "./calendar-service";
+import { isCalendarConnected, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -773,6 +774,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to fetch current event:", error);
       sendErrorResponse(res, 500, "Failed to fetch current event", error);
+    }
+  });
+
+  /**
+   * POST /api/calendar/events/detect - Detect calendar event from memory text
+   * Uses AI to analyze if text describes a future event
+   */
+  app.post("/api/calendar/events/detect", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const { memoryText } = req.body;
+      
+      if (!memoryText || typeof memoryText !== 'string') {
+        return sendErrorResponse(res, 400, "Memory text is required");
+      }
+
+      const detectedEvent = await detectCalendarEvent(memoryText);
+      
+      res.json({
+        status: 'success',
+        data: detectedEvent,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to detect calendar event:", error);
+      sendErrorResponse(res, 500, "Failed to detect calendar event", error);
+    }
+  });
+
+  /**
+   * POST /api/calendar/events/create - Create a new calendar event
+   * Also checks for duplicate events before creating
+   */
+  app.post("/api/calendar/events/create", requireAuth, async (req, res) => {
+    try {
+      const { title, startDateTime, endDateTime, attendees, location, description, memoryId } = req.body;
+      
+      if (!title || !startDateTime || !endDateTime) {
+        return sendErrorResponse(res, 400, "Title, start time, and end time are required");
+      }
+
+      // Check if calendar is connected
+      const connected = await isCalendarConnected();
+      if (!connected) {
+        return sendErrorResponse(res, 400, "Google Calendar is not connected");
+      }
+
+      // Check for duplicate event
+      const duplicate = await findDuplicateEvent(title, startDateTime);
+      if (duplicate) {
+        return res.json({
+          status: 'success',
+          data: {
+            created: false,
+            duplicate: true,
+            existingEvent: duplicate,
+          },
+          message: 'A similar event already exists',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Create the event
+      const createdEvent = await createCalendarEvent(title, startDateTime, endDateTime, {
+        attendees,
+        location,
+        description,
+      });
+
+      if (!createdEvent) {
+        return sendErrorResponse(res, 500, "Failed to create calendar event");
+      }
+
+      // If memoryId provided, link the event back to the memory
+      if (memoryId) {
+        const user = req.user as any;
+        try {
+          await storage.updateLogEntry(memoryId, user.id, {
+            calendarEventId: createdEvent.id,
+            calendarEventTitle: createdEvent.title,
+            calendarEventAttendees: createdEvent.attendees || [],
+          });
+        } catch (linkError) {
+          console.error("Failed to link event to memory:", linkError);
+          // Don't fail the whole request if linking fails
+        }
+      }
+
+      res.status(201).json({
+        status: 'success',
+        data: {
+          created: true,
+          duplicate: false,
+          event: createdEvent,
+        },
+        message: 'Calendar event created successfully',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to create calendar event:", error);
+      sendErrorResponse(res, 500, "Failed to create calendar event", error);
+    }
+  });
+
+  /**
+   * POST /api/calendar/events/check-duplicate - Check if similar event exists
+   */
+  app.post("/api/calendar/events/check-duplicate", requireAuth, async (req, res) => {
+    try {
+      const { title, startDateTime } = req.body;
+      
+      if (!title || !startDateTime) {
+        return sendErrorResponse(res, 400, "Title and start time are required");
+      }
+
+      const duplicate = await findDuplicateEvent(title, startDateTime);
+      
+      res.json({
+        status: 'success',
+        data: {
+          exists: !!duplicate,
+          event: duplicate,
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Failed to check for duplicate event:", error);
+      sendErrorResponse(res, 500, "Failed to check for duplicate event", error);
     }
   });
 

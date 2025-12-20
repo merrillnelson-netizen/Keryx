@@ -82,11 +82,15 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 ### Phase 4: Calendar Integration (Completed)
 - **Google Calendar**: Connected via Replit integration, fetches events around timestamps.
 - **Auto-linking**: Memories recorded during meetings automatically link to calendar events.
+- **Smart Event Detection**: AI analyzes memories to detect future events and suggests adding them to calendar.
+- **Event Creation**: Create calendar events directly from voice memories with duplicate detection.
 - **Calendar Fields**: `calendarEventId`, `calendarEventTitle`, `calendarEventAttendees` on log_entries.
 - **Settings Page**: Shows calendar connection status and auto-link toggle.
 - **History View**: Purple calendar badges show linked meeting names with attendee tooltips.
-- **API Endpoints**: `/api/calendar/status`, `/api/calendar/events/today`, `/api/calendar/events/current`.
-- **Service File**: `server/calendar-service.ts` - handles OAuth token refresh and event fetching.
+- **Timeline Page**: Calendar view showing only calendar-linked memories, with month navigation and day-click details.
+- **API Endpoints**: `/api/calendar/status`, `/api/calendar/events/today`, `/api/calendar/events/current`, `/api/calendar/events/detect`, `/api/calendar/events/create`, `/api/calendar/events/check-duplicate`.
+- **Service File**: `server/calendar-service.ts` - handles OAuth token refresh, event fetching, event creation.
+- **AI Function**: `detectCalendarEvent()` in `server/ai-service.ts` - extracts event details from natural language.
 
 #### Backend API Extensions
 - **New Endpoint**: `POST /api/companion/action` - Unified MCP action handler.

@@ -5,6 +5,7 @@ import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Plus, Search, Volume2, Send, Keyboard } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
+import CalendarEventSuggestion from "./calendar-event-suggestion";
 
 export default function VoiceActivation() {
   const [textInput, setTextInput] = useState("");
@@ -19,7 +20,9 @@ export default function VoiceActivation() {
     setMode,
     lastResponse,
     submitText,
-    isProcessing
+    isProcessing,
+    lastSavedMemory,
+    clearLastSavedMemory,
   } = useSpeechRecognition();
 
   const handleLogMode = () => {
@@ -228,6 +231,16 @@ export default function VoiceActivation() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Calendar Event Suggestion */}
+        {lastSavedMemory && (
+          <CalendarEventSuggestion
+            memoryText={lastSavedMemory.memoryText}
+            memoryId={lastSavedMemory.id}
+            onDismiss={clearLastSavedMemory}
+            onCreated={clearLastSavedMemory}
+          />
         )}
       </CardContent>
     </div>

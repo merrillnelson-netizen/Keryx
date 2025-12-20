@@ -156,6 +156,130 @@ export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent 
 }
 
 /**
+ * Create a new calendar event
+ * Returns the created event or null if creation failed
+ */
+export async function createCalendarEvent(
+  title: string,
+  startDateTime: string,
+  endDateTime: string,
+  options?: {
+    attendees?: string[];
+    location?: string;
+    description?: string;
+  }
+): Promise<CalendarEvent | null> {
+  try {
+    const calendar = await getCalendarClient();
+    
+    const event: calendar_v3.Schema$Event = {
+      summary: title,
+      start: {
+        dateTime: startDateTime,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
+    };
+
+    if (options?.description) {
+      event.description = options.description;
+    }
+
+    if (options?.location) {
+      event.location = options.location;
+    }
+
+    if (options?.attendees && options.attendees.length > 0) {
+      // Only add attendees that look like email addresses
+      const validEmails = options.attendees.filter(a => a.includes('@'));
+      if (validEmails.length > 0) {
+        event.attendees = validEmails.map(email => ({ email }));
+      }
+    }
+
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      requestBody: event,
+      sendUpdates: 'none', // Don't send invite emails automatically
+    });
+
+    const created = response.data;
+    return {
+      id: created.id || '',
+      title: created.summary || title,
+      description: created.description || undefined,
+      startTime: new Date(created.start?.dateTime || startDateTime),
+      endTime: new Date(created.end?.dateTime || endDateTime),
+      attendees: created.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
+      location: created.location || undefined,
+      meetingLink: created.hangoutLink || undefined,
+    };
+  } catch (error) {
+    console.error('Failed to create calendar event:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if a similar event already exists in the calendar
+ * Returns the existing event if found, null otherwise
+ */
+export async function findDuplicateEvent(
+  title: string,
+  startDateTime: string,
+  toleranceMinutes: number = 30
+): Promise<CalendarEvent | null> {
+  try {
+    const calendar = await getCalendarClient();
+    const startTime = new Date(startDateTime);
+    
+    // Search window around the event time
+    const timeMin = new Date(startTime.getTime() - toleranceMinutes * 60 * 1000);
+    const timeMax = new Date(startTime.getTime() + toleranceMinutes * 60 * 1000);
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      maxResults: 20,
+      q: title, // Search for events with similar title
+    });
+
+    const events = response.data.items || [];
+    
+    // Find event with matching or similar title
+    const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 2);
+    
+    for (const event of events) {
+      const eventTitle = (event.summary || '').toLowerCase();
+      // Check if titles share significant words
+      const matchingWords = titleWords.filter(word => eventTitle.includes(word));
+      if (matchingWords.length >= Math.min(2, titleWords.length)) {
+        return {
+          id: event.id || '',
+          title: event.summary || 'Untitled Event',
+          description: event.description || undefined,
+          startTime: new Date(event.start?.dateTime || event.start?.date || startTime),
+          endTime: new Date(event.end?.dateTime || event.end?.date || startTime),
+          attendees: event.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
+          location: event.location || undefined,
+          meetingLink: event.hangoutLink || undefined,
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Failed to check for duplicate event:', error);
+    return null;
+  }
+}
+
+/**
  * Get upcoming events for today
  */
 export async function getTodaysEvents(): Promise<CalendarEvent[]> {
