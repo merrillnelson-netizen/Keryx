@@ -67,16 +67,20 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Mutation for saving memories with AI extraction or manual/session category
+  // Mutation for saving memories with AI extraction or manual category
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
       const body: { memoryText: string; topicTag?: string } = { memoryText };
       
-      // Include topicTag: manual category takes priority, then session category from settings
+      // Include topicTag if user manually selected a category
       if (manualCategory) {
         body.topicTag = manualCategory;
-      } else if (settings?.sessionCategory) {
-        body.topicTag = settings.sessionCategory;
+      } else {
+        // Check session storage for session category
+        const sessionCategory = sessionStorage.getItem("helix_session_category");
+        if (sessionCategory) {
+          body.topicTag = sessionCategory;
+        }
       }
       
       const response = await apiRequest("POST", "/api/memories", body);

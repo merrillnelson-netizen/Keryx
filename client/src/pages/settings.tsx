@@ -1,7 +1,6 @@
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
@@ -11,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Settings, Category } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag } from "lucide-react";
 
@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { sessionCategory, setSessionCategory } = useSessionCategory();
 
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -169,19 +170,17 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
                   Set a category to automatically apply to all new memories. Great for extended sessions 
-                  like hobbies or activities where you'll log multiple related memories.
+                  like hobbies or activities where you'll log multiple related memories. Resets to Auto when you close the browser.
                 </p>
                 <Select
-                  value={settings.sessionCategory || "none"}
-                  onValueChange={(value) => 
-                    setSettings(prev => ({ ...prev, sessionCategory: value === "none" ? null : value }))
-                  }
+                  value={sessionCategory || "auto"}
+                  onValueChange={(value) => setSessionCategory(value === "auto" ? null : value)}
                 >
                   <SelectTrigger data-testid="select-session-category">
-                    <SelectValue placeholder="No session category" />
+                    <SelectValue placeholder="Auto (AI decides)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No session category</SelectItem>
+                    <SelectItem value="auto">Auto (AI decides)</SelectItem>
                     {categories.map((category) => (
                       <SelectItem key={category.id} value={category.name}>
                         {category.name}
@@ -189,9 +188,9 @@ export default function SettingsPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {settings.sessionCategory && (
+                {sessionCategory && (
                   <p className="text-xs text-primary">
-                    All new memories will be tagged with "{settings.sessionCategory}"
+                    All new memories will be tagged with "{sessionCategory}"
                   </p>
                 )}
               </div>
