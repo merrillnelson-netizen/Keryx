@@ -54,7 +54,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **People Detection**: AI identifies mentioned people, stored in `detectedPeople` array and tracked in `people` table.
 - **Insights Page** (`/insights`): Mood distribution charts (pie + bar), AI thematic synthesis with custom questions.
 - **People Page** (`/people`): Grid of tracked people with mention counts, relationship editing, view memories by person.
-- **Timeline Page** (`/timeline`): Chronological memories grouped by month, visual mood indicators, "On This Day" time capsule.
+- **Timeline Page** (`/timeline`): Meeting Memories view showing only calendar-linked memories with Calendar/Card/Table views, interactive month grid with day-click detail view.
 - **Enhanced History**: Mood badges (emoji + score) and people badges on memory cards/table rows.
 
 ### Phase 2: Proactive Features (Completed)

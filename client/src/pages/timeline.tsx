@@ -1,12 +1,12 @@
 import AppLayout from "@/components/app-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, Clock, Gift, LayoutGrid, Table as TableIcon, Users, GitBranch } from "lucide-react";
+import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -39,45 +39,6 @@ const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string;
   nostalgic: { emoji: "🥹", color: "bg-violet-500", bgColor: "bg-violet-500/20", label: "Nostalgic" },
   motivated: { emoji: "💪", color: "bg-lime-500", bgColor: "bg-lime-500/20", label: "Motivated" },
 };
-
-function groupEntriesByMonth(entries: LogEntry[]): Map<string, LogEntry[]> {
-  const groups = new Map<string, LogEntry[]>();
-  entries.forEach((entry) => {
-    const date = new Date(entry.timestamp!).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-    });
-    if (!groups.has(date)) {
-      groups.set(date, []);
-    }
-    groups.get(date)!.push(entry);
-  });
-  return groups;
-}
-
-function groupEntriesByDate(entries: LogEntry[]): Map<string, LogEntry[]> {
-  const groups = new Map<string, LogEntry[]>();
-  entries.forEach((entry) => {
-    const date = new Date(entry.timestamp!).toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-    if (!groups.has(date)) {
-      groups.set(date, []);
-    }
-    groups.get(date)!.push(entry);
-  });
-  return groups;
-}
-
-interface TimeCapsuleResponse {
-  data: LogEntry[];
-  count: number;
-  date: { month: number; day: number };
-  message: string;
-}
 
 function MoodBadge({ mood, score }: { mood?: string | null; score?: number | null }) {
   if (!mood) return null;
@@ -130,24 +91,199 @@ function PeopleBadge({ people }: { people?: string[] | null }) {
   );
 }
 
+function CalendarBadge({ title, attendees }: { title?: string | null; attendees?: string[] | null }) {
+  if (!title) return null;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className="cursor-default text-xs bg-purple-500/20 text-purple-400 border-purple-500/30"
+          >
+            <Calendar className="w-3 h-3 mr-1" />
+            {title.length > 20 ? title.substring(0, 20) + "..." : title}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">{title}</p>
+          {attendees && attendees.length > 0 && (
+            <>
+              <p className="text-xs text-muted-foreground mt-1">Attendees:</p>
+              <ul className="text-xs">
+                {attendees.slice(0, 5).map((email, i) => (
+                  <li key={i}>{email}</li>
+                ))}
+                {attendees.length > 5 && <li>+{attendees.length - 5} more</li>}
+              </ul>
+            </>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+interface CalendarGridProps {
+  entries: LogEntry[];
+  currentMonth: Date;
+  onDayClick: (date: Date, entries: LogEntry[]) => void;
+}
+
+function getLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) {
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, LogEntry[]>();
+    entries.forEach((entry) => {
+      const dateKey = getLocalDateKey(new Date(entry.timestamp!));
+      if (!map.has(dateKey)) {
+        map.set(dateKey, []);
+      }
+      map.get(dateKey)!.push(entry);
+    });
+    return map;
+  }, [entries]);
+
+  const daysInMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() + 1,
+    0
+  ).getDate();
+
+  const firstDayOfMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth(),
+    1
+  ).getDay();
+
+  const days = [];
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    days.push(null);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    days.push(day);
+  }
+
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  return (
+    <div className="glass-card rounded-2xl p-4 md:p-6">
+      <div className="grid grid-cols-7 gap-1 md:gap-2 mb-2">
+        {weekDays.map((day) => (
+          <div
+            key={day}
+            className="text-center text-xs md:text-sm font-medium text-muted-foreground py-2"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1 md:gap-2">
+        {days.map((day, index) => {
+          if (day === null) {
+            return <div key={`empty-${index}`} className="aspect-square" />;
+          }
+
+          const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const dayEntries = entriesByDay.get(dateKey) || [];
+          const hasEntries = dayEntries.length > 0;
+          const isToday = getLocalDateKey(new Date()) === dateKey;
+
+          return (
+            <button
+              key={day}
+              onClick={() => {
+                if (hasEntries) {
+                  const clickedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                  onDayClick(clickedDate, dayEntries);
+                }
+              }}
+              disabled={!hasEntries}
+              className={cn(
+                "aspect-square rounded-lg flex flex-col items-center justify-center p-1 transition-all relative",
+                hasEntries 
+                  ? "bg-purple-500/20 hover:bg-purple-500/30 cursor-pointer border border-purple-500/30" 
+                  : "hover:bg-white/5",
+                isToday && "ring-2 ring-primary"
+              )}
+              data-testid={`calendar-day-${day}`}
+            >
+              <span className={cn(
+                "text-sm md:text-base font-medium",
+                hasEntries ? "text-purple-400" : "text-muted-foreground"
+              )}>
+                {day}
+              </span>
+              {hasEntries && (
+                <div className="flex gap-0.5 mt-0.5">
+                  {dayEntries.slice(0, 3).map((entry, i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-purple-400"
+                    />
+                  ))}
+                  {dayEntries.length > 3 && (
+                    <span className="text-[8px] text-purple-400">+{dayEntries.length - 3}</span>
+                  )}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Timeline() {
-  const [viewMode, setViewMode] = useState<"timeline" | "cards" | "table">("timeline");
+  const [viewMode, setViewMode] = useState<"calendar" | "cards" | "table">("calendar");
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedEntries, setSelectedEntries] = useState<LogEntry[]>([]);
   
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
   });
 
-  const { data: timeCapsuleData } = useQuery<TimeCapsuleResponse>({
-    queryKey: ["/api/timecapsule"],
-    queryFn: async () => {
-      const response = await fetch("/api/timecapsule", { credentials: "include" });
-      if (!response.ok) {
-        const text = (await response.text()) || response.statusText;
-        throw new Error(`${response.status}: ${text}`);
-      }
-      return response.json();
-    },
-  });
+  const calendarLinkedEntries = useMemo(() => {
+    return logEntries.filter((entry) => entry.calendarEventId);
+  }, [logEntries]);
+
+  const sortedEntries = useMemo(() => {
+    return [...calendarLinkedEntries].sort(
+      (a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
+    );
+  }, [calendarLinkedEntries]);
+
+  const handleDayClick = (date: Date, entries: LogEntry[]) => {
+    setSelectedDate(date);
+    setSelectedEntries(entries);
+  };
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+    setSelectedDate(null);
+    setSelectedEntries([]);
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+    setSelectedDate(null);
+    setSelectedEntries([]);
+  };
+
+  const goToToday = () => {
+    setCurrentMonth(new Date());
+    setSelectedDate(null);
+    setSelectedEntries([]);
+  };
 
   if (isLoading) {
     return (
@@ -155,51 +291,38 @@ export default function Timeline() {
         <div className="flex items-center justify-center h-96">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading timeline...</p>
+            <p className="mt-4 text-muted-foreground">Loading meeting memories...</p>
           </div>
         </div>
       </AppLayout>
     );
   }
 
-  const groupedByMonth = groupEntriesByMonth(logEntries);
-  const groupedByDate = groupEntriesByDate(logEntries);
-  const timeCapsuleEntries = timeCapsuleData?.data || [];
-  const sortedMonths = Array.from(groupedByMonth.entries()).sort((a, b) => 
-    new Date(b[0]).getTime() - new Date(a[0]).getTime()
-  );
-  const sortedDates = Array.from(groupedByDate.entries()).sort((a, b) => 
-    new Date(b[0]).getTime() - new Date(a[0]).getTime()
-  );
-
-  const sortedEntries = [...logEntries].sort((a, b) => 
-    new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
-  );
-
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-violet-500 to-indigo-500 flex items-center justify-center">
+                <CalendarDays className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Life Timeline</h2>
-                <p className="text-sm text-muted-foreground">Your journey through memories ({logEntries.length} total)</p>
+                <h2 className="text-2xl font-bold text-foreground">Meeting Memories</h2>
+                <p className="text-sm text-muted-foreground">
+                  Memories linked to calendar events ({calendarLinkedEntries.length} total)
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant={viewMode === "timeline" ? "default" : "outline"}
+                variant={viewMode === "calendar" ? "default" : "outline"}
                 size="icon"
-                onClick={() => setViewMode("timeline")}
-                data-testid="button-view-timeline"
-                title="Timeline view"
+                onClick={() => setViewMode("calendar")}
+                data-testid="button-view-calendar"
+                title="Calendar view"
               >
-                <GitBranch className="w-4 h-4" />
+                <Calendar className="w-4 h-4" />
               </Button>
               <Button
                 variant={viewMode === "cards" ? "default" : "outline"}
@@ -223,68 +346,126 @@ export default function Timeline() {
           </div>
         </div>
 
-        {/* Time Capsule - On This Day */}
-        {timeCapsuleEntries.length > 0 && (
-          <Card className="glass-card border-white/20 border-l-4 border-l-yellow-500">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Gift className="w-5 h-5 text-yellow-500" />
-                On This Day
-              </CardTitle>
-              <CardDescription>
-                Memories from {timeCapsuleData?.date.month}/{timeCapsuleData?.date.day} in previous years
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {timeCapsuleEntries.map((entry) => {
-                  const yearsAgo = new Date().getFullYear() - new Date(entry.timestamp!).getFullYear();
-                  const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-                  
-                  return (
-                    <div 
-                      key={entry.id}
-                      className="glass-card p-4 rounded-xl flex items-start gap-4"
-                      data-testid={`timecapsule-${entry.id}`}
-                    >
-                      <div className="flex flex-col items-center">
-                        <span className="text-2xl font-bold text-primary">{yearsAgo}</span>
-                        <span className="text-xs text-muted-foreground">year{yearsAgo > 1 ? "s" : ""} ago</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-foreground">{entry.memoryText}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="outline" className="text-xs border-white/20">
-                            {new Date(entry.timestamp!).toLocaleDateString()}
-                          </Badge>
-                          {entry.mood && (
-                            <span className="text-sm">{mood.emoji}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {logEntries.length === 0 ? (
+        {calendarLinkedEntries.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
             <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No memories yet</h3>
-            <p className="text-muted-foreground">Start logging memories to see your timeline</p>
+            <h3 className="text-lg font-medium text-foreground mb-2">No meeting memories yet</h3>
+            <p className="text-muted-foreground">
+              When you record memories during calendar events, they'll appear here
+            </p>
+          </div>
+        ) : viewMode === "calendar" ? (
+          <div className="space-y-4">
+            <div className="glass-card rounded-2xl p-4 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToPreviousMonth}
+                data-testid="button-previous-month"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </Button>
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-semibold">
+                  {currentMonth.toLocaleDateString("en-US", {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goToToday}
+                  data-testid="button-today"
+                >
+                  Today
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToNextMonth}
+                data-testid="button-next-month"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <CalendarGrid
+              entries={calendarLinkedEntries}
+              currentMonth={currentMonth}
+              onDayClick={handleDayClick}
+            />
+
+            {selectedDate && selectedEntries.length > 0 && (
+              <Card className="glass-card border-white/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-purple-500" />
+                    {selectedDate.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                    <Badge variant="outline" className="ml-2">
+                      {selectedEntries.length} {selectedEntries.length === 1 ? "memory" : "memories"}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {selectedEntries.map((entry) => {
+                    const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
+                    return (
+                      <div
+                        key={entry.id}
+                        className={cn(
+                          "p-4 rounded-xl border border-white/10",
+                          mood.bgColor
+                        )}
+                        data-testid={`selected-entry-${entry.id}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl">{mood.emoji}</span>
+                          <div className="flex-1">
+                            <p className="text-foreground">{entry.memoryText}</p>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <Badge variant="outline" className="text-xs border-white/20">
+                                {new Date(entry.timestamp!).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </Badge>
+                              <Badge
+                                variant="secondary"
+                                className="text-xs bg-primary/20 text-primary border-primary/30"
+                              >
+                                {entry.topicTag}
+                              </Badge>
+                              <CalendarBadge
+                                title={entry.calendarEventTitle}
+                                attendees={entry.calendarEventAttendees}
+                              />
+                              <PeopleBadge people={entry.detectedPeople} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
           </div>
         ) : viewMode === "table" ? (
-          /* Table View */
           <div className="glass-card rounded-2xl overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="border-white/10 hover:bg-white/5">
                   <TableHead className="text-muted-foreground">Date</TableHead>
                   <TableHead className="text-muted-foreground">Time</TableHead>
-                  <TableHead className="text-muted-foreground w-[40%]">Memory</TableHead>
+                  <TableHead className="text-muted-foreground w-[30%]">Memory</TableHead>
+                  <TableHead className="text-muted-foreground">Meeting</TableHead>
                   <TableHead className="text-muted-foreground">Topic</TableHead>
                   <TableHead className="text-muted-foreground text-center">Mood</TableHead>
                   <TableHead className="text-muted-foreground text-center">People</TableHead>
@@ -293,9 +474,9 @@ export default function Timeline() {
               <TableBody>
                 {sortedEntries.map((entry) => {
                   const entryDate = new Date(entry.timestamp!);
-                  
+
                   return (
-                    <TableRow 
+                    <TableRow
                       key={entry.id}
                       className="border-white/10 hover:bg-white/5"
                       data-testid={`timeline-row-${entry.id}`}
@@ -308,16 +489,25 @@ export default function Timeline() {
                         })}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {entryDate.toLocaleTimeString([], { 
-                          hour: "2-digit", 
-                          minute: "2-digit" 
+                        {entryDate.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
                         })}
                       </TableCell>
                       <TableCell>
                         <p className="line-clamp-2">{entry.memoryText}</p>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
+                        <CalendarBadge
+                          title={entry.calendarEventTitle}
+                          attendees={entry.calendarEventAttendees}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          className="bg-primary/20 text-primary border-primary/30"
+                        >
                           {entry.topicTag}
                         </Badge>
                       </TableCell>
@@ -333,147 +523,56 @@ export default function Timeline() {
               </TableBody>
             </Table>
           </div>
-        ) : viewMode === "timeline" ? (
-          /* Timeline View - Compact chronological view */
-          <div className="glass-card rounded-2xl p-6">
-            <div className="relative">
-              {/* Main Timeline Line */}
-              <div className="absolute left-[120px] md:left-[140px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-secondary to-accent" />
-
-              {sortedDates.map(([date, dateEntries], dateIndex) => (
-                <div key={date} className="mb-6 last:mb-0">
-                  {/* Date Header */}
-                  <div className="flex items-center mb-3">
-                    <div className="w-[120px] md:w-[140px] pr-4 text-right">
-                      <span className="text-sm font-semibold text-foreground">{date.split(",")[0]}</span>
-                      <span className="text-xs text-muted-foreground block">{date.split(",").slice(1).join(",").trim()}</span>
-                    </div>
-                    <div className="w-3 h-3 rounded-full bg-primary z-10 ring-4 ring-background" />
-                  </div>
-
-                  {/* Entries for this date */}
-                  <div className="ml-[120px] md:ml-[140px] pl-6 space-y-2">
-                    {dateEntries.map((entry, entryIndex) => {
-                      const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-                      const entryTime = new Date(entry.timestamp!).toLocaleTimeString([], { 
-                        hour: "2-digit", 
-                        minute: "2-digit" 
-                      });
-                      
-                      return (
-                        <div 
-                          key={entry.id}
-                          className={cn(
-                            "relative p-3 rounded-lg border border-white/10 hover:border-white/20 transition-all",
-                            mood.bgColor
-                          )}
-                          data-testid={`timeline-item-${entry.id}`}
-                        >
-                          {/* Connection dot */}
-                          <div className={cn(
-                            "absolute -left-[27px] top-4 w-2 h-2 rounded-full",
-                            mood.color
-                          )} />
-                          
-                          <div className="flex items-start gap-3">
-                            <span className="text-lg flex-shrink-0">{mood.emoji}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-foreground leading-relaxed">{entry.memoryText}</p>
-                              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                <span className="text-xs text-muted-foreground">{entryTime}</span>
-                                <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                                  {entry.topicTag}
-                                </Badge>
-                                {entry.detectedPeople && entry.detectedPeople.length > 0 && (
-                                  <PeopleBadge people={entry.detectedPeople} />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         ) : (
-          /* Card View with Timeline */
-          <div className="relative">
-            {/* Timeline Line */}
-            <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-secondary to-accent" />
+          <div className="grid gap-4 md:grid-cols-2">
+            {sortedEntries.map((entry) => {
+              const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
 
-            {/* Timeline Entries by Month */}
-            {sortedMonths.map(([month, monthEntries]) => (
-              <div key={month} className="mb-8">
-                {/* Month Header */}
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center z-10">
-                    <Clock className="w-6 h-6 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground">{month}</h3>
-                  <Badge variant="outline" className="border-white/20">
-                    {monthEntries.length} memories
-                  </Badge>
-                </div>
-
-                {/* Entries */}
-                <div className="ml-20 space-y-4">
-                  {monthEntries.map((entry) => {
-                    const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-                    
-                    return (
-                      <div 
-                        key={entry.id}
-                        className="relative"
-                        data-testid={`timeline-entry-${entry.id}`}
-                      >
-                        {/* Connection Line */}
-                        <div className="absolute -left-12 top-4 w-8 h-0.5 bg-white/20" />
-                        
-                        {/* Mood Indicator */}
-                        <div className={cn(
-                          "absolute -left-16 top-2 w-4 h-4 rounded-full z-10",
-                          mood.color
-                        )} />
-                        
-                        <Card className="glass-card border-white/20 hover:shadow-lg transition-all">
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1">
-                                <p className="text-foreground">{entry.memoryText}</p>
-                                <div className="flex items-center gap-2 mt-3 flex-wrap">
-                                  <Badge variant="outline" className="text-xs border-white/20">
-                                    {new Date(entry.timestamp!).toLocaleTimeString([], { 
-                                      hour: "2-digit", 
-                                      minute: "2-digit" 
-                                    })}
-                                  </Badge>
-                                  <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                                    {entry.topicTag}
-                                  </Badge>
-                                  {entry.mood && (
-                                    <span className="text-lg" title={entry.mood}>
-                                      {mood.emoji}
-                                    </span>
-                                  )}
-                                  {entry.detectedPeople && entry.detectedPeople.length > 0 && (
-                                    <Badge variant="outline" className="text-xs bg-sky-500/20 text-sky-400 border-sky-500/30">
-                                      {entry.detectedPeople.length} people
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+              return (
+                <Card
+                  key={entry.id}
+                  className={cn("glass-card border-white/20", mood.bgColor)}
+                  data-testid={`timeline-card-${entry.id}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">{mood.emoji}</span>
+                      <div className="flex-1">
+                        <p className="text-foreground">{entry.memoryText}</p>
+                        <div className="flex items-center gap-2 mt-3 flex-wrap">
+                          <Badge variant="outline" className="text-xs border-white/20">
+                            {new Date(entry.timestamp!).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs border-white/20">
+                            {new Date(entry.timestamp!).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </Badge>
+                          <Badge
+                            variant="secondary"
+                            className="text-xs bg-primary/20 text-primary border-primary/30"
+                          >
+                            {entry.topicTag}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <CalendarBadge
+                            title={entry.calendarEventTitle}
+                            attendees={entry.calendarEventAttendees}
+                          />
+                          <PeopleBadge people={entry.detectedPeople} />
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
