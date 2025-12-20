@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, Clock, Gift, Sparkles, LayoutGrid, Table as TableIcon, Users } from "lucide-react";
+import { Calendar, Clock, Gift, LayoutGrid, Table as TableIcon, Users, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import {
@@ -22,22 +22,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string }> = {
-  happy: { emoji: "😊", color: "bg-green-500", label: "Happy" },
-  sad: { emoji: "😢", color: "bg-blue-500", label: "Sad" },
-  anxious: { emoji: "😰", color: "bg-yellow-500", label: "Anxious" },
-  excited: { emoji: "🎉", color: "bg-purple-500", label: "Excited" },
-  neutral: { emoji: "😐", color: "bg-gray-500", label: "Neutral" },
-  frustrated: { emoji: "😤", color: "bg-red-500", label: "Frustrated" },
-  hopeful: { emoji: "🌟", color: "bg-cyan-500", label: "Hopeful" },
-  grateful: { emoji: "🙏", color: "bg-pink-500", label: "Grateful" },
-  stressed: { emoji: "😫", color: "bg-orange-500", label: "Stressed" },
-  peaceful: { emoji: "😌", color: "bg-teal-500", label: "Peaceful" },
-  angry: { emoji: "😠", color: "bg-red-600", label: "Angry" },
-  confused: { emoji: "😕", color: "bg-amber-500", label: "Confused" },
-  proud: { emoji: "😊", color: "bg-indigo-500", label: "Proud" },
-  nostalgic: { emoji: "🥹", color: "bg-violet-500", label: "Nostalgic" },
-  motivated: { emoji: "💪", color: "bg-lime-500", label: "Motivated" },
+const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string; bgColor: string }> = {
+  happy: { emoji: "😊", color: "bg-green-500", bgColor: "bg-green-500/20", label: "Happy" },
+  sad: { emoji: "😢", color: "bg-blue-500", bgColor: "bg-blue-500/20", label: "Sad" },
+  anxious: { emoji: "😰", color: "bg-yellow-500", bgColor: "bg-yellow-500/20", label: "Anxious" },
+  excited: { emoji: "🎉", color: "bg-purple-500", bgColor: "bg-purple-500/20", label: "Excited" },
+  neutral: { emoji: "😐", color: "bg-gray-500", bgColor: "bg-gray-500/20", label: "Neutral" },
+  frustrated: { emoji: "😤", color: "bg-red-500", bgColor: "bg-red-500/20", label: "Frustrated" },
+  hopeful: { emoji: "🌟", color: "bg-cyan-500", bgColor: "bg-cyan-500/20", label: "Hopeful" },
+  grateful: { emoji: "🙏", color: "bg-pink-500", bgColor: "bg-pink-500/20", label: "Grateful" },
+  stressed: { emoji: "😫", color: "bg-orange-500", bgColor: "bg-orange-500/20", label: "Stressed" },
+  peaceful: { emoji: "😌", color: "bg-teal-500", bgColor: "bg-teal-500/20", label: "Peaceful" },
+  angry: { emoji: "😠", color: "bg-red-600", bgColor: "bg-red-600/20", label: "Angry" },
+  confused: { emoji: "😕", color: "bg-amber-500", bgColor: "bg-amber-500/20", label: "Confused" },
+  proud: { emoji: "😊", color: "bg-indigo-500", bgColor: "bg-indigo-500/20", label: "Proud" },
+  nostalgic: { emoji: "🥹", color: "bg-violet-500", bgColor: "bg-violet-500/20", label: "Nostalgic" },
+  motivated: { emoji: "💪", color: "bg-lime-500", bgColor: "bg-lime-500/20", label: "Motivated" },
 };
 
 function groupEntriesByMonth(entries: LogEntry[]): Map<string, LogEntry[]> {
@@ -46,6 +46,23 @@ function groupEntriesByMonth(entries: LogEntry[]): Map<string, LogEntry[]> {
     const date = new Date(entry.timestamp!).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
+    });
+    if (!groups.has(date)) {
+      groups.set(date, []);
+    }
+    groups.get(date)!.push(entry);
+  });
+  return groups;
+}
+
+function groupEntriesByDate(entries: LogEntry[]): Map<string, LogEntry[]> {
+  const groups = new Map<string, LogEntry[]>();
+  entries.forEach((entry) => {
+    const date = new Date(entry.timestamp!).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
     if (!groups.has(date)) {
       groups.set(date, []);
@@ -114,13 +131,13 @@ function PeopleBadge({ people }: { people?: string[] | null }) {
 }
 
 export default function Timeline() {
-  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [viewMode, setViewMode] = useState<"timeline" | "cards" | "table">("timeline");
   
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
   });
 
-  const { data: timeCapsuleData, isLoading: timeCapsuleLoading } = useQuery<TimeCapsuleResponse>({
+  const { data: timeCapsuleData } = useQuery<TimeCapsuleResponse>({
     queryKey: ["/api/timecapsule"],
     queryFn: async () => {
       const response = await fetch("/api/timecapsule", { credentials: "include" });
@@ -146,8 +163,12 @@ export default function Timeline() {
   }
 
   const groupedByMonth = groupEntriesByMonth(logEntries);
+  const groupedByDate = groupEntriesByDate(logEntries);
   const timeCapsuleEntries = timeCapsuleData?.data || [];
   const sortedMonths = Array.from(groupedByMonth.entries()).sort((a, b) => 
+    new Date(b[0]).getTime() - new Date(a[0]).getTime()
+  );
+  const sortedDates = Array.from(groupedByDate.entries()).sort((a, b) => 
     new Date(b[0]).getTime() - new Date(a[0]).getTime()
   );
 
@@ -160,7 +181,7 @@ export default function Timeline() {
       <div className="space-y-6 animate-fade-in">
         {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
                 <Calendar className="w-6 h-6 text-white" />
@@ -171,6 +192,15 @@ export default function Timeline() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "timeline" ? "default" : "outline"}
+                size="icon"
+                onClick={() => setViewMode("timeline")}
+                data-testid="button-view-timeline"
+                title="Timeline view"
+              >
+                <GitBranch className="w-4 h-4" />
+              </Button>
               <Button
                 variant={viewMode === "cards" ? "default" : "outline"}
                 size="icon"
@@ -262,7 +292,6 @@ export default function Timeline() {
               </TableHeader>
               <TableBody>
                 {sortedEntries.map((entry) => {
-                  const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
                   const entryDate = new Date(entry.timestamp!);
                   
                   return (
@@ -303,6 +332,71 @@ export default function Timeline() {
                 })}
               </TableBody>
             </Table>
+          </div>
+        ) : viewMode === "timeline" ? (
+          /* Timeline View - Compact chronological view */
+          <div className="glass-card rounded-2xl p-6">
+            <div className="relative">
+              {/* Main Timeline Line */}
+              <div className="absolute left-[120px] md:left-[140px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-secondary to-accent" />
+
+              {sortedDates.map(([date, dateEntries], dateIndex) => (
+                <div key={date} className="mb-6 last:mb-0">
+                  {/* Date Header */}
+                  <div className="flex items-center mb-3">
+                    <div className="w-[120px] md:w-[140px] pr-4 text-right">
+                      <span className="text-sm font-semibold text-foreground">{date.split(",")[0]}</span>
+                      <span className="text-xs text-muted-foreground block">{date.split(",").slice(1).join(",").trim()}</span>
+                    </div>
+                    <div className="w-3 h-3 rounded-full bg-primary z-10 ring-4 ring-background" />
+                  </div>
+
+                  {/* Entries for this date */}
+                  <div className="ml-[120px] md:ml-[140px] pl-6 space-y-2">
+                    {dateEntries.map((entry, entryIndex) => {
+                      const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
+                      const entryTime = new Date(entry.timestamp!).toLocaleTimeString([], { 
+                        hour: "2-digit", 
+                        minute: "2-digit" 
+                      });
+                      
+                      return (
+                        <div 
+                          key={entry.id}
+                          className={cn(
+                            "relative p-3 rounded-lg border border-white/10 hover:border-white/20 transition-all",
+                            mood.bgColor
+                          )}
+                          data-testid={`timeline-item-${entry.id}`}
+                        >
+                          {/* Connection dot */}
+                          <div className={cn(
+                            "absolute -left-[27px] top-4 w-2 h-2 rounded-full",
+                            mood.color
+                          )} />
+                          
+                          <div className="flex items-start gap-3">
+                            <span className="text-lg flex-shrink-0">{mood.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground leading-relaxed">{entry.memoryText}</p>
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                <span className="text-xs text-muted-foreground">{entryTime}</span>
+                                <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
+                                  {entry.topicTag}
+                                </Badge>
+                                {entry.detectedPeople && entry.detectedPeople.length > 0 && (
+                                  <PeopleBadge people={entry.detectedPeople} />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           /* Card View with Timeline */
