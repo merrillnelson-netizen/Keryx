@@ -4,13 +4,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Template } from "@shared/schema";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  logFormat: string;
+  queryFormat: string;
+  fields: string[];
+  isActive?: boolean;
+}
 
 export default function Templates() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
