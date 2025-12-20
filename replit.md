@@ -73,10 +73,20 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Session Category**: Power user feature in Settings to auto-tag memories during extended sessions (uses browser session storage, resets on close).
 - **Simplified Auth Pages**: Clean login/signup forms with "Back to home" navigation.
 
-### Phase 3: Meta Glasses Integration (In Progress)
+### Phase 3: Meta Glasses Integration (Completed)
 - **Architecture**: Hybrid system - web app (desktop/browser) + React Native companion app (glasses/mobile) sharing Express/PostgreSQL backend.
 - **Companion App**: Located in `/companion-app/`, React Native project with TypeScript.
 - **MCP Protocol**: Model Context Protocol 2025-01 compliant payloads for structured communication.
+- **Geolocation**: Browser Geolocation API captures GPS coordinates when recording memories, with Google Maps links in History view.
+
+### Phase 4: Calendar Integration (Completed)
+- **Google Calendar**: Connected via Replit integration, fetches events around timestamps.
+- **Auto-linking**: Memories recorded during meetings automatically link to calendar events.
+- **Calendar Fields**: `calendarEventId`, `calendarEventTitle`, `calendarEventAttendees` on log_entries.
+- **Settings Page**: Shows calendar connection status and auto-link toggle.
+- **History View**: Purple calendar badges show linked meeting names with attendee tooltips.
+- **API Endpoints**: `/api/calendar/status`, `/api/calendar/events/today`, `/api/calendar/events/current`.
+- **Service File**: `server/calendar-service.ts` - handles OAuth token refresh and event fetching.
 
 #### Backend API Extensions
 - **New Endpoint**: `POST /api/companion/action` - Unified MCP action handler.
@@ -103,7 +113,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - Custom "Hey Helix" wake word model (.ppn file)
 
 ### Future Phases
-- **Phase 5 (Life Integration)**: Photos, location tracking, shared memories.
+- **Phase 5 (Life Integration)**: Photos, shared memories.
 - **Phase 6 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
 
 ## External Dependencies
