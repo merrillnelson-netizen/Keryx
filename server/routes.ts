@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, type User } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, type User, type MCPPayload } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -353,6 +353,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to search memories:", error);
       sendErrorResponse(res, 500, "Failed to search memories", error);
+    }
+  });
+
+  /**
+   * COMPANION APP ROUTES
+   * MCP-compliant endpoints for React Native companion app
+   * Handles voice-to-action with geolocation context
+   */
+
+  /**
+   * POST /api/companion/action - Unified MCP action handler
+   * Accepts MCP-compliant payloads from companion app
+   * Routes to record or query based on action type
+   * Enriches memories with geolocation and device context
+   */
+  app.post("/api/companion/action", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const payload = mcpPayloadSchema.parse(req.body);
+      const user = req.user as any;
+
+      if (payload.action === 'record') {
+        // Handle memory recording with full context
+        const extracted = await extractMetadata(payload.transcript);
+        const embeddingVector = await generateEmbedding(payload.transcript);
+
+        const logEntry = await storage.createLogEntry({
+          userId: user.id,
+          memoryText: payload.transcript,
+          topicTag: extracted.topicTag,
+          metadataJson: {
+            ...extracted.metadataJson,
+            ...payload.metadata,
+          },
+          embeddingVector,
+          mood: extracted.mood,
+          moodScore: extracted.moodScore,
+          detectedPeople: extracted.detectedPeople,
+          // Geolocation context
+          geoLat: payload.geo?.lat,
+          geoLng: payload.geo?.lng,
+          geoPlaceId: payload.geo?.placeId,
+          geoPlaceName: payload.geo?.placeName,
+          geoAccuracyMeters: payload.geo?.accuracyMeters,
+          // Device context
+          deviceId: payload.device?.id,
+          deviceType: payload.device?.type,
+          deviceConnection: payload.device?.connection,
+        });
+
+        // Track people mentions
+        if (extracted.detectedPeople.length > 0) {
+          Promise.all(
+            extracted.detectedPeople.map(name => storage.upsertPerson(user.id, name))
+          ).catch(err => console.error("Failed to track people:", err));
+        }
+
+        res.status(201).json({
+          status: 'success',
+          action: 'record',
+          data: logEntry,
+          confirmation: `Memory saved${payload.geo?.placeName ? ` at ${payload.geo.placeName}` : ''}`,
+          timestamp: new Date().toISOString()
+        });
+
+      } else if (payload.action === 'query') {
+        // Handle memory search with AI response
+        const [decomposed, queryVector] = await Promise.all([
+          decomposeQuery(payload.transcript),
+          generateEmbedding(payload.transcript)
+        ]);
+
+        const { semanticComponent, structuredFilters } = decomposed;
+
+        const results = await storage.searchMemories(
+          user.id,
+          queryVector,
+          structuredFilters.topicTag,
+          structuredFilters.timestampFilter?.start,
+          structuredFilters.timestampFilter?.end,
+          structuredFilters.metadataFilters,
+          5 // Limit for voice response
+        );
+
+        // Generate a spoken summary of results
+        let spokenResponse: string;
+        if (results.length === 0) {
+          spokenResponse = "I couldn't find any memories matching your query.";
+        } else if (results.length === 1) {
+          spokenResponse = `I found one memory: ${results[0].memoryText}`;
+        } else {
+          spokenResponse = `I found ${results.length} memories. The most recent one is: ${results[0].memoryText}`;
+        }
+
+        res.json({
+          status: 'success',
+          action: 'query',
+          data: results,
+          spokenResponse,
+          query: {
+            original: payload.transcript,
+            semantic: semanticComponent,
+            filters: structuredFilters,
+          },
+          count: results.length,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid MCP payload',
+          errors: error.errors,
+          timestamp: new Date().toISOString()
+        });
+      }
+      console.error("Companion action failed:", error);
+      sendErrorResponse(res, 500, "Failed to process companion action", error);
     }
   });
 

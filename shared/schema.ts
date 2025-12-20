@@ -1,7 +1,49 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, vector, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, vector, index, uniqueIndex, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+/**
+ * MCP (Model Context Protocol) compliant geolocation schema
+ * Used for companion app payloads with rich context
+ */
+export const geoContextSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+  placeId: z.string().optional(),
+  placeName: z.string().optional(),
+  accuracyMeters: z.number().optional(),
+});
+
+export const deviceContextSchema = z.object({
+  id: z.string(),
+  type: z.enum(['oakley-hstn', 'meta-glasses', 'phone', 'web']).default('web'),
+  connection: z.enum(['bluetooth-hfp', 'bluetooth-a2dp', 'wifi', 'direct']).default('direct'),
+});
+
+export const audioContextSchema = z.object({
+  scoSessionId: z.string().optional(),
+  format: z.enum(['pcm16', 'opus', 'aac']).default('pcm16'),
+  sampleRateHz: z.number().default(16000),
+  durationMs: z.number().optional(),
+});
+
+export const mcpPayloadSchema = z.object({
+  type: z.literal('memory.action'),
+  schemaVersion: z.string().default('2025-01'),
+  action: z.enum(['record', 'query']),
+  timestamp: z.string().datetime(),
+  geo: geoContextSchema.optional(),
+  device: deviceContextSchema.optional(),
+  audio: audioContextSchema.optional(),
+  transcript: z.string(),
+  metadata: z.record(z.any()).optional(),
+});
+
+export type GeoContext = z.infer<typeof geoContextSchema>;
+export type DeviceContext = z.infer<typeof deviceContextSchema>;
+export type AudioContext = z.infer<typeof audioContextSchema>;
+export type MCPPayload = z.infer<typeof mcpPayloadSchema>;
 
 /**
  * Users table - authentication and user management
@@ -49,6 +91,16 @@ export const logEntries = pgTable("log_entries", {
   mood: text("mood"), // AI-detected mood: happy, sad, anxious, excited, neutral, frustrated, hopeful, etc.
   moodScore: integer("mood_score"), // Sentiment score: -100 (very negative) to +100 (very positive)
   detectedPeople: text("detected_people").array(), // Array of person names detected in the memory
+  // Phase 3: Geolocation context from companion app
+  geoLat: real("geo_lat"), // Latitude coordinate
+  geoLng: real("geo_lng"), // Longitude coordinate
+  geoPlaceId: text("geo_place_id"), // Google Places ID for reverse lookup
+  geoPlaceName: text("geo_place_name"), // Semantic place name (e.g., "Main St. Billiards Hall")
+  geoAccuracyMeters: real("geo_accuracy_meters"), // GPS accuracy in meters
+  // Device context from companion app
+  deviceId: text("device_id"), // Device identifier
+  deviceType: text("device_type"), // 'oakley-hstn', 'meta-glasses', 'phone', 'web'
+  deviceConnection: text("device_connection"), // 'bluetooth-hfp', 'bluetooth-a2dp', 'wifi', 'direct'
 }, (table) => ({
   // Index for user-specific queries (critical for data isolation)
   userIdIdx: index("log_entries_user_id_idx").on(table.userId),
