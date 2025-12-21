@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, LogIn, Brain, ArrowLeft } from "lucide-react";
+import { UserPlus, LogIn, ArrowLeft } from "lucide-react";
+import { HelixLogo } from "@/components/helix-logo";
 
 export default function SignupPage() {
   const [, navigate] = useLocation();
@@ -60,13 +61,8 @@ export default function SignupPage() {
             </div>
           </Link>
           
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
-              <Brain className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-              Helix
-            </span>
+          <div className="flex justify-center mb-4">
+            <HelixLogo size="lg" textClassName="text-2xl" />
           </div>
         </div>
 

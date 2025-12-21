@@ -6,6 +6,7 @@ import {
   MessageSquare, Lightbulb, Heart
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { HelixLogo } from "@/components/helix-logo";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -109,14 +110,7 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="relative z-50 px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
-              <Brain className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
-            </div>
-            <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-              Helix
-            </span>
-          </div>
+          <HelixLogo size="md" />
           <div className="flex items-center gap-3">
             <Button 
               variant="ghost" 
@@ -456,14 +450,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="relative z-10 px-4 sm:px-6 lg:px-8 py-12 border-t border-white/10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
-              <Brain className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Helix
-            </span>
-          </div>
+          <HelixLogo size="sm" textClassName="text-lg" />
           <p className="text-sm text-muted-foreground">
             © 2024 Helix. Your memories, beautifully organized.
           </p>
