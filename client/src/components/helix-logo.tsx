@@ -35,11 +35,10 @@ export function HelixLogo({
         <img 
           src={helixLogoPath} 
           alt="Helix Logo" 
-          className="w-full h-full object-cover object-top"
+          className="w-[200%] h-[200%]"
           style={{
-            objectPosition: "0% 0%",
-            transform: "scale(2)",
-            transformOrigin: "0 0"
+            objectFit: "cover",
+            objectPosition: "top left"
           }}
         />
       </div>
@@ -70,11 +69,10 @@ export function HelixLogoIcon({
       <img 
         src={helixLogoPath} 
         alt="Helix" 
-        className="w-full h-full object-cover object-top"
+        className="w-[200%] h-[200%]"
         style={{
-          objectPosition: "0% 0%",
-          transform: "scale(2)",
-          transformOrigin: "0 0"
+          objectFit: "cover",
+          objectPosition: "top left"
         }}
       />
     </div>
