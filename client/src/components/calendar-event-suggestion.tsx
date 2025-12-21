@@ -102,11 +102,12 @@ export default function CalendarEventSuggestion({
     );
   }
 
-  const detectedEvent = detectMutation.data?.data as DetectedEvent | undefined;
-
-  if (!detectedEvent?.detected) {
+  // Handle detection errors silently - just don't show the suggestion
+  if (detectMutation.isError) {
     return null;
   }
+
+  const detectedEvent = detectMutation.data?.data as DetectedEvent | undefined;
 
   const formatDateTime = (isoString?: string) => {
     if (!isoString) return "";
@@ -130,6 +131,33 @@ export default function CalendarEventSuggestion({
     setDismissed(true);
     onDismiss();
   };
+
+  // Handle creation errors
+  if (createMutation.isError) {
+    return (
+      <Card className="glass-card border-red-500/30 border-l-4 border-l-red-500 mt-4 animate-fade-in">
+        <CardContent className="p-4 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-400">Could not add to calendar</p>
+            <p className="text-xs text-muted-foreground">Please try again or add manually</p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDismiss}
+            data-testid="button-dismiss-error"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!detectedEvent?.detected) {
+    return null;
+  }
 
   if (createMutation.isSuccess) {
     const result = createMutation.data?.data;
