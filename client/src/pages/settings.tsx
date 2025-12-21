@@ -49,9 +49,14 @@ export default function SettingsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      const calendarMsg = data.calendarLinked > 0 
+        ? ` Linked ${data.calendarLinked} to calendar events.` 
+        : data.calendarConnected 
+          ? '' 
+          : ' Connect calendar to link meetings.';
       toast({ 
         title: "AI Analysis Complete", 
-        description: `Processed ${data.entriesProcessed} memories, found mood and people data.`
+        description: `Processed ${data.entriesProcessed} memories.${calendarMsg}`
       });
     },
     onError: () => {
@@ -270,7 +275,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Re-analyze all your memories to extract mood, emotions, and people mentioned. 
+                  Re-analyze all your memories to extract mood, emotions, people mentioned, and link to calendar events. 
                   This is useful if you have older memories that were created before these features were added.
                 </p>
                 <Button

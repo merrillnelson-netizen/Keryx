@@ -1319,33 +1319,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/backfill - Backfill AI metadata for existing memories
    * 
-   * Re-processes all memories to extract mood, moodScore, and detectedPeople
-   * that may have been missing from memories created before Phase 1.
+   * Re-processes all memories to extract mood, moodScore, detectedPeople,
+   * and link to calendar events that occurred around the memory timestamp.
    */
   app.post("/api/backfill", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
       const forceAll = req.body?.force === true;
+      const includeCalendar = req.body?.includeCalendar !== false; // Default true
       
       const entries = await storage.getLogEntries(user.id, 500);
       const entriesNeedingBackfill = forceAll ? entries : entries.filter((e: any) => {
         const hasMood = e.mood && e.mood.trim() !== '';
         const hasPeople = Array.isArray(e.detectedPeople) && e.detectedPeople.length > 0;
-        return !hasMood || !hasPeople;
+        const hasCalendar = e.calendarEventId && e.calendarEventId.trim() !== '';
+        // Need backfill if missing mood/people, or if calendar linking requested and not linked
+        return !hasMood || !hasPeople || (includeCalendar && !hasCalendar);
       });
       
       let processed = 0;
       let errors = 0;
+      let calendarLinked = 0;
+      
+      // Check if calendar is connected for calendar linking
+      const calendarConnected = includeCalendar ? await isCalendarConnected() : false;
       
       for (const entry of entriesNeedingBackfill) {
         try {
           const metadata = await extractMetadata(entry.memoryText);
           
-          await storage.updateLogEntry(entry.id, user.id, {
+          const updateData: any = {
             mood: metadata.mood,
             moodScore: metadata.moodScore,
             detectedPeople: metadata.detectedPeople,
-          });
+          };
+          
+          // Try to link to calendar event if connected and not already linked
+          if (calendarConnected && !entry.calendarEventId && entry.timestamp) {
+            try {
+              const relevantEvent = await findRelevantEvent(entry.timestamp);
+              if (relevantEvent) {
+                updateData.calendarEventId = relevantEvent.id;
+                updateData.calendarEventTitle = relevantEvent.title;
+                updateData.calendarEventAttendees = relevantEvent.attendees || [];
+                calendarLinked++;
+              }
+            } catch (calErr) {
+              // Non-fatal: just log and continue
+              console.warn(`Calendar lookup failed for entry ${entry.id}:`, calErr);
+            }
+          }
+          
+          await storage.updateLogEntry(entry.id, user.id, updateData);
           
           if (metadata.detectedPeople && metadata.detectedPeople.length > 0) {
             for (const personName of metadata.detectedPeople) {
@@ -1366,6 +1391,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalEntries: entries.length,
         entriesProcessed: processed,
         entriesSkipped: entries.length - entriesNeedingBackfill.length,
+        calendarLinked,
+        calendarConnected,
         errors,
         timestamp: new Date().toISOString()
       });
