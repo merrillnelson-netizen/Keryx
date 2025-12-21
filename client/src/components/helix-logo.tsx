@@ -25,23 +25,18 @@ export function HelixLogo({
     <div className={cn("flex items-center gap-3", className)}>
       <div 
         className={cn(
-          "rounded-xl overflow-hidden shadow-lg flex-shrink-0",
+          "rounded-xl shadow-lg flex-shrink-0",
           sizeMap[size]
         )}
         style={{
-          background: "linear-gradient(135deg, transparent 0%, transparent 100%)"
+          backgroundImage: `url(${helixLogoPath})`,
+          backgroundSize: "200% 200%",
+          backgroundPosition: "0% 0%",
+          backgroundRepeat: "no-repeat"
         }}
-      >
-        <img 
-          src={helixLogoPath} 
-          alt="Helix Logo" 
-          className="w-[200%] h-[200%]"
-          style={{
-            objectFit: "cover",
-            objectPosition: "top left"
-          }}
-        />
-      </div>
+        role="img"
+        aria-label="Helix Logo"
+      />
       {showText && (
         <span className={cn(
           "font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent",
@@ -61,21 +56,19 @@ export function HelixLogoIcon({
   return (
     <div 
       className={cn(
-        "rounded-xl overflow-hidden shadow-lg flex-shrink-0",
+        "rounded-xl shadow-lg flex-shrink-0",
         sizeMap[size],
         className
       )}
-    >
-      <img 
-        src={helixLogoPath} 
-        alt="Helix" 
-        className="w-[200%] h-[200%]"
-        style={{
-          objectFit: "cover",
-          objectPosition: "top left"
-        }}
-      />
-    </div>
+      style={{
+        backgroundImage: `url(${helixLogoPath})`,
+        backgroundSize: "200% 200%",
+        backgroundPosition: "0% 0%",
+        backgroundRepeat: "no-repeat"
+      }}
+      role="img"
+      aria-label="Helix Logo"
+    />
   );
 }
 
