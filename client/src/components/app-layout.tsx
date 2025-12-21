@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
+import { HelixLogoIcon } from "@/components/helix-logo";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -42,9 +43,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {/* Logo & Branding */}
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
-                <Activity className="w-6 h-6 text-white" />
-              </div>
+              <HelixLogoIcon size="md" />
               <div>
                 <h1 className="text-xl font-bold text-foreground">Helix</h1>
                 <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
@@ -145,9 +144,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     {/* Mobile Menu Header */}
                     <div className="p-6 border-b border-white/10">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shadow-lg">
-                          <Activity className="w-6 h-6 text-white" />
-                        </div>
+                        <HelixLogoIcon size="md" />
                         <div>
                           <h1 className="text-xl font-bold text-foreground">Helix</h1>
                           <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
