@@ -243,11 +243,11 @@ function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) 
 }
 
 export default function Timeline() {
-  const [viewMode, setViewMode] = useState<"calendar" | "cards" | "table">("calendar");
   const [filterMode, setFilterMode] = useState<"all" | "calendar">("all");
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<LogEntry[]>([]);
+  const [detailViewMode, setDetailViewMode] = useState<"cards" | "table">("cards");
   
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
@@ -318,58 +318,27 @@ export default function Timeline() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
-                <Button
-                  variant={filterMode === "all" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setFilterMode("all")}
-                  data-testid="filter-all"
-                  className="text-xs"
-                >
-                  <Filter className="w-3 h-3 mr-1" />
-                  All
-                </Button>
-                <Button
-                  variant={filterMode === "calendar" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setFilterMode("calendar")}
-                  data-testid="filter-calendar"
-                  className="text-xs"
-                >
-                  <Calendar className="w-3 h-3 mr-1" />
-                  Calendar
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewMode === "calendar" ? "default" : "outline"}
-                  size="icon"
-                  onClick={() => setViewMode("calendar")}
-                  data-testid="button-view-calendar"
-                  title="Calendar view"
-                >
-                  <Calendar className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "cards" ? "default" : "outline"}
-                  size="icon"
-                  onClick={() => setViewMode("cards")}
-                  data-testid="button-view-cards"
-                  title="Card view"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "table" ? "default" : "outline"}
-                  size="icon"
-                  onClick={() => setViewMode("table")}
-                  data-testid="button-view-table"
-                  title="Table view"
-                >
-                  <TableIcon className="w-4 h-4" />
-                </Button>
-              </div>
+            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+              <Button
+                variant={filterMode === "all" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setFilterMode("all")}
+                data-testid="filter-all"
+                className="text-xs"
+              >
+                <Filter className="w-3 h-3 mr-1" />
+                All
+              </Button>
+              <Button
+                variant={filterMode === "calendar" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setFilterMode("calendar")}
+                data-testid="filter-calendar"
+                className="text-xs"
+              >
+                <Calendar className="w-3 h-3 mr-1" />
+                Calendar
+              </Button>
             </div>
           </div>
         </div>
@@ -386,7 +355,7 @@ export default function Timeline() {
                 : "When you record memories during calendar events, they'll appear here"}
             </p>
           </div>
-        ) : viewMode === "calendar" ? (
+        ) : (
           <div className="space-y-4">
             <div className="glass-card rounded-2xl p-4 flex items-center justify-between">
               <Button
@@ -432,179 +401,135 @@ export default function Timeline() {
             {selectedDate && selectedEntries.length > 0 && (
               <Card className="glass-card border-white/20">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-purple-500" />
-                    {selectedDate.toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "long",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                    <Badge variant="outline" className="ml-2">
-                      {selectedEntries.length} {selectedEntries.length === 1 ? "memory" : "memories"}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {selectedEntries.map((entry) => {
-                    const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-                    return (
-                      <div
-                        key={entry.id}
-                        className={cn(
-                          "p-4 rounded-xl border border-white/10",
-                          mood.bgColor
-                        )}
-                        data-testid={`selected-entry-${entry.id}`}
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <CardTitle className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-purple-500" />
+                      {selectedDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      <Badge variant="outline" className="ml-2">
+                        {selectedEntries.length} {selectedEntries.length === 1 ? "memory" : "memories"}
+                      </Badge>
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={detailViewMode === "cards" ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => setDetailViewMode("cards")}
+                        data-testid="button-detail-cards"
+                        title="Card view"
                       >
-                        <div className="flex items-start gap-3">
-                          <span className="text-xl">{mood.emoji}</span>
-                          <div className="flex-1">
-                            <p className="text-foreground">{entry.memoryText}</p>
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              <Badge variant="outline" className="text-xs border-white/20">
+                        <LayoutGrid className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={detailViewMode === "table" ? "default" : "outline"}
+                        size="icon"
+                        onClick={() => setDetailViewMode("table")}
+                        data-testid="button-detail-table"
+                        title="Table view"
+                      >
+                        <TableIcon className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {detailViewMode === "cards" ? (
+                    <div className="space-y-3">
+                      {selectedEntries.map((entry) => {
+                        const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
+                        return (
+                          <div
+                            key={entry.id}
+                            className={cn(
+                              "p-4 rounded-xl border border-white/10",
+                              mood.bgColor
+                            )}
+                            data-testid={`selected-entry-${entry.id}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="text-xl">{mood.emoji}</span>
+                              <div className="flex-1">
+                                <p className="text-foreground">{entry.memoryText}</p>
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                  <Badge variant="outline" className="text-xs border-white/20">
+                                    {new Date(entry.timestamp!).toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </Badge>
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs bg-primary/20 text-primary border-primary/30"
+                                  >
+                                    {entry.topicTag}
+                                  </Badge>
+                                  <CalendarBadge
+                                    title={entry.calendarEventTitle}
+                                    attendees={entry.calendarEventAttendees}
+                                  />
+                                  <PeopleBadge people={entry.detectedPeople} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg overflow-hidden border border-white/10">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-white/10 hover:bg-white/5">
+                            <TableHead className="text-muted-foreground">Time</TableHead>
+                            <TableHead className="text-muted-foreground w-[40%]">Memory</TableHead>
+                            <TableHead className="text-muted-foreground">Topic</TableHead>
+                            <TableHead className="text-muted-foreground text-center">Mood</TableHead>
+                            <TableHead className="text-muted-foreground text-center">People</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedEntries.map((entry) => (
+                            <TableRow
+                              key={entry.id}
+                              className="border-white/10 hover:bg-white/5"
+                              data-testid={`selected-row-${entry.id}`}
+                            >
+                              <TableCell className="text-muted-foreground">
                                 {new Date(entry.timestamp!).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}
-                              </Badge>
-                              <Badge
-                                variant="secondary"
-                                className="text-xs bg-primary/20 text-primary border-primary/30"
-                              >
-                                {entry.topicTag}
-                              </Badge>
-                              <CalendarBadge
-                                title={entry.calendarEventTitle}
-                                attendees={entry.calendarEventAttendees}
-                              />
-                              <PeopleBadge people={entry.detectedPeople} />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                              </TableCell>
+                              <TableCell>
+                                <p className="line-clamp-2">{entry.memoryText}</p>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-primary/20 text-primary border-primary/30"
+                                >
+                                  {entry.topicTag}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <MoodBadge mood={entry.mood} score={entry.moodScore} />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <PeopleBadge people={entry.detectedPeople} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
-          </div>
-        ) : viewMode === "table" ? (
-          <div className="glass-card rounded-2xl overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-white/10 hover:bg-white/5">
-                  <TableHead className="text-muted-foreground">Date</TableHead>
-                  <TableHead className="text-muted-foreground">Time</TableHead>
-                  <TableHead className="text-muted-foreground w-[30%]">Memory</TableHead>
-                  <TableHead className="text-muted-foreground">Meeting</TableHead>
-                  <TableHead className="text-muted-foreground">Topic</TableHead>
-                  <TableHead className="text-muted-foreground text-center">Mood</TableHead>
-                  <TableHead className="text-muted-foreground text-center">People</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedEntries.map((entry) => {
-                  const entryDate = new Date(entry.timestamp!);
-
-                  return (
-                    <TableRow
-                      key={entry.id}
-                      className="border-white/10 hover:bg-white/5"
-                      data-testid={`timeline-row-${entry.id}`}
-                    >
-                      <TableCell className="font-medium">
-                        {entryDate.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {entryDate.toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        <p className="line-clamp-2">{entry.memoryText}</p>
-                      </TableCell>
-                      <TableCell>
-                        <CalendarBadge
-                          title={entry.calendarEventTitle}
-                          attendees={entry.calendarEventAttendees}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="secondary"
-                          className="bg-primary/20 text-primary border-primary/30"
-                        >
-                          {entry.topicTag}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <MoodBadge mood={entry.mood} score={entry.moodScore} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <PeopleBadge people={entry.detectedPeople} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {sortedEntries.map((entry) => {
-              const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-
-              return (
-                <Card
-                  key={entry.id}
-                  className={cn("glass-card border-white/20", mood.bgColor)}
-                  data-testid={`timeline-card-${entry.id}`}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{mood.emoji}</span>
-                      <div className="flex-1">
-                        <p className="text-foreground">{entry.memoryText}</p>
-                        <div className="flex items-center gap-2 mt-3 flex-wrap">
-                          <Badge variant="outline" className="text-xs border-white/20">
-                            {new Date(entry.timestamp!).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs border-white/20">
-                            {new Date(entry.timestamp!).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </Badge>
-                          <Badge
-                            variant="secondary"
-                            className="text-xs bg-primary/20 text-primary border-primary/30"
-                          >
-                            {entry.topicTag}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <CalendarBadge
-                            title={entry.calendarEventTitle}
-                            attendees={entry.calendarEventAttendees}
-                          />
-                          <PeopleBadge people={entry.detectedPeople} />
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
           </div>
         )}
       </div>
