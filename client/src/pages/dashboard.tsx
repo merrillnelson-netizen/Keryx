@@ -91,7 +91,7 @@ interface AlertsResponse {
 
 export default function Dashboard() {
   // Custom queryFn to preserve full response with metadata
-  const { data: briefingData, isLoading: briefingLoading, refetch: refetchBriefing } = useQuery<BriefingResponse>({
+  const { data: briefingData, isLoading: briefingLoading, isFetching: briefingFetching, refetch: refetchBriefing } = useQuery<BriefingResponse>({
     queryKey: ["/api/briefing"],
     queryFn: async () => {
       const localHour = new Date().getHours();
@@ -105,7 +105,7 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 30, // 30 minutes
   });
 
-  const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useQuery<AlertsResponse>({
+  const { data: alertsData, isLoading: alertsLoading, isFetching: alertsFetching, refetch: refetchAlerts } = useQuery<AlertsResponse>({
     queryKey: ["/api/alerts"],
     queryFn: async () => {
       const response = await fetch("/api/alerts", { credentials: "include" });
@@ -152,11 +152,11 @@ export default function Dashboard() {
               variant="outline"
               size="sm"
               onClick={handleRefresh}
-              disabled={briefingLoading || alertsLoading}
+              disabled={briefingFetching || alertsFetching}
               className="border-white/20 hover:bg-white/10"
               data-testid="button-refresh-briefing"
             >
-              <RefreshCw className={cn("w-4 h-4 mr-2", (briefingLoading || alertsLoading) && "animate-spin")} />
+              <RefreshCw className={cn("w-4 h-4 mr-2", (briefingFetching || alertsFetching) && "animate-spin")} />
               Refresh
             </Button>
           </div>
