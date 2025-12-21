@@ -35,11 +35,40 @@ const aiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // Rate limit by user ID if authenticated, otherwise by IP
-    const user = req.user as any;
-    return user?.id || 'anonymous';
+    const user = req.user as User | undefined;
+    return user?.id?.toString() || 'anonymous';
   },
   validate: { xForwardedForHeader: false },
+});
+
+// Validation schemas for API endpoints
+const calendarEventDetectSchema = z.object({
+  memoryText: z.string().min(1, "Memory text is required").max(5000, "Memory text too long"),
+});
+
+const calendarEventCreateSchema = z.object({
+  title: z.string().min(1, "Title is required").max(500, "Title too long"),
+  startDateTime: z.string().min(1, "Start time is required"),
+  endDateTime: z.string().min(1, "End time is required"),
+  attendees: z.array(z.string()).optional(),
+  location: z.string().max(500).optional(),
+  description: z.string().max(2000).optional(),
+  memoryId: z.string().optional(),
+});
+
+const calendarDuplicateCheckSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  startDateTime: z.string().min(1, "Start time is required"),
+});
+
+const insightsQuerySchema = z.object({
+  question: z.string().max(1000).optional(),
+  days: z.number().int().min(1).max(365).optional().default(30),
+});
+
+const backfillSchema = z.object({
+  force: z.boolean().optional().default(false),
+  includeCalendar: z.boolean().optional().default(true),
 });
 
 /**
@@ -259,7 +288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (calendarError) {
         // Calendar not connected or error - continue without it
-        console.log('Calendar auto-link skipped:', calendarError instanceof Error ? calendarError.message : 'not connected');
+        // Calendar auto-link not available - this is expected when calendar is not connected
       }
 
       // Save to database with user ID, mood, detected people, geolocation, and calendar
@@ -783,11 +812,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/calendar/events/detect", requireAuth, aiLimiter, async (req, res) => {
     try {
-      const { memoryText } = req.body;
-      
-      if (!memoryText || typeof memoryText !== 'string') {
-        return sendErrorResponse(res, 400, "Memory text is required");
+      const validation = calendarEventDetectSchema.safeParse(req.body);
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
+      const { memoryText } = validation.data;
 
       const detectedEvent = await detectCalendarEvent(memoryText);
       
@@ -808,11 +837,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/calendar/events/create", requireAuth, async (req, res) => {
     try {
-      const { title, startDateTime, endDateTime, attendees, location, description, memoryId } = req.body;
-      
-      if (!title || !startDateTime || !endDateTime) {
-        return sendErrorResponse(res, 400, "Title, start time, and end time are required");
+      const validation = calendarEventCreateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
+      const { title, startDateTime, endDateTime, attendees, location, description, memoryId } = validation.data;
 
       // Check if calendar is connected
       const connected = await isCalendarConnected();
@@ -882,11 +911,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/calendar/events/check-duplicate", requireAuth, async (req, res) => {
     try {
-      const { title, startDateTime } = req.body;
-      
-      if (!title || !startDateTime) {
-        return sendErrorResponse(res, 400, "Title and start time are required");
+      const validation = calendarDuplicateCheckSchema.safeParse(req.body);
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
+      const { title, startDateTime } = validation.data;
 
       const duplicate = await findDuplicateEvent(title, startDateTime);
       
@@ -1179,8 +1208,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/insights", requireAuth, aiLimiter, async (req, res) => {
     try {
-      const user = req.user as any;
-      const { question, days = 30 } = req.body;
+      const user = req.user as User;
+      const validation = insightsQuerySchema.safeParse(req.body);
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
+      }
+      const { question, days } = validation.data;
       
       // Get recent memories for analysis
       const memories = await storage.getLogEntries(user.id, 100);
@@ -1322,11 +1355,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Re-processes all memories to extract mood, moodScore, detectedPeople,
    * and link to calendar events that occurred around the memory timestamp.
    */
-  app.post("/api/backfill", requireAuth, async (req, res) => {
+  app.post("/api/backfill", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
-      const forceAll = req.body?.force === true;
-      const includeCalendar = req.body?.includeCalendar !== false; // Default true
+      const validation = backfillSchema.safeParse(req.body || {});
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
+      }
+      const { force: forceAll, includeCalendar } = validation.data;
       
       const entries = await storage.getLogEntries(user.id, 500);
       const entriesNeedingBackfill = forceAll ? entries : entries.filter((e: any) => {
