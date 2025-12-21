@@ -81,13 +81,15 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Phase 4: Calendar Integration (Completed)
 - **Google Calendar**: Connected via Replit integration, fetches events around timestamps.
+- **Architecture Note**: Calendar is connected at the Replit app level (single-tenant), not per-user. The Replit owner's Google Calendar is used for all calendar operations. For multi-tenant per-user calendars, OAuth tokens would need to be stored per-user.
 - **Auto-linking**: Memories recorded during meetings automatically link to calendar events.
 - **Smart Event Detection**: AI analyzes memories to detect future events and suggests adding them to calendar.
 - **Event Creation**: Create calendar events directly from voice memories with duplicate detection.
+- **Data Management**: Re-analyze feature in Settings can backfill calendar links for existing memories.
 - **Calendar Fields**: `calendarEventId`, `calendarEventTitle`, `calendarEventAttendees` on log_entries.
 - **Settings Page**: Shows calendar connection status and auto-link toggle.
 - **History View**: Purple calendar badges show linked meeting names with attendee tooltips.
-- **Timeline Page**: Calendar view showing only calendar-linked memories, with month navigation and day-click details.
+- **Timeline Page**: Calendar view with All/Calendar filter, month navigation and day-click details with Card/Table views.
 - **API Endpoints**: `/api/calendar/status`, `/api/calendar/events/today`, `/api/calendar/events/current`, `/api/calendar/events/detect`, `/api/calendar/events/create`, `/api/calendar/events/check-duplicate`.
 - **Service File**: `server/calendar-service.ts` - handles OAuth token refresh, event fetching, event creation.
 - **AI Function**: `detectCalendarEvent()` in `server/ai-service.ts` - extracts event details from natural language.

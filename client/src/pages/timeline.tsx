@@ -363,6 +363,7 @@ export default function Timeline() {
                 size="icon"
                 onClick={goToPreviousMonth}
                 data-testid="button-previous-month"
+                aria-label="Previous month"
               >
                 <ChevronLeft className="w-5 h-5" />
               </Button>
@@ -387,6 +388,7 @@ export default function Timeline() {
                 size="icon"
                 onClick={goToNextMonth}
                 data-testid="button-next-month"
+                aria-label="Next month"
               >
                 <ChevronRight className="w-5 h-5" />
               </Button>
@@ -421,6 +423,7 @@ export default function Timeline() {
                         onClick={() => setDetailViewMode("cards")}
                         data-testid="button-detail-cards"
                         title="Card view"
+                        aria-label="Switch to card view"
                       >
                         <LayoutGrid className="w-4 h-4" />
                       </Button>
@@ -430,6 +433,7 @@ export default function Timeline() {
                         onClick={() => setDetailViewMode("table")}
                         data-testid="button-detail-table"
                         title="Table view"
+                        aria-label="Switch to table view"
                       >
                         <TableIcon className="w-4 h-4" />
                       </Button>
