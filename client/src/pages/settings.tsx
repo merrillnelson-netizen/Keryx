@@ -271,7 +271,8 @@ export default function SettingsPage() {
                     <>
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
                       <span className="text-sm text-green-500 font-medium">
-                        {calendarStatus.provider === 'google' ? 'Google Calendar' : 'Connected'}
+                        {calendarStatus.provider === 'google' ? 'Google Calendar' : 
+                         calendarStatus.provider === 'outlook' ? 'Outlook Calendar' : 'Connected'}
                       </span>
                     </>
                   ) : (
@@ -303,7 +304,7 @@ export default function SettingsPage() {
 
               {!calendarStatus?.connected && (
                 <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                  Connect your Google Calendar to automatically link memories to meetings. 
+                  Connect your Google Calendar or Outlook to automatically link memories to meetings. 
                   This helps track meeting notes and context.
                 </p>
               )}

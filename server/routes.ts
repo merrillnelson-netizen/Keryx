@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
-import { isCalendarConnected, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { isCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 
 // Background job tracking for re-analysis
@@ -768,19 +768,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/calendar/status - Check if calendar is connected
+   * Returns which calendar provider is connected (google or outlook)
    */
   app.get("/api/calendar/status", requireAuth, async (req, res) => {
     try {
-      const connected = await isCalendarConnected();
+      const provider = await getConnectedCalendarProvider();
       res.json({
         status: 'success',
-        data: { connected, provider: connected ? 'google' : null },
+        connected: provider !== null,
+        provider: provider,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
       res.json({
         status: 'success',
-        data: { connected: false, provider: null },
+        connected: false,
+        provider: null,
         timestamp: new Date().toISOString()
       });
     }

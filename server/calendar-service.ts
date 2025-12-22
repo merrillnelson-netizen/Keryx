@@ -1,18 +1,29 @@
 /**
- * Calendar Service for Google Calendar Integration
+ * Unified Calendar Service for Google Calendar and Outlook Integration
  * Fetches events around a given timestamp to enrich meeting memories
+ * Supports both Google Calendar and Microsoft Outlook via Replit connectors
  * 
- * Integration: google-calendar connector via Replit
+ * Integration: google-calendar and outlook connectors via Replit
  */
 
 import { google, calendar_v3 } from 'googleapis';
+import { 
+  isOutlookConnected, 
+  getOutlookEventsAroundTime, 
+  getOutlookTodaysEvents, 
+  findOutlookRelevantEvent,
+  createOutlookCalendarEvent,
+  type OutlookCalendarEvent 
+} from './outlook-calendar-service';
 
-let connectionSettings: any;
+let googleConnectionSettings: any;
+
+export type CalendarProvider = 'google' | 'outlook' | null;
 
 async function getAccessToken(): Promise<string> {
-  if (connectionSettings && connectionSettings.settings?.expires_at && 
-      new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
+  if (googleConnectionSettings && googleConnectionSettings.settings?.expires_at && 
+      new Date(googleConnectionSettings.settings.expires_at).getTime() > Date.now()) {
+    return googleConnectionSettings.settings.access_token;
   }
   
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -37,12 +48,12 @@ async function getAccessToken(): Promise<string> {
   );
   
   const data = await response.json();
-  connectionSettings = data.items?.[0];
+  googleConnectionSettings = data.items?.[0];
 
-  const accessToken = connectionSettings?.settings?.access_token || 
-                      connectionSettings?.settings?.oauth?.credentials?.access_token;
+  const accessToken = googleConnectionSettings?.settings?.access_token || 
+                      googleConnectionSettings?.settings?.oauth?.credentials?.access_token;
 
-  if (!connectionSettings || !accessToken) {
+  if (!googleConnectionSettings || !accessToken) {
     throw new Error('Google Calendar not connected');
   }
   return accessToken;
@@ -73,7 +84,7 @@ export interface CalendarEvent {
 /**
  * Check if Google Calendar is connected and available
  */
-export async function isCalendarConnected(): Promise<boolean> {
+async function isGoogleCalendarConnected(): Promise<boolean> {
   try {
     await getAccessToken();
     return true;
@@ -83,10 +94,33 @@ export async function isCalendarConnected(): Promise<boolean> {
 }
 
 /**
- * Fetch calendar events around a given timestamp
- * Returns events that overlap with the time window (±30 minutes by default)
+ * Check if any calendar (Google or Outlook) is connected
+ * Returns the connected provider or null if neither is connected
  */
-export async function getEventsAroundTime(
+export async function getConnectedCalendarProvider(): Promise<CalendarProvider> {
+  const [googleConnected, outlookConnected] = await Promise.all([
+    isGoogleCalendarConnected(),
+    isOutlookConnected()
+  ]);
+  
+  // Prefer Google if both are connected
+  if (googleConnected) return 'google';
+  if (outlookConnected) return 'outlook';
+  return null;
+}
+
+/**
+ * Check if any calendar is connected (backwards compatible)
+ */
+export async function isCalendarConnected(): Promise<boolean> {
+  const provider = await getConnectedCalendarProvider();
+  return provider !== null;
+}
+
+/**
+ * Fetch Google calendar events around a given timestamp
+ */
+async function getGoogleEventsAroundTime(
   timestamp: Date,
   windowMinutes: number = 30
 ): Promise<CalendarEvent[]> {
@@ -118,17 +152,42 @@ export async function getEventsAroundTime(
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
   } catch (error) {
-    console.error('Failed to fetch calendar events:', error);
+    console.error('Failed to fetch Google calendar events:', error);
     return [];
   }
 }
 
 /**
+ * Fetch calendar events around a given timestamp (uses connected provider)
+ */
+export async function getEventsAroundTime(
+  timestamp: Date,
+  windowMinutes: number = 30
+): Promise<CalendarEvent[]> {
+  const provider = await getConnectedCalendarProvider();
+  
+  if (provider === 'google') {
+    return getGoogleEventsAroundTime(timestamp, windowMinutes);
+  } else if (provider === 'outlook') {
+    return getOutlookEventsAroundTime(timestamp, windowMinutes);
+  }
+  
+  return [];
+}
+
+/**
  * Find the most relevant event for a given timestamp
- * Prioritizes events that are currently happening
+ * Uses whichever calendar is connected (Google or Outlook)
  */
 export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent | null> {
-  const events = await getEventsAroundTime(timestamp, 60);
+  const provider = await getConnectedCalendarProvider();
+  
+  if (provider === 'outlook') {
+    return findOutlookRelevantEvent(timestamp);
+  }
+  
+  // Default to Google behavior
+  const events = await getGoogleEventsAroundTime(timestamp, 60);
   
   if (events.length === 0) return null;
   
@@ -156,7 +215,7 @@ export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent 
 }
 
 /**
- * Create a new calendar event
+ * Create a new calendar event (uses connected provider)
  * Returns the created event or null if creation failed
  */
 export async function createCalendarEvent(
@@ -169,11 +228,34 @@ export async function createCalendarEvent(
     description?: string;
   }
 ): Promise<CalendarEvent | null> {
+  const provider = await getConnectedCalendarProvider();
+  
+  if (provider === 'outlook') {
+    return createOutlookCalendarEvent(title, startDateTime, endDateTime, options);
+  }
+  
+  // Default to Google Calendar
+  return createGoogleCalendarEvent(title, startDateTime, endDateTime, options);
+}
+
+/**
+ * Create a new Google calendar event
+ */
+async function createGoogleCalendarEvent(
+  title: string,
+  startDateTime: string,
+  endDateTime: string,
+  options?: {
+    attendees?: string[];
+    location?: string;
+    description?: string;
+  }
+): Promise<CalendarEvent | null> {
   try {
-    console.log('[Calendar] Creating event:', { title, startDateTime, endDateTime, options });
+    console.log('[Calendar] Creating Google event:', { title, startDateTime, endDateTime, options });
     
     const calendar = await getCalendarClient();
-    console.log('[Calendar] Got calendar client successfully');
+    console.log('[Calendar] Got Google calendar client successfully');
     
     // Ensure datetime strings are valid ISO format
     const startDate = new Date(startDateTime);
@@ -301,9 +383,23 @@ export async function findDuplicateEvent(
 }
 
 /**
- * Get upcoming events for today
+ * Get upcoming events for today (uses connected provider)
  */
 export async function getTodaysEvents(): Promise<CalendarEvent[]> {
+  const provider = await getConnectedCalendarProvider();
+  
+  if (provider === 'outlook') {
+    return getOutlookTodaysEvents();
+  }
+  
+  // Default to Google Calendar
+  return getGoogleTodaysEvents();
+}
+
+/**
+ * Get today's Google calendar events
+ */
+async function getGoogleTodaysEvents(): Promise<CalendarEvent[]> {
   try {
     const calendar = await getCalendarClient();
     
@@ -333,7 +429,7 @@ export async function getTodaysEvents(): Promise<CalendarEvent[]> {
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
   } catch (error) {
-    console.error('Failed to fetch today\'s events:', error);
+    console.error('Failed to fetch today\'s Google events:', error);
     return [];
   }
 }
