@@ -170,16 +170,28 @@ export async function createCalendarEvent(
   }
 ): Promise<CalendarEvent | null> {
   try {
+    console.log('[Calendar] Creating event:', { title, startDateTime, endDateTime, options });
+    
     const calendar = await getCalendarClient();
+    console.log('[Calendar] Got calendar client successfully');
+    
+    // Ensure datetime strings are valid ISO format
+    const startDate = new Date(startDateTime);
+    const endDate = new Date(endDateTime);
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.error('[Calendar] Invalid date format:', { startDateTime, endDateTime });
+      return null;
+    }
     
     const event: calendar_v3.Schema$Event = {
       summary: title,
       start: {
-        dateTime: startDateTime,
+        dateTime: startDate.toISOString(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       },
       end: {
-        dateTime: endDateTime,
+        dateTime: endDate.toISOString(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       },
     };
@@ -200,12 +212,16 @@ export async function createCalendarEvent(
       }
     }
 
+    console.log('[Calendar] Inserting event:', JSON.stringify(event, null, 2));
+    
     const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: event,
       sendUpdates: 'none', // Don't send invite emails automatically
     });
 
+    console.log('[Calendar] Event created successfully:', response.data.id);
+    
     const created = response.data;
     return {
       id: created.id || '',
@@ -217,8 +233,13 @@ export async function createCalendarEvent(
       location: created.location || undefined,
       meetingLink: created.hangoutLink || undefined,
     };
-  } catch (error) {
-    console.error('Failed to create calendar event:', error);
+  } catch (error: any) {
+    console.error('[Calendar] Failed to create event:', {
+      message: error?.message,
+      code: error?.code,
+      errors: error?.errors,
+      response: error?.response?.data,
+    });
     return null;
   }
 }
