@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, CheckCircle2, XCircle } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 interface BackfillStatus {
@@ -40,13 +40,13 @@ export default function SettingsPage() {
     queryKey: ["/api/categories"],
   });
 
-  const { data: calendarStatus } = useQuery<{ 
-    connected: boolean; 
-    provider: string | null;
-    google: boolean;
-    outlook: boolean;
+  // Use combined providers status endpoint for all provider info
+  const { data: providersStatus } = useQuery<{
+    calendar: { google: boolean; outlook: boolean; activeProvider: string | null; userPreference: string | null };
+    email: { gmail: boolean; outlook: boolean; activeProvider: string | null; userPreference: string | null };
+    providerSelectionMode: string;
   }>({
-    queryKey: ["/api/calendar/status"],
+    queryKey: ["/api/providers/status"],
   });
 
   // Poll for backfill job status
@@ -64,6 +64,7 @@ export default function SettingsPage() {
       apiRequest("PUT", "/api/settings", newSettings),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/providers/status"] });
       toast({ title: "Settings saved successfully" });
     },
   });
@@ -126,6 +127,19 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     updateSettingsMutation.mutate(settings);
+  };
+
+  // Auto-save provider preference when clicked
+  const handleProviderSelect = (type: 'calendar' | 'email', provider: string) => {
+    const newSettings = type === 'calendar' 
+      ? { ...settings, calendarProvider: provider }
+      : { ...settings, emailProvider: provider };
+    setSettings(newSettings);
+    updateSettingsMutation.mutate(
+      type === 'calendar' 
+        ? { calendarProvider: provider } 
+        : { emailProvider: provider }
+    );
   };
 
   if (isLoading) {
@@ -269,62 +283,82 @@ export default function SettingsPage() {
               </p>
               
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                <div 
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                    providersStatus?.calendar.google 
+                      ? providersStatus?.calendar.activeProvider === 'google'
+                        ? 'bg-blue-500/10 border border-blue-500/30'
+                        : 'bg-muted/30 hover:bg-blue-500/5'
+                      : 'bg-muted/30 opacity-60'
+                  }`}
+                  onClick={() => providersStatus?.calendar.google && handleProviderSelect('calendar', 'google')}
+                  data-testid="calendar-provider-google"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
                       <span className="text-blue-500 text-xs font-bold">G</span>
                     </div>
                     <div>
                       <span className="text-sm font-medium">Google Calendar</span>
-                      {calendarStatus?.google && calendarStatus.provider === 'google' && (
+                      {providersStatus?.calendar.google && providersStatus?.calendar.activeProvider === 'google' && (
                         <p className="text-xs text-green-500">Active</p>
                       )}
-                      {calendarStatus?.google && calendarStatus.provider !== 'google' && (
-                        <p className="text-xs text-muted-foreground">Connected (secondary)</p>
+                      {providersStatus?.calendar.google && providersStatus?.calendar.activeProvider !== 'google' && (
+                        <p className="text-xs text-muted-foreground">Click to make active</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {calendarStatus?.google ? (
+                    {providersStatus?.calendar.google ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
                     ) : (
                       <XCircle className="w-5 h-5 text-muted-foreground" />
                     )}
-                    <span className={`text-sm ${calendarStatus?.google ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {calendarStatus?.google ? 'Connected' : 'Not connected'}
+                    <span className={`text-sm ${providersStatus?.calendar.google ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {providersStatus?.calendar.google ? 'Connected' : 'Not connected'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                <div 
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                    providersStatus?.calendar.outlook 
+                      ? providersStatus?.calendar.activeProvider === 'outlook'
+                        ? 'bg-cyan-500/10 border border-cyan-500/30'
+                        : 'bg-muted/30 hover:bg-cyan-500/5'
+                      : 'bg-muted/30 opacity-60'
+                  }`}
+                  onClick={() => providersStatus?.calendar.outlook && handleProviderSelect('calendar', 'outlook')}
+                  data-testid="calendar-provider-outlook"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
                       <span className="text-cyan-500 text-xs font-bold">O</span>
                     </div>
                     <div>
                       <span className="text-sm font-medium">Outlook Calendar</span>
-                      {calendarStatus?.outlook && calendarStatus.provider === 'outlook' && (
+                      {providersStatus?.calendar.outlook && providersStatus?.calendar.activeProvider === 'outlook' && (
                         <p className="text-xs text-green-500">Active</p>
                       )}
-                      {calendarStatus?.outlook && calendarStatus.provider !== 'outlook' && (
-                        <p className="text-xs text-muted-foreground">Connected (secondary)</p>
+                      {providersStatus?.calendar.outlook && providersStatus?.calendar.activeProvider !== 'outlook' && (
+                        <p className="text-xs text-muted-foreground">Click to make active</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {calendarStatus?.outlook ? (
+                    {providersStatus?.calendar.outlook ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
                     ) : (
                       <XCircle className="w-5 h-5 text-muted-foreground" />
                     )}
-                    <span className={`text-sm ${calendarStatus?.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {calendarStatus?.outlook ? 'Connected' : 'Not connected'}
+                    <span className={`text-sm ${providersStatus?.calendar.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {providersStatus?.calendar.outlook ? 'Connected' : 'Not connected'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {calendarStatus?.connected && (
+              {(providersStatus?.calendar.google || providersStatus?.calendar.outlook) && (
                 <div className="flex items-center justify-between pt-2">
                   <div className="space-y-0.5">
                     <Label className="text-base">Auto-link Meetings</Label>
@@ -342,9 +376,105 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {!calendarStatus?.connected && (
+              {!providersStatus?.calendar.google && !providersStatus?.calendar.outlook && (
                 <p className="text-xs text-muted-foreground mt-2">
                   Calendars are connected via the Replit integrations panel.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-red-500" />
+                Email Integration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Connect email to send summaries and reminders from your memories.
+              </p>
+              
+              <div className="space-y-3">
+                <div 
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                    providersStatus?.email.gmail 
+                      ? providersStatus?.email.activeProvider === 'gmail'
+                        ? 'bg-red-500/10 border border-red-500/30'
+                        : 'bg-muted/30 hover:bg-red-500/5'
+                      : 'bg-muted/30 opacity-60'
+                  }`}
+                  onClick={() => providersStatus?.email.gmail && handleProviderSelect('email', 'gmail')}
+                  data-testid="email-provider-gmail"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                      <span className="text-red-500 text-xs font-bold">G</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Gmail</span>
+                      {providersStatus?.email.gmail && providersStatus?.email.activeProvider === 'gmail' && (
+                        <p className="text-xs text-green-500">Active</p>
+                      )}
+                      {providersStatus?.email.gmail && providersStatus?.email.activeProvider !== 'gmail' && (
+                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {providersStatus?.email.gmail ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-muted-foreground" />
+                    )}
+                    <span className={`text-sm ${providersStatus?.email.gmail ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {providersStatus?.email.gmail ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+
+                <div 
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                    providersStatus?.email.outlook 
+                      ? providersStatus?.email.activeProvider === 'outlook'
+                        ? 'bg-cyan-500/10 border border-cyan-500/30'
+                        : 'bg-muted/30 hover:bg-cyan-500/5'
+                      : 'bg-muted/30 opacity-60'
+                  }`}
+                  onClick={() => providersStatus?.email.outlook && handleProviderSelect('email', 'outlook')}
+                  data-testid="email-provider-outlook"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                      <span className="text-cyan-500 text-xs font-bold">O</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Outlook Mail</span>
+                      {providersStatus?.email.outlook && providersStatus?.email.activeProvider === 'outlook' && (
+                        <p className="text-xs text-green-500">Active</p>
+                      )}
+                      {providersStatus?.email.outlook && providersStatus?.email.activeProvider !== 'outlook' && (
+                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {providersStatus?.email.outlook ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-muted-foreground" />
+                    )}
+                    <span className={`text-sm ${providersStatus?.email.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {providersStatus?.email.outlook ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {!providersStatus?.email.gmail && !providersStatus?.email.outlook && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Email services are connected via the Replit integrations panel.
                 </p>
               )}
             </CardContent>

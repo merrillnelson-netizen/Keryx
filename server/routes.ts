@@ -10,6 +10,8 @@ import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
 import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
+import { isGmailConnected } from "./gmail-service";
+import { isOutlookMailConnected } from "./outlook-mail-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 
 // Background job tracking for re-analysis
@@ -796,6 +798,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
         provider: null,
         google: false,
         outlook: false,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  /**
+   * GET /api/email/status - Check if email services are connected
+   * Returns status for both Gmail and Outlook Mail
+   */
+  app.get("/api/email/status", requireAuth, async (req, res) => {
+    try {
+      const [gmailConnected, outlookConnected] = await Promise.all([
+        isGmailConnected(),
+        isOutlookMailConnected()
+      ]);
+      
+      // Active provider (Gmail preferred when both connected)
+      const activeProvider = gmailConnected ? 'gmail' : outlookConnected ? 'outlook' : null;
+      
+      res.json({
+        status: 'success',
+        connected: activeProvider !== null,
+        provider: activeProvider,
+        gmail: gmailConnected,
+        outlook: outlookConnected,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.json({
+        status: 'success',
+        connected: false,
+        provider: null,
+        gmail: false,
+        outlook: false,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  /**
+   * GET /api/providers/status - Get combined status of all providers
+   * Returns calendar and email connection status for all providers
+   * Respects user's saved preferences for active provider selection
+   */
+  app.get("/api/providers/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      // Fetch connection status and user settings in parallel
+      const [googleCalendar, outlookCalendar, gmail, outlookMail, userSettings] = await Promise.all([
+        isGoogleCalendarConnected(),
+        isOutlookConnected(),
+        isGmailConnected(),
+        isOutlookMailConnected(),
+        storage.getSettings(user.id)
+      ]);
+      
+      // Determine active calendar provider based on user preference, then fallback to availability
+      let activeCalendarProvider: string | null = null;
+      if (userSettings?.calendarProvider) {
+        // User has a preference - use it if that provider is connected
+        if (userSettings.calendarProvider === 'google' && googleCalendar) {
+          activeCalendarProvider = 'google';
+        } else if (userSettings.calendarProvider === 'outlook' && outlookCalendar) {
+          activeCalendarProvider = 'outlook';
+        }
+      }
+      // Fallback: auto-detect (prefer Google when both connected)
+      if (!activeCalendarProvider) {
+        activeCalendarProvider = googleCalendar ? 'google' : outlookCalendar ? 'outlook' : null;
+      }
+      
+      // Determine active email provider based on user preference, then fallback to availability
+      let activeEmailProvider: string | null = null;
+      if (userSettings?.emailProvider) {
+        // User has a preference - use it if that provider is connected
+        if (userSettings.emailProvider === 'gmail' && gmail) {
+          activeEmailProvider = 'gmail';
+        } else if (userSettings.emailProvider === 'outlook' && outlookMail) {
+          activeEmailProvider = 'outlook';
+        }
+      }
+      // Fallback: auto-detect (prefer Gmail when both connected)
+      if (!activeEmailProvider) {
+        activeEmailProvider = gmail ? 'gmail' : outlookMail ? 'outlook' : null;
+      }
+      
+      res.json({
+        status: 'success',
+        calendar: {
+          google: googleCalendar,
+          outlook: outlookCalendar,
+          activeProvider: activeCalendarProvider,
+          userPreference: userSettings?.calendarProvider || null,
+        },
+        email: {
+          gmail: gmail,
+          outlook: outlookMail,
+          activeProvider: activeEmailProvider,
+          userPreference: userSettings?.emailProvider || null,
+        },
+        providerSelectionMode: userSettings?.providerSelectionMode || 'default',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      res.json({
+        status: 'success',
+        calendar: { google: false, outlook: false, activeProvider: null, userPreference: null },
+        email: { gmail: false, outlook: false, activeProvider: null, userPreference: null },
+        providerSelectionMode: 'default',
         timestamp: new Date().toISOString()
       });
     }

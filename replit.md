@@ -79,19 +79,25 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **MCP Protocol**: Model Context Protocol 2025-01 compliant payloads for structured communication.
 - **Geolocation**: Browser Geolocation API captures GPS coordinates when recording memories, with Google Maps links in History view.
 
-### Phase 4: Calendar Integration (Completed)
-- **Google Calendar**: Connected via Replit integration, fetches events around timestamps.
-- **Architecture Note**: Calendar is connected at the Replit app level (single-tenant), not per-user. The Replit owner's Google Calendar is used for all calendar operations. For multi-tenant per-user calendars, OAuth tokens would need to be stored per-user.
+### Phase 4: Calendar & Email Integration (Completed)
+- **Multi-Provider Support**: Both Google and Microsoft (Outlook) providers supported for calendar and email.
+- **Provider Preference**: Users can select preferred provider in Settings; clicking a provider card makes it active.
+- **Google Calendar**: Connected via Replit google-calendar connector.
+- **Outlook Calendar**: Connected via Replit outlook connector.
+- **Gmail**: Connected via Replit google-mail connector for email operations.
+- **Outlook Mail**: Shares connection with Outlook calendar connector.
+- **Architecture Note**: Integrations are connected at the Replit app level (single-tenant), not per-user.
 - **Auto-linking**: Memories recorded during meetings automatically link to calendar events.
 - **Smart Event Detection**: AI analyzes memories to detect future events and suggests adding them to calendar.
 - **Event Creation**: Create calendar events directly from voice memories with duplicate detection.
-- **Data Management**: Re-analyze feature in Settings can backfill calendar links for existing memories.
+- **Data Management**: Re-analyze feature in Settings runs in background with progress polling.
 - **Calendar Fields**: `calendarEventId`, `calendarEventTitle`, `calendarEventAttendees` on log_entries.
-- **Settings Page**: Shows calendar connection status and auto-link toggle.
+- **Settings Schema**: `calendarProvider`, `emailProvider`, `providerSelectionMode` for user preferences.
+- **Settings Page**: Shows both calendar providers (Google/Outlook) and email providers (Gmail/Outlook) with connection status and active selection.
 - **History View**: Purple calendar badges show linked meeting names with attendee tooltips.
 - **Timeline Page**: Calendar view with All/Calendar filter, month navigation and day-click details with Card/Table views.
-- **API Endpoints**: `/api/calendar/status`, `/api/calendar/events/today`, `/api/calendar/events/current`, `/api/calendar/events/detect`, `/api/calendar/events/create`, `/api/calendar/events/check-duplicate`.
-- **Service File**: `server/calendar-service.ts` - handles OAuth token refresh, event fetching, event creation.
+- **API Endpoints**: `/api/calendar/status`, `/api/email/status`, `/api/providers/status` (combined), `/api/calendar/events/*`.
+- **Service Files**: `server/calendar-service.ts`, `server/outlook-calendar-service.ts`, `server/gmail-service.ts`, `server/outlook-mail-service.ts`.
 - **AI Function**: `detectCalendarEvent()` in `server/ai-service.ts` - extracts event details from natural language.
 
 #### Backend API Extensions

@@ -155,14 +155,21 @@ export const people = pgTable("people", {
 
 /**
  * Settings table - application configuration
+ * Supports multi-provider preferences for calendar and email services
  */
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   voiceResponseEnabled: boolean("voice_response_enabled").default(true),
   confidenceThreshold: integer("confidence_threshold").default(80), // 0-100
-  calendarProvider: text("calendar_provider"), // 'google' or 'outlook' - null means disabled
+  // Calendar provider settings
+  calendarProvider: text("calendar_provider"), // 'google' or 'outlook' - default provider for calendar operations
   calendarAutoLink: boolean("calendar_auto_link").default(true), // Auto-link memories to calendar events
+  // Email provider settings
+  emailProvider: text("email_provider"), // 'gmail' or 'outlook' - default provider for email operations
+  emailNotificationsEnabled: boolean("email_notifications_enabled").default(false), // Send email summaries/reminders
+  // Provider selection mode: 'default' uses settings, 'ask' prompts per-memory
+  providerSelectionMode: text("provider_selection_mode").default("default"), // 'default' or 'ask'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
