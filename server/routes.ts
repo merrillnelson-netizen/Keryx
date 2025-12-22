@@ -11,6 +11,20 @@ import rateLimit from "express-rate-limit";
 import { isCalendarConnected, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 
+// Background job tracking for re-analysis
+interface BackfillJob {
+  status: 'running' | 'completed' | 'failed';
+  progress: number;
+  total: number;
+  processed: number;
+  calendarLinked: number;
+  errors: number;
+  startedAt: Date;
+  completedAt?: Date;
+  message?: string;
+}
+const backfillJobs = new Map<string, BackfillJob>();
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -1355,91 +1369,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * POST /api/backfill - Backfill AI metadata for existing memories
+   * POST /api/backfill - Start background re-analysis of memories
    * 
    * Re-processes all memories to extract mood, moodScore, detectedPeople,
-   * and link to calendar events that occurred around the memory timestamp.
+   * and link to calendar events. Runs in background and returns immediately.
    */
-  app.post("/api/backfill", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/backfill", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = backfillSchema.safeParse(req.body || {});
       if (!validation.success) {
         return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
+      
+      // Check if job already running for this user
+      const existingJob = backfillJobs.get(user.id);
+      if (existingJob && existingJob.status === 'running') {
+        return res.json({
+          status: 'already_running',
+          message: 'Re-analysis is already in progress',
+          job: existingJob,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
       const { force: forceAll, includeCalendar } = validation.data;
       
+      // Get entries and set up job tracking
       const entries = await storage.getLogEntries(user.id, 500);
       const entriesNeedingBackfill = forceAll ? entries : entries.filter((e: any) => {
         const hasMood = e.mood && e.mood.trim() !== '';
         const hasPeople = Array.isArray(e.detectedPeople) && e.detectedPeople.length > 0;
         const hasCalendar = e.calendarEventId && e.calendarEventId.trim() !== '';
-        // Need backfill if missing mood/people, or if calendar linking requested and not linked
         return !hasMood || !hasPeople || (includeCalendar && !hasCalendar);
       });
       
-      let processed = 0;
-      let errors = 0;
-      let calendarLinked = 0;
+      // Initialize job tracking
+      const job: BackfillJob = {
+        status: 'running',
+        progress: 0,
+        total: entriesNeedingBackfill.length,
+        processed: 0,
+        calendarLinked: 0,
+        errors: 0,
+        startedAt: new Date(),
+        message: `Processing 0 of ${entriesNeedingBackfill.length} memories...`
+      };
+      backfillJobs.set(user.id, job);
       
-      // Check if calendar is connected for calendar linking
-      const calendarConnected = includeCalendar ? await isCalendarConnected() : false;
+      // Return immediately, processing continues in background
+      res.json({
+        status: 'started',
+        message: `Re-analysis started for ${entriesNeedingBackfill.length} memories`,
+        totalEntries: entries.length,
+        toProcess: entriesNeedingBackfill.length,
+        timestamp: new Date().toISOString()
+      });
       
-      for (const entry of entriesNeedingBackfill) {
+      // Run processing in background (don't await)
+      (async () => {
         try {
-          const metadata = await extractMetadata(entry.memoryText);
+          const calendarConnected = includeCalendar ? await isCalendarConnected() : false;
           
-          const updateData: any = {
-            mood: metadata.mood,
-            moodScore: metadata.moodScore,
-            detectedPeople: metadata.detectedPeople,
-          };
-          
-          // Try to link to calendar event if connected and not already linked
-          if (calendarConnected && !entry.calendarEventId && entry.timestamp) {
+          for (let i = 0; i < entriesNeedingBackfill.length; i++) {
+            const entry = entriesNeedingBackfill[i];
             try {
-              const relevantEvent = await findRelevantEvent(entry.timestamp);
-              if (relevantEvent) {
-                updateData.calendarEventId = relevantEvent.id;
-                updateData.calendarEventTitle = relevantEvent.title;
-                updateData.calendarEventAttendees = relevantEvent.attendees || [];
-                calendarLinked++;
+              const metadata = await extractMetadata(entry.memoryText);
+              
+              const updateData: any = {
+                mood: metadata.mood,
+                moodScore: metadata.moodScore,
+                detectedPeople: metadata.detectedPeople,
+              };
+              
+              if (calendarConnected && !entry.calendarEventId && entry.timestamp) {
+                try {
+                  const relevantEvent = await findRelevantEvent(entry.timestamp);
+                  if (relevantEvent) {
+                    updateData.calendarEventId = relevantEvent.id;
+                    updateData.calendarEventTitle = relevantEvent.title;
+                    updateData.calendarEventAttendees = relevantEvent.attendees || [];
+                    job.calendarLinked++;
+                  }
+                } catch (calErr) {
+                  console.warn(`Calendar lookup failed for entry ${entry.id}:`, calErr);
+                }
               }
-            } catch (calErr) {
-              // Non-fatal: just log and continue
-              console.warn(`Calendar lookup failed for entry ${entry.id}:`, calErr);
+              
+              await storage.updateLogEntry(entry.id, user.id, updateData);
+              
+              if (metadata.detectedPeople && metadata.detectedPeople.length > 0) {
+                for (const personName of metadata.detectedPeople) {
+                  await storage.upsertPerson(user.id, personName);
+                }
+              }
+              
+              job.processed++;
+            } catch (err) {
+              console.error(`Failed to backfill entry ${entry.id}:`, err);
+              job.errors++;
             }
+            
+            // Update progress
+            job.progress = Math.round(((i + 1) / entriesNeedingBackfill.length) * 100);
+            job.message = `Processing ${i + 1} of ${entriesNeedingBackfill.length} memories...`;
           }
           
-          await storage.updateLogEntry(entry.id, user.id, updateData);
+          // Mark complete
+          job.status = 'completed';
+          job.completedAt = new Date();
+          job.message = `Completed! Analyzed ${job.processed} memories${job.calendarLinked > 0 ? `, linked ${job.calendarLinked} to calendar` : ''}.`;
           
-          if (metadata.detectedPeople && metadata.detectedPeople.length > 0) {
-            for (const personName of metadata.detectedPeople) {
-              await storage.upsertPerson(user.id, personName);
-            }
-          }
-          
-          processed++;
-        } catch (err) {
-          console.error(`Failed to backfill entry ${entry.id}:`, err);
-          errors++;
+        } catch (error) {
+          console.error("Background backfill failed:", error);
+          job.status = 'failed';
+          job.completedAt = new Date();
+          job.message = 'Analysis failed. Please try again.';
         }
+      })();
+      
+    } catch (error) {
+      console.error("Failed to start backfill:", error);
+      sendErrorResponse(res, 500, "Failed to start re-analysis", error);
+    }
+  });
+
+  /**
+   * GET /api/backfill/status - Check background re-analysis progress
+   */
+  app.get("/api/backfill/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const job = backfillJobs.get(user.id);
+      
+      if (!job) {
+        return res.json({
+          status: 'idle',
+          message: 'No active re-analysis job',
+          timestamp: new Date().toISOString()
+        });
       }
       
       res.json({
-        status: 'success',
-        message: `Backfill complete`,
-        totalEntries: entries.length,
-        entriesProcessed: processed,
-        entriesSkipped: entries.length - entriesNeedingBackfill.length,
-        calendarLinked,
-        calendarConnected,
-        errors,
+        status: job.status,
+        progress: job.progress,
+        total: job.total,
+        processed: job.processed,
+        calendarLinked: job.calendarLinked,
+        errors: job.errors,
+        message: job.message,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to run backfill:", error);
-      sendErrorResponse(res, 500, "Failed to run backfill", error);
+      sendErrorResponse(res, 500, "Failed to get status", error);
+    }
+  });
+
+  /**
+   * DELETE /api/backfill/status - Clear completed job status
+   */
+  app.delete("/api/backfill/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const job = backfillJobs.get(user.id);
+      
+      if (job && job.status !== 'running') {
+        backfillJobs.delete(user.id);
+      }
+      
+      res.json({
+        status: 'cleared',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to clear status", error);
     }
   });
 

@@ -13,9 +13,21 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, CheckCircle2, XCircle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+
+interface BackfillStatus {
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'started' | 'already_running';
+  progress?: number;
+  total?: number;
+  processed?: number;
+  calendarLinked?: number;
+  message?: string;
+  toProcess?: number;
+}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
+  const [hasShownCompletion, setHasShownCompletion] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { sessionCategory, setSessionCategory } = useSessionCategory();
@@ -30,6 +42,16 @@ export default function SettingsPage() {
 
   const { data: calendarStatus } = useQuery<{ connected: boolean; provider: string | null }>({
     queryKey: ["/api/calendar/status"],
+  });
+
+  // Poll for backfill job status
+  const { data: backfillStatus } = useQuery<BackfillStatus>({
+    queryKey: ["/api/backfill/status"],
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Poll every 2 seconds while running, stop when complete
+      return data?.status === 'running' ? 2000 : false;
+    },
   });
 
   const updateSettingsMutation = useMutation({
@@ -47,26 +69,49 @@ export default function SettingsPage() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
-      const calendarMsg = data.calendarLinked > 0 
-        ? ` Linked ${data.calendarLinked} to calendar events.` 
-        : data.calendarConnected 
-          ? '' 
-          : ' Connect calendar to link meetings.';
-      toast({ 
-        title: "AI Analysis Complete", 
-        description: `Processed ${data.entriesProcessed} memories.${calendarMsg}`
-      });
+      setHasShownCompletion(false); // Reset so we show completion when done
+      if (data.status === 'started') {
+        toast({ 
+          title: "Re-analysis Started", 
+          description: `Processing ${data.toProcess} memories in the background. You can continue using the app.`
+        });
+      } else if (data.status === 'already_running') {
+        toast({ 
+          title: "Already Running", 
+          description: "A re-analysis is already in progress."
+        });
+      }
+      // Start polling
+      queryClient.invalidateQueries({ queryKey: ["/api/backfill/status"] });
     },
     onError: () => {
       toast({ 
         title: "Analysis Failed", 
-        description: "Could not process memories. Please try again.",
+        description: "Could not start re-analysis. Please try again.",
         variant: "destructive"
       });
     },
   });
+
+  // Show completion toast when job finishes
+  useEffect(() => {
+    if (backfillStatus?.status === 'completed' && !hasShownCompletion) {
+      setHasShownCompletion(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ 
+        title: "Re-analysis Complete!", 
+        description: backfillStatus.message || `Processed ${backfillStatus.processed} memories.`
+      });
+    } else if (backfillStatus?.status === 'failed' && !hasShownCompletion) {
+      setHasShownCompletion(true);
+      toast({ 
+        title: "Re-analysis Failed", 
+        description: backfillStatus.message || "Something went wrong. Please try again.",
+        variant: "destructive"
+      });
+    }
+  }, [backfillStatus?.status, hasShownCompletion, queryClient, toast, backfillStatus?.message, backfillStatus?.processed]);
 
   useEffect(() => {
     if (currentSettings) {
@@ -273,20 +318,45 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Re-analyze all your memories to extract mood, emotions, people mentioned, and link to calendar events. 
                   This is useful if you have older memories that were created before these features were added.
                 </p>
+                
+                {/* Progress indicator when running */}
+                {backfillStatus?.status === 'running' && (
+                  <div className="space-y-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-primary font-medium">Processing in background...</span>
+                      <span className="text-muted-foreground">{backfillStatus.progress}%</span>
+                    </div>
+                    <Progress value={backfillStatus.progress || 0} className="h-2" />
+                    <p className="text-xs text-muted-foreground">{backfillStatus.message}</p>
+                  </div>
+                )}
+
+                {/* Completion message */}
+                {backfillStatus?.status === 'completed' && (
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      <span className="text-sm text-green-500 font-medium">{backfillStatus.message}</span>
+                    </div>
+                  </div>
+                )}
+
                 <Button
                   data-testid="button-backfill"
                   onClick={() => backfillMutation.mutate()}
-                  disabled={backfillMutation.isPending}
+                  disabled={backfillMutation.isPending || backfillStatus?.status === 'running'}
                   variant="outline"
                   className="w-full"
                 >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${backfillMutation.isPending ? 'animate-spin' : ''}`} />
-                  {backfillMutation.isPending ? "Analyzing memories..." : "Re-analyze All Memories"}
+                  <RefreshCw className={`w-4 h-4 mr-2 ${backfillStatus?.status === 'running' ? 'animate-spin' : ''}`} />
+                  {backfillStatus?.status === 'running' 
+                    ? `Processing ${backfillStatus.processed || 0} of ${backfillStatus.total || 0}...` 
+                    : "Re-analyze All Memories"}
                 </Button>
               </div>
             </CardContent>
