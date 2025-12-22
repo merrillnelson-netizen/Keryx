@@ -1001,10 +1001,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/people - Get all tracked people for the user
    * Requires authentication
+   * Automatically syncs mention counts before returning data
    */
   app.get("/api/people", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
+      
+      // Sync mention counts to ensure accuracy
+      await storage.syncPeopleMentionCounts(user.id);
+      
       const userPeople = await storage.getPeople(user.id);
       
       res.json({

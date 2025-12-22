@@ -540,6 +540,45 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
+   * Recalculate and sync mention counts for all people based on actual memories
+   * This fixes any drift between stored counts and real data
+   */
+  async syncPeopleMentionCounts(userId: string): Promise<{ updated: number }> {
+    try {
+      const userPeople = await this.getPeople(userId);
+      let updated = 0;
+
+      for (const person of userPeople) {
+        // Count actual memories mentioning this person
+        const mentions = await this.getPersonMentions(userId, person.name);
+        const actualCount = mentions.length;
+        
+        // Find the most recent mention date
+        const lastMentioned = mentions.length > 0 
+          ? mentions[0].timestamp 
+          : person.lastMentioned;
+
+        // Update if count differs
+        if (actualCount !== person.mentionCount) {
+          await db
+            .update(people)
+            .set({ 
+              mentionCount: actualCount,
+              lastMentioned: lastMentioned
+            })
+            .where(eq(people.id, person.id));
+          updated++;
+        }
+      }
+
+      return { updated };
+    } catch (error) {
+      console.error('Failed to sync people mention counts:', error);
+      throw new Error('Database error while syncing mention counts');
+    }
+  }
+
+  /**
    * MOOD ANALYTICS METHODS
    * Analyze emotional patterns across memories
    */
