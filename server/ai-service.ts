@@ -289,16 +289,28 @@ export async function generateThematicInsights(
       `[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`
     ).join('\n\n');
 
-    const prompt = question 
-      ? `Based on the following memories, answer this question: "${question}"\n\nMemories:\n${memorySummary}`
-      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}`;
+    // Use different system prompts based on whether user asked a specific question
+    const systemPrompt = question 
+      ? `You are an expert life coach and personal analyst. The user is asking a specific question about their memories. 
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert life coach and personal analyst. Analyze the user's memories to identify:
+FOCUS YOUR ANSWER ON THEIR QUESTION: "${question}"
+
+Analyze the memories to directly answer their question. Your response should:
+1. SUMMARY: Directly answer their specific question based on the memories
+2. PATTERNS: List specific patterns or themes from the memories that relate to their question
+3. RECOMMENDATIONS: Provide actionable suggestions that address their question
+4. TIMESPAN: Description of the time period covered
+
+Be specific to their question. Don't give a generic life analysis - focus on what they asked about.
+
+Respond with JSON in this format:
+{
+  "summary": "A direct answer to their question based on the memories",
+  "patterns": ["relevant pattern 1", "relevant pattern 2", ...],
+  "recommendations": ["targeted suggestion 1", "targeted suggestion 2", ...],
+  "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
+}`
+      : `You are an expert life coach and personal analyst. Analyze the user's memories to identify:
 
 1. SUMMARY: A concise overview of what these memories reveal about the user's life/work during this period
 2. PATTERNS: Recurring themes, behaviors, emotional patterns, or concerns
@@ -313,11 +325,22 @@ Respond with JSON in this format:
   "patterns": ["pattern 1", "pattern 2", ...],
   "recommendations": ["suggestion 1", "suggestion 2", ...],
   "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
-}`,
+}`;
+
+    const userPrompt = question 
+      ? `Here are my memories. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}`
+      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
         },
         {
           role: "user",
-          content: prompt,
+          content: userPrompt,
         },
       ],
       response_format: { type: "json_object" },
