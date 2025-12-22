@@ -40,7 +40,12 @@ export default function SettingsPage() {
     queryKey: ["/api/categories"],
   });
 
-  const { data: calendarStatus } = useQuery<{ connected: boolean; provider: string | null }>({
+  const { data: calendarStatus } = useQuery<{ 
+    connected: boolean; 
+    provider: string | null;
+    google: boolean;
+    outlook: boolean;
+  }>({
     queryKey: ["/api/calendar/status"],
   });
 
@@ -259,33 +264,68 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base">Connection Status</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Link memories to calendar events automatically
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {calendarStatus?.connected ? (
-                    <>
+              <p className="text-sm text-muted-foreground">
+                Connect a calendar to automatically link memories to meetings.
+              </p>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                      <span className="text-blue-500 text-xs font-bold">G</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Google Calendar</span>
+                      {calendarStatus?.google && calendarStatus.provider === 'google' && (
+                        <p className="text-xs text-green-500">Active</p>
+                      )}
+                      {calendarStatus?.google && calendarStatus.provider !== 'google' && (
+                        <p className="text-xs text-muted-foreground">Connected (secondary)</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {calendarStatus?.google ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <span className="text-sm text-green-500 font-medium">
-                        {calendarStatus.provider === 'google' ? 'Google Calendar' : 
-                         calendarStatus.provider === 'outlook' ? 'Outlook Calendar' : 'Connected'}
-                      </span>
-                    </>
-                  ) : (
-                    <>
+                    ) : (
                       <XCircle className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Not connected</span>
-                    </>
-                  )}
+                    )}
+                    <span className={`text-sm ${calendarStatus?.google ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {calendarStatus?.google ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                      <span className="text-cyan-500 text-xs font-bold">O</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Outlook Calendar</span>
+                      {calendarStatus?.outlook && calendarStatus.provider === 'outlook' && (
+                        <p className="text-xs text-green-500">Active</p>
+                      )}
+                      {calendarStatus?.outlook && calendarStatus.provider !== 'outlook' && (
+                        <p className="text-xs text-muted-foreground">Connected (secondary)</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {calendarStatus?.outlook ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-muted-foreground" />
+                    )}
+                    <span className={`text-sm ${calendarStatus?.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
+                      {calendarStatus?.outlook ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {calendarStatus?.connected && (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-2">
                   <div className="space-y-0.5">
                     <Label className="text-base">Auto-link Meetings</Label>
                     <p className="text-xs text-muted-foreground">
@@ -303,9 +343,8 @@ export default function SettingsPage() {
               )}
 
               {!calendarStatus?.connected && (
-                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                  Connect your Google Calendar or Outlook to automatically link memories to meetings. 
-                  This helps track meeting notes and context.
+                <p className="text-xs text-muted-foreground mt-2">
+                  Calendars are connected via the Replit integrations panel.
                 </p>
               )}
             </CardContent>

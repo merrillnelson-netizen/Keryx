@@ -8,7 +8,8 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
-import { isCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { isOutlookConnected } from "./outlook-calendar-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 
 // Background job tracking for re-analysis
@@ -768,15 +769,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/calendar/status - Check if calendar is connected
-   * Returns which calendar provider is connected (google or outlook)
+   * Returns status for both Google and Outlook providers
    */
   app.get("/api/calendar/status", requireAuth, async (req, res) => {
     try {
-      const provider = await getConnectedCalendarProvider();
+      const [googleConnected, outlookConnected] = await Promise.all([
+        isGoogleCalendarConnected(),
+        isOutlookConnected()
+      ]);
+      
+      // Active provider (Google preferred when both connected)
+      const activeProvider = googleConnected ? 'google' : outlookConnected ? 'outlook' : null;
+      
       res.json({
         status: 'success',
-        connected: provider !== null,
-        provider: provider,
+        connected: activeProvider !== null,
+        provider: activeProvider,
+        google: googleConnected,
+        outlook: outlookConnected,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -784,6 +794,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'success',
         connected: false,
         provider: null,
+        google: false,
+        outlook: false,
         timestamp: new Date().toISOString()
       });
     }

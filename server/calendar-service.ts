@@ -84,7 +84,7 @@ export interface CalendarEvent {
 /**
  * Check if Google Calendar is connected and available
  */
-async function isGoogleCalendarConnected(): Promise<boolean> {
+export async function isGoogleCalendarConnected(): Promise<boolean> {
   try {
     await getAccessToken();
     return true;
