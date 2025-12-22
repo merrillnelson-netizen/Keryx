@@ -129,17 +129,14 @@ export default function SettingsPage() {
     updateSettingsMutation.mutate(settings);
   };
 
-  // Auto-save provider preference when clicked
+  // Auto-save provider preference when clicked (sends full settings to preserve other fields)
   const handleProviderSelect = (type: 'calendar' | 'email', provider: string) => {
+    if (updateSettingsMutation.isPending) return; // Prevent rapid clicks
     const newSettings = type === 'calendar' 
       ? { ...settings, calendarProvider: provider }
       : { ...settings, emailProvider: provider };
     setSettings(newSettings);
-    updateSettingsMutation.mutate(
-      type === 'calendar' 
-        ? { calendarProvider: provider } 
-        : { emailProvider: provider }
-    );
+    updateSettingsMutation.mutate(newSettings);
   };
 
   if (isLoading) {

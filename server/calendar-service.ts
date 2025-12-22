@@ -252,10 +252,7 @@ async function createGoogleCalendarEvent(
   }
 ): Promise<CalendarEvent | null> {
   try {
-    console.log('[Calendar] Creating Google event:', { title, startDateTime, endDateTime, options });
-    
     const calendar = await getCalendarClient();
-    console.log('[Calendar] Got Google calendar client successfully');
     
     // Ensure datetime strings are valid ISO format
     const startDate = new Date(startDateTime);
@@ -294,16 +291,12 @@ async function createGoogleCalendarEvent(
       }
     }
 
-    console.log('[Calendar] Inserting event:', JSON.stringify(event, null, 2));
-    
     const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: event,
       sendUpdates: 'none', // Don't send invite emails automatically
     });
 
-    console.log('[Calendar] Event created successfully:', response.data.id);
-    
     const created = response.data;
     return {
       id: created.id || '',
