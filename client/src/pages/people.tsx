@@ -323,10 +323,7 @@ export default function People() {
               <Card 
                 key={person.id} 
                 data-testid={`person-card-${person.id}`}
-                className={cn(
-                  "glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl",
-                  selectedPerson?.id === person.id && "ring-2 ring-primary"
-                )}
+                className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
                 onClick={() => setSelectedPerson(person)}
               >
                 <CardHeader className="pb-2">
@@ -393,50 +390,66 @@ export default function People() {
           </div>
         )}
 
-        {/* Mentions Panel */}
-        {selectedPerson && (
-          <Card className="glass-card border-white/20 mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-primary" />
-                Memories mentioning {selectedPerson.name}
-              </CardTitle>
-              <CardDescription>
-                {mentions.length} memories found
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {mentionsLoading ? (
-                <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                </div>
-              ) : !mentions.length ? (
-                <p className="text-muted-foreground text-center py-8">No memories found</p>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {mentions.map((entry: LogEntry) => (
-                    <div 
-                      key={entry.id} 
-                      className="glass-card p-3 rounded-lg"
-                      data-testid={`mention-${entry.id}`}
-                    >
-                      <p className="text-foreground">{entry.memoryText}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs border-white/20">
-                          {new Date(entry.timestamp!).toLocaleDateString()}
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                          {entry.topicTag}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
+
+      {/* Memories Popup Dialog */}
+      <Dialog open={!!selectedPerson} onOpenChange={() => setSelectedPerson(null)}>
+        <DialogContent className="glass-card-strong border-white/20 max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <span className="text-lg">{selectedPerson?.name}</span>
+                {selectedPerson?.relationship && (
+                  <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary border-primary/30 text-xs">
+                    {selectedPerson.relationship}
+                  </Badge>
+                )}
+              </div>
+            </DialogTitle>
+            <DialogDescription>
+              {mentions.length} {mentions.length === 1 ? 'memory' : 'memories'} mentioning this person
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto mt-4 pr-2 -mr-2">
+            {mentionsLoading ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : !mentions.length ? (
+              <p className="text-muted-foreground text-center py-8">No memories found</p>
+            ) : (
+              <div className="space-y-3">
+                {mentions.map((entry: LogEntry) => (
+                  <div 
+                    key={entry.id} 
+                    className="glass-card p-3 rounded-lg border border-white/10"
+                    data-testid={`mention-${entry.id}`}
+                  >
+                    <p className="text-foreground text-sm">{entry.memoryText}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <Badge variant="outline" className="text-xs border-white/20">
+                        {new Date(entry.timestamp!).toLocaleDateString()}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
+                        {entry.topicTag}
+                      </Badge>
+                      {entry.mood && (
+                        <Badge variant="outline" className="text-xs border-white/20">
+                          {entry.mood}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Person Dialog */}
       <Dialog open={!!editingPerson} onOpenChange={() => setEditingPerson(null)}>
