@@ -418,16 +418,36 @@ export class DatabaseStorage implements IStorage {
       const existingSettings = await this.getSettings(userId);
       
       if (existingSettings) {
+        // Merge with existing settings - only update fields that are explicitly provided (not undefined)
+        const mergedSettings: Record<string, any> = { updatedAt: new Date() };
+        for (const [key, value] of Object.entries(newSettings)) {
+          if (value !== undefined) {
+            mergedSettings[key] = value;
+          }
+        }
+        
         const [updated] = await db
           .update(settings)
-          .set({ ...newSettings, updatedAt: new Date() })
+          .set(mergedSettings)
           .where(and(eq(settings.id, existingSettings.id), eq(settings.userId, userId)))
           .returning();
         return updated;
       } else {
+        // For new settings, use defaults for any missing fields
+        const defaultSettings = {
+          voiceResponseEnabled: true,
+          autoSaveEnabled: true,
+          calendarAutoLinkEnabled: true,
+          calendarProvider: null,
+          emailProvider: null,
+          emailNotificationsEnabled: false,
+          providerSelectionMode: 'default',
+          ...newSettings,
+        };
+        
         const [created] = await db
           .insert(settings)
-          .values({ ...newSettings, userId })
+          .values({ ...defaultSettings, userId })
           .returning();
         return created;
       }
