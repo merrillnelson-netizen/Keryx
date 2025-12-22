@@ -11,7 +11,7 @@ import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent 
  * Saved memory data for calendar integration
  */
 export interface SavedMemoryData {
-  id?: number;
+  id?: string;
   memoryText: string;
   topicTag: string;
 }

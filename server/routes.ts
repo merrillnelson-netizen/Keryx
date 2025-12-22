@@ -53,7 +53,7 @@ const calendarEventCreateSchema = z.object({
   attendees: z.array(z.string()).optional(),
   location: z.string().max(500).optional(),
   description: z.string().max(2000).optional(),
-  memoryId: z.number().int().positive().optional(),
+  memoryId: z.string().uuid().optional(),
 });
 
 const calendarDuplicateCheckSchema = z.object({

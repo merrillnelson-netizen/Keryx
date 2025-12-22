@@ -19,7 +19,7 @@ interface DetectedEvent {
 
 interface CalendarEventSuggestionProps {
   memoryText: string;
-  memoryId?: number;
+  memoryId?: string;
   onDismiss: () => void;
   onCreated?: () => void;
 }
