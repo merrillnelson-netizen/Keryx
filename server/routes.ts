@@ -953,6 +953,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           outlook: outlookMail,
           activeProvider: activeEmailProvider,
           userPreference: userSettings?.emailProvider || null,
+          enabled: userSettings?.emailIntegrationEnabled !== false,
+          capabilities: {
+            gmail: { send: true, read: false },
+            outlook: { send: true, read: true },
+          },
         },
         providerSelectionMode: userSettings?.providerSelectionMode || 'default',
         timestamp: new Date().toISOString()
@@ -961,7 +966,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         status: 'success',
         calendar: { google: false, outlook: false, activeProvider: null, userPreference: null },
-        email: { gmail: false, outlook: false, activeProvider: null, userPreference: null },
+        email: { 
+          gmail: false, 
+          outlook: false, 
+          activeProvider: null, 
+          userPreference: null, 
+          enabled: true,
+          capabilities: {
+            gmail: { send: true, read: false },
+            outlook: { send: true, read: true },
+          },
+        },
         providerSelectionMode: 'default',
         timestamp: new Date().toISOString()
       });
