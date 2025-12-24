@@ -12,7 +12,9 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 
 interface BackfillStatus {
@@ -28,6 +30,7 @@ interface BackfillStatus {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
   const [hasShownCompletion, setHasShownCompletion] = useState(false);
+  const [newProject, setNewProject] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { sessionCategory, setSessionCategory } = useSessionCategory();
@@ -264,6 +267,118 @@ export default function SettingsPage() {
                   </p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-green-500" />
+                Active Projects
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Mark topics as active focus areas. These topics will be weighted higher in search results 
+                and given priority in your daily briefings.
+              </p>
+              
+              <div className="flex gap-2">
+                <Input
+                  data-testid="input-new-project"
+                  placeholder="Add a topic (e.g., Product Launch, Home Renovation)"
+                  value={newProject}
+                  onChange={(e) => setNewProject(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newProject.trim()) {
+                      const current = settings.activeProjects || [];
+                      if (!current.includes(newProject.trim())) {
+                        const newProjects = [...current, newProject.trim()];
+                        setSettings(prev => ({ ...prev, activeProjects: newProjects }));
+                        updateSettingsMutation.mutate({ ...settings, activeProjects: newProjects });
+                      }
+                      setNewProject("");
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  data-testid="button-add-project"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    if (newProject.trim()) {
+                      const current = settings.activeProjects || [];
+                      if (!current.includes(newProject.trim())) {
+                        const newProjects = [...current, newProject.trim()];
+                        setSettings(prev => ({ ...prev, activeProjects: newProjects }));
+                        updateSettingsMutation.mutate({ ...settings, activeProjects: newProjects });
+                      }
+                      setNewProject("");
+                    }
+                  }}
+                  disabled={!newProject.trim()}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {settings.activeProjects && settings.activeProjects.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {settings.activeProjects.map((project, idx) => (
+                    <Badge 
+                      key={idx} 
+                      variant="outline" 
+                      className="bg-green-500/10 border-green-500/30 text-green-400 py-1.5 pr-1.5 flex items-center gap-1"
+                    >
+                      {project}
+                      <button
+                        data-testid={`button-remove-project-${idx}`}
+                        onClick={() => {
+                          const newProjects = settings.activeProjects?.filter((_, i) => i !== idx) || [];
+                          setSettings(prev => ({ ...prev, activeProjects: newProjects }));
+                          updateSettingsMutation.mutate({ ...settings, activeProjects: newProjects });
+                        }}
+                        className="ml-1 hover:bg-green-500/20 rounded p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  No active projects set. Add topics you're currently focused on.
+                </p>
+              )}
+              
+              {categories.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <p className="text-xs text-muted-foreground">Quick add from your categories:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {categories
+                      .filter(cat => !settings.activeProjects?.includes(cat.name))
+                      .slice(0, 8)
+                      .map((category) => (
+                        <Button
+                          key={category.id}
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            const current = settings.activeProjects || [];
+                            const newProjects = [...current, category.name];
+                            setSettings(prev => ({ ...prev, activeProjects: newProjects }));
+                            updateSettingsMutation.mutate({ ...settings, activeProjects: newProjects });
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          {category.name}
+                        </Button>
+                      ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -396,13 +396,15 @@ export interface MorningBriefing {
  * @param userName - User's name for personalization
  * @param localHour - Local hour for time-of-day greeting
  * @param recentEmails - Recent emails to cross-reference with memories
+ * @param activeProjects - Topics marked as current focus areas (prioritized in briefing)
  * @returns Promise<MorningBriefing>
  */
 export async function generateMorningBriefing(
   recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[] }>,
   userName?: string,
   localHour?: number,
-  recentEmails?: EmailContext[]
+  recentEmails?: EmailContext[],
+  activeProjects?: string[]
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -428,6 +430,12 @@ export async function generateMorningBriefing(
       ).join('\n\n')}`;
     }
 
+    // Format active projects context
+    let activeProjectsContext = '';
+    if (activeProjects && activeProjects.length > 0) {
+      activeProjectsContext = `\n\nACTIVE FOCUS AREAS (prioritize these topics): ${activeProjects.join(', ')}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -435,7 +443,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ' and emails' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ' and emails' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}, create a personalized briefing that:
 1. GREETING: A warm, personalized greeting mentioning their name if provided
 2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
 3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
@@ -460,8 +468,8 @@ Respond with JSON:
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${emailContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${emailContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${activeProjectsContext}${emailContext}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${activeProjectsContext}${emailContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },

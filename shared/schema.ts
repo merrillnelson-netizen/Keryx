@@ -170,6 +170,8 @@ export const settings = pgTable("settings", {
   emailNotificationsEnabled: boolean("email_notifications_enabled").default(false), // Send email summaries/reminders
   // Provider selection mode: 'default' uses settings, 'ask' prompts per-memory
   providerSelectionMode: text("provider_selection_mode").default("default"), // 'default' or 'ask'
+  // Active projects: topics marked as current focus for higher relevance weighting
+  activeProjects: text("active_projects").array(), // Array of topic names marked as active focus areas
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

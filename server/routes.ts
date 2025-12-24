@@ -1469,6 +1469,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Email fetch failed, continue without email context
       }
       
+      // Get user's active projects for priority weighting
+      const userSettings = await storage.getSettings(user.id);
+      const activeProjects = userSettings?.activeProjects || undefined;
+      
       const briefing = await generateMorningBriefing(
         recentMemories.map((m: any) => ({
           memoryText: m.memoryText,
@@ -1480,7 +1484,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })),
         user.username,
         localHour,
-        emailContext.length > 0 ? emailContext : undefined
+        emailContext.length > 0 ? emailContext : undefined,
+        activeProjects
       );
       
       res.json({
