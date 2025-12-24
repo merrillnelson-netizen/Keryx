@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 
 interface MobileLayoutProps {
   children: React.ReactNode;
@@ -32,6 +32,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-80 p-0">
+              <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
               <div className="bg-surface h-full">
                 <div className="p-6 border-b border-outline">
                   <h1 className="text-xl font-medium text-foreground">Helix</h1>

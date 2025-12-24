@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
@@ -140,6 +140,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-80 p-0 glass-card-strong border-white/20">
+                  <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <div className="flex flex-col h-full">
                     {/* Mobile Menu Header */}
                     <div className="p-6 border-b border-white/10">
