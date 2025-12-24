@@ -16,7 +16,8 @@ import {
   CheckCircle,
   Info,
   RefreshCw,
-  Loader2
+  Loader2,
+  Mail
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
@@ -28,6 +29,7 @@ interface MorningBriefing {
   reminders: string[];
   moodTrend: string;
   affirmation: string;
+  emailHighlights?: string[];
 }
 
 interface PatternAlert {
@@ -80,6 +82,7 @@ const getAlertStyle = (type: PatternAlert["type"]) => {
 interface BriefingResponse {
   data: MorningBriefing;
   memoriesAnalyzed: number;
+  emailsAnalyzed?: number;
   generatedAt: string;
 }
 
@@ -219,6 +222,23 @@ export default function Dashboard() {
                       >
                         {reminder}
                       </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Email Highlights */}
+              {briefing.emailHighlights && briefing.emailHighlights.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-foreground flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-blue-500" />
+                    Relevant Emails
+                  </h4>
+                  <div className="grid gap-2">
+                    {briefing.emailHighlights.map((highlight, i) => (
+                      <div key={i} className="glass-card p-3 rounded-lg flex items-start gap-3 border-l-2 border-l-blue-500">
+                        <p className="text-muted-foreground text-sm">{highlight}</p>
+                      </div>
                     ))}
                   </div>
                 </div>

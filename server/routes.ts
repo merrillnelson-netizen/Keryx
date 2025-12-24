@@ -1416,7 +1416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/briefing - Generate personalized morning/daily briefing
    * 
    * Returns an AI-generated summary of recent memories with focus areas,
-   * reminders, mood trends, and an encouraging affirmation.
+   * reminders, mood trends, email highlights, and an encouraging affirmation.
    */
   app.get("/api/briefing", requireAuth, aiLimiter, async (req, res) => {
     try {
@@ -1430,6 +1430,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const memories = await storage.getLogEntries(user.id, 100);
       const recentMemories = memories.filter((m: any) => m.timestamp >= sevenDaysAgo);
       
+      // Fetch recent emails from user's preferred provider (or any connected provider)
+      let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
+      try {
+        const userSettings = await storage.getSettings(user.id);
+        const preferredEmailProvider = userSettings?.emailProvider;
+        
+        // Try Gmail first (if preferred or no preference)
+        if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
+          const gmailConnected = await isGmailConnected();
+          if (gmailConnected) {
+            const { getRecentEmails } = await import('./gmail-service');
+            const emails = await getRecentEmails(10);
+            emailContext = emails.map(e => ({
+              subject: e.subject,
+              from: e.from,
+              snippet: e.snippet,
+              date: e.date
+            }));
+          }
+        }
+        
+        // Try Outlook if Gmail not available or not preferred
+        if (emailContext.length === 0 && (!preferredEmailProvider || preferredEmailProvider === 'outlook')) {
+          const outlookConnected = await isOutlookMailConnected();
+          if (outlookConnected) {
+            const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+            const emails = await getOutlookRecentEmails(10);
+            emailContext = emails.map(e => ({
+              subject: e.subject,
+              from: e.from,
+              snippet: e.snippet,
+              date: e.date
+            }));
+          }
+        }
+      } catch (emailError) {
+        // Email fetch failed, continue without email context
+      }
+      
       const briefing = await generateMorningBriefing(
         recentMemories.map((m: any) => ({
           memoryText: m.memoryText,
@@ -1440,13 +1479,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           detectedPeople: m.detectedPeople || undefined,
         })),
         user.username,
-        localHour
+        localHour,
+        emailContext.length > 0 ? emailContext : undefined
       );
       
       res.json({
         status: 'success',
         data: briefing,
         memoriesAnalyzed: recentMemories.length,
+        emailsAnalyzed: emailContext.length,
         generatedAt: new Date().toISOString()
       });
     } catch (error) {
