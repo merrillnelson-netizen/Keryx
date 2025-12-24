@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
+import PendingActions from "@/components/pending-actions";
 
 interface MorningBriefing {
   greeting: string;
@@ -270,6 +271,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* Pending AI Actions */}
+        <PendingActions />
 
         {/* Pattern Alerts */}
         <Card className="glass-card border-white/20">

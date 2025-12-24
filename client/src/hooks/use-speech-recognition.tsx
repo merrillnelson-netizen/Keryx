@@ -136,6 +136,15 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       isProcessingRef.current = false;
 
       const successMessage = `Memory saved as ${data.data.topicTag}`;
+      
+      // AI action detection runs in background - invalidate pending actions after a delay
+      // to allow backend to process and create any pending actions
+      if (data.actionDetectionInitiated) {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
+        }, 3000); // Check after 3 seconds for new pending actions
+      }
+      
       setLastResponse(successMessage);
       
       // Store saved memory data for calendar event detection

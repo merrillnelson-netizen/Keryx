@@ -362,11 +362,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ).catch(err => console.error("Failed to track people:", err));
       }
 
+      // AI Action Detection: Fire-and-forget - runs in background without blocking response
+      // This ensures memory save is fast while action detection happens asynchronously
+      import('./ai-actions-service').then(({ processUserInputForActions }) => {
+        processUserInputForActions(user.id, memoryText, 'memory', logEntry.id)
+          .then(result => {
+            if (result.actionDetected) {
+              console.log(`AI action detected for memory ${logEntry.id}: ${result.action?.actionType || 'unknown'}`);
+            }
+          })
+          .catch(err => console.warn('AI action detection failed:', err));
+      }).catch(err => console.warn('Failed to load ai-actions-service:', err));
+
       res.status(201).json({
         status: 'success',
         data: logEntry,
         message: 'Memory saved successfully',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        // Flag that action detection is running in background
+        actionDetectionInitiated: true,
       });
     } catch (error) {
       // Log error for debugging but don't expose details to client

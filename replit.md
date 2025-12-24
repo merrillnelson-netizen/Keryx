@@ -128,9 +128,22 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - Google Places API Key (optional, for reverse geocoding)
 - Custom "Hey Helix" wake word model (.ppn file)
 
+### Phase 5: AI Task Execution (Completed)
+- **Actionable Request Detection**: AI analyzes voice input to detect actionable requests (schedule meeting, send email, set reminder).
+- **Action Types Supported**: `calendar.create`, `calendar.update`, `calendar.delete`, `email.send`, `email.reply`, `reminder.create`.
+- **Policy-Based Approval**: Users configure per-action-type policies in Settings (auto-execute, require confirmation, disabled).
+- **Database Tables**: `aiActions` (action lifecycle tracking), `aiActionPreferences` (user policies per action type).
+- **Action Lifecycle**: pending → approved → executing → completed/failed, with rollback capability for calendar events.
+- **Voice Flow Integration**: Memory save automatically triggers action detection via `processUserInputForActions()`.
+- **Dashboard Display**: PendingActions component shows awaiting actions with approve/reject buttons.
+- **AI Transparency**: Each action stores `aiReasoning` explaining why action was detected and how parameters were extracted.
+- **API Endpoints**: `/api/actions/pending`, `/api/actions/:id/approve`, `/api/actions/:id/reject`, `/api/actions/preferences`.
+- **Service File**: `server/ai-actions-service.ts` - action detection (GPT-4o-mini), policy checking, execution routing.
+- **Settings UI**: AI Actions tab with toggles for each action type's approval policy.
+
 ### Future Phases
-- **Phase 5 (Life Integration)**: Photos, shared memories.
-- **Phase 6 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
+- **Phase 6 (Life Integration)**: Photos, shared memories.
+- **Phase 7 (Privacy Hardening)**: End-to-end encryption, selective AI processing.
 
 ## External Dependencies
 

@@ -7,12 +7,12 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Settings, Category } from "@shared/schema";
+import { Settings, Category, AiActionPreference, AI_ACTION_TYPES, AI_ACTION_POLICIES } from "@shared/schema";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -62,6 +62,25 @@ export default function SettingsPage() {
     },
   });
 
+  // AI Actions: available action types and user preferences
+  interface AvailableActionType {
+    actionType: string;
+    category: string;
+    description: string;
+    available: boolean;
+    provider?: string;
+  }
+  
+  const { data: availableActions = [] } = useQuery<AvailableActionType[]>({
+    queryKey: ["/api/actions/available"],
+    select: (response: any) => response.data || [],
+  });
+
+  const { data: actionPreferences = [] } = useQuery<AiActionPreference[]>({
+    queryKey: ["/api/actions/preferences"],
+    select: (response: any) => response.data || [],
+  });
+
   const updateSettingsMutation = useMutation({
     mutationFn: (newSettings: Partial<Settings>) =>
       apiRequest("PUT", "/api/settings", newSettings),
@@ -101,6 +120,60 @@ export default function SettingsPage() {
       });
     },
   });
+
+  // Update AI action preference
+  const updateActionPrefMutation = useMutation({
+    mutationFn: async ({ actionType, policy }: { actionType: string; policy: string }) => {
+      const response = await apiRequest("PUT", `/api/actions/preferences/${encodeURIComponent(actionType)}`, { policy });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/preferences"] });
+      toast({ title: "AI action preference updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to update preference", variant: "destructive" });
+    },
+  });
+
+  // Get the current policy for an action type
+  const getActionPolicy = (actionType: string): string => {
+    const pref = actionPreferences.find(p => p.actionType === actionType);
+    return pref?.policy || AI_ACTION_POLICIES.CONFIRM;
+  };
+
+  // Handle policy change for an action
+  const handlePolicyChange = (actionType: string, policy: string) => {
+    updateActionPrefMutation.mutate({ actionType, policy });
+  };
+
+  // Get friendly name for action type
+  const getActionTypeName = (actionType: string): string => {
+    const names: Record<string, string> = {
+      [AI_ACTION_TYPES.CALENDAR_CREATE]: 'Create Calendar Events',
+      [AI_ACTION_TYPES.CALENDAR_UPDATE]: 'Update Calendar Events',
+      [AI_ACTION_TYPES.CALENDAR_DELETE]: 'Delete Calendar Events',
+      [AI_ACTION_TYPES.EMAIL_SEND]: 'Send Emails',
+      [AI_ACTION_TYPES.EMAIL_REPLY]: 'Reply to Emails',
+      [AI_ACTION_TYPES.REMINDER_CREATE]: 'Create Reminders',
+      [AI_ACTION_TYPES.PERSON_UPDATE]: 'Update People Info',
+    };
+    return names[actionType] || actionType;
+  };
+
+  // Get icon for policy
+  const getPolicyIcon = (policy: string) => {
+    switch (policy) {
+      case AI_ACTION_POLICIES.AUTO:
+        return <Zap className="w-4 h-4 text-green-500" />;
+      case AI_ACTION_POLICIES.CONFIRM:
+        return <ShieldQuestion className="w-4 h-4 text-yellow-500" />;
+      case AI_ACTION_POLICIES.DISABLED:
+        return <ShieldOff className="w-4 h-4 text-red-500" />;
+      default:
+        return <ShieldCheck className="w-4 h-4 text-muted-foreground" />;
+    }
+  };
 
   // Show completion toast when job finishes
   useEffect(() => {
@@ -589,6 +662,97 @@ export default function SettingsPage() {
                   Email services are connected via the Replit integrations panel.
                 </p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-violet-500" />
+                AI Task Execution
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Allow Helix to perform actions on your behalf. Choose how each action type should be handled.
+              </p>
+              
+              <div className="space-y-3">
+                {availableActions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">
+                    Connect a calendar or email service to enable AI actions.
+                  </p>
+                ) : (
+                  availableActions.map((action) => {
+                    const currentPolicy = getActionPolicy(action.actionType);
+                    return (
+                      <div 
+                        key={action.actionType}
+                        className={`p-3 rounded-lg border ${
+                          action.available 
+                            ? 'bg-muted/20 border-white/10' 
+                            : 'bg-muted/10 border-white/5 opacity-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {getPolicyIcon(currentPolicy)}
+                            <div>
+                              <span className="text-sm font-medium">{getActionTypeName(action.actionType)}</span>
+                              <p className="text-xs text-muted-foreground">{action.description}</p>
+                              {action.provider && (
+                                <Badge variant="outline" className="text-xs mt-1">
+                                  via {action.provider}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <Select 
+                            value={currentPolicy} 
+                            onValueChange={(value) => handlePolicyChange(action.actionType, value)}
+                            disabled={!action.available || updateActionPrefMutation.isPending}
+                          >
+                            <SelectTrigger 
+                              className="w-32 h-8 text-xs"
+                              data-testid={`select-policy-${action.actionType.replace('.', '-')}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">
+                                <span className="flex items-center gap-2">
+                                  <Zap className="w-3 h-3 text-green-500" /> Auto
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="confirm">
+                                <span className="flex items-center gap-2">
+                                  <ShieldQuestion className="w-3 h-3 text-yellow-500" /> Confirm
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="disabled">
+                                <span className="flex items-center gap-2">
+                                  <ShieldOff className="w-3 h-3 text-red-500" /> Disabled
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <div className="flex gap-2 text-xs text-muted-foreground">
+                  <Bot className="w-4 h-4 text-violet-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p><strong>Auto:</strong> AI executes immediately without asking</p>
+                    <p><strong>Confirm:</strong> AI proposes actions for your approval</p>
+                    <p><strong>Disabled:</strong> AI will never perform this action</p>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
