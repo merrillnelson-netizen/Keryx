@@ -63,6 +63,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isProcessingRef = useRef(false);
   const modeRef = useRef<"log" | "query" | null>(null);
+  // Cache pre-warmed geolocation to avoid timeout issues when saving
+  const cachedLocationRef = useRef<{ lat: number; lng: number; accuracy?: number } | null>(null);
 
   // Helper to update both mode state and ref (fixes React closure issue)
   const setMode = useCallback((newMode: "log" | "query" | null) => {
@@ -103,17 +105,29 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }
       }
       
-      // Capture geolocation if supported (truly non-blocking with short timeout)
+      // Capture geolocation - use pre-warmed cache first, then try fresh with longer timeout
       if (geoSupported) {
         try {
-          const geoPromise = requestLocation();
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
-          const geo = await Promise.race([geoPromise, timeoutPromise]);
-          if (geo && geo.lat && geo.lng) {
-            body.geoLat = geo.lat;
-            body.geoLng = geo.lng;
-            if (geo.accuracy) {
-              body.geoAccuracyMeters = geo.accuracy;
+          // First check if we have a pre-warmed location from when recording started
+          if (cachedLocationRef.current) {
+            body.geoLat = cachedLocationRef.current.lat;
+            body.geoLng = cachedLocationRef.current.lng;
+            if (cachedLocationRef.current.accuracy) {
+              body.geoAccuracyMeters = cachedLocationRef.current.accuracy;
+            }
+            // Clear cache after use
+            cachedLocationRef.current = null;
+          } else {
+            // No cached location - try fresh with 5 second timeout
+            const geoPromise = requestLocation();
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+            const geo = await Promise.race([geoPromise, timeoutPromise]);
+            if (geo && geo.lat && geo.lng) {
+              body.geoLat = geo.lat;
+              body.geoLng = geo.lng;
+              if (geo.accuracy) {
+                body.geoAccuracyMeters = geo.accuracy;
+              }
             }
           }
         } catch (geoError) {
@@ -452,11 +466,27 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       recognitionRef.current = newRecognition;
       newRecognition.start();
 
+      // Pre-warm GPS when recording starts (fire-and-forget)
+      // This gives the GPS time to acquire a fix while the user is speaking
+      if (geoSupported) {
+        requestLocation().then((geo) => {
+          if (geo && geo.lat && geo.lng) {
+            cachedLocationRef.current = {
+              lat: geo.lat,
+              lng: geo.lng,
+              accuracy: geo.accuracy ?? undefined,
+            };
+          }
+        }).catch(() => {
+          // Ignore pre-warm failures - we'll try again at save time
+        });
+      }
+
     } catch (error) {
       console.error('Error starting recognition:', error);
       setIsListening(false);
     }
-  }, [isSupported, isListening, processTranscript, settings, speak]);
+  }, [isSupported, isListening, processTranscript, settings, speak, geoSupported, requestLocation]);
 
   // Cleanup on unmount
   useEffect(() => {
