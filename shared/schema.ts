@@ -203,6 +203,65 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/**
+ * AI Actions table - tracks AI-proposed and executed actions
+ * Enables AI to perform tasks on behalf of users with approval workflows
+ */
+export const aiActions = pgTable("ai_actions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Action classification
+  actionType: text("action_type").notNull(), // 'calendar.create', 'calendar.delete', 'email.send', 'email.reply', 'reminder.create'
+  actionCategory: text("action_category").notNull(), // 'calendar', 'email', 'reminder', 'people'
+  // Source context - what triggered this action
+  sourceType: text("source_type").notNull(), // 'voice_input', 'memory', 'briefing', 'manual'
+  sourceId: varchar("source_id"), // Reference to log_entry.id or other source
+  sourceText: text("source_text"), // The user input that triggered this action
+  // Action details
+  title: text("title").notNull(), // Human-readable title: "Schedule meeting with John"
+  description: text("description"), // Detailed description of what will happen
+  payload: jsonb("payload").notNull(), // Action-specific data (event details, email content, etc.)
+  // Execution state
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected', 'executing', 'completed', 'failed', 'cancelled'
+  // AI reasoning for transparency
+  aiReasoning: text("ai_reasoning"), // Why the AI proposed this action
+  confidence: real("confidence"), // 0.0-1.0 confidence score
+  // Execution results
+  executedAt: timestamp("executed_at"),
+  resultData: jsonb("result_data"), // Response from the external service (created event ID, sent email ID, etc.)
+  errorMessage: text("error_message"), // Error details if failed
+  // Rollback capability
+  rollbackAvailable: boolean("rollback_available").default(false),
+  rollbackData: jsonb("rollback_data"), // Data needed to undo this action
+  rolledBackAt: timestamp("rolled_back_at"),
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"), // Auto-reject after this time if not approved
+}, (table) => ({
+  userIdIdx: index("ai_actions_user_id_idx").on(table.userId),
+  statusIdx: index("ai_actions_status_idx").on(table.status),
+  userStatusIdx: index("ai_actions_user_status_idx").on(table.userId, table.status),
+  createdAtIdx: index("ai_actions_created_at_idx").on(table.createdAt.desc()),
+}));
+
+/**
+ * AI Action Preferences - per-user settings for how AI should handle different action types
+ */
+export const aiActionPreferences = pgTable("ai_action_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  actionType: text("action_type").notNull(), // 'calendar.create', 'email.send', etc.
+  // Policy: how to handle this action type
+  policy: text("policy").notNull().default("confirm"), // 'auto' (execute immediately), 'confirm' (require approval), 'disabled' (never execute)
+  // Additional constraints
+  autoApproveConditions: jsonb("auto_approve_conditions"), // e.g., { maxDurationMinutes: 60, allowedRecipients: ['team@...'] }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userActionTypeIdx: uniqueIndex("ai_action_prefs_user_action_idx").on(table.userId, table.actionType),
+}));
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -235,6 +294,20 @@ export const insertPersonSchema = createInsertSchema(people).omit({
   lastMentioned: true,
 });
 
+export const insertAiActionSchema = createInsertSchema(aiActions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  executedAt: true,
+  rolledBackAt: true,
+});
+
+export const insertAiActionPreferenceSchema = createInsertSchema(aiActionPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // TypeScript types inferred from schemas
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -250,3 +323,73 @@ export type Category = typeof categories.$inferSelect;
 
 export type InsertPerson = z.infer<typeof insertPersonSchema>;
 export type Person = typeof people.$inferSelect;
+
+export type InsertAiAction = z.infer<typeof insertAiActionSchema>;
+export type AiAction = typeof aiActions.$inferSelect;
+
+export type InsertAiActionPreference = z.infer<typeof insertAiActionPreferenceSchema>;
+export type AiActionPreference = typeof aiActionPreferences.$inferSelect;
+
+// Action type constants for type safety
+export const AI_ACTION_TYPES = {
+  CALENDAR_CREATE: 'calendar.create',
+  CALENDAR_UPDATE: 'calendar.update', 
+  CALENDAR_DELETE: 'calendar.delete',
+  EMAIL_SEND: 'email.send',
+  EMAIL_REPLY: 'email.reply',
+  REMINDER_CREATE: 'reminder.create',
+  PERSON_UPDATE: 'person.update',
+} as const;
+
+export const AI_ACTION_CATEGORIES = {
+  CALENDAR: 'calendar',
+  EMAIL: 'email',
+  REMINDER: 'reminder',
+  PEOPLE: 'people',
+} as const;
+
+export const AI_ACTION_STATUSES = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  EXECUTING: 'executing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export const AI_ACTION_POLICIES = {
+  AUTO: 'auto',
+  CONFIRM: 'confirm',
+  DISABLED: 'disabled',
+} as const;
+
+// Payload schemas for different action types
+export const calendarCreatePayloadSchema = z.object({
+  summary: z.string(),
+  description: z.string().optional(),
+  startDateTime: z.string(), // ISO datetime
+  endDateTime: z.string(), // ISO datetime
+  attendees: z.array(z.string()).optional(), // Email addresses
+  location: z.string().optional(),
+  provider: z.enum(['google', 'outlook']).optional(),
+});
+
+export const emailSendPayloadSchema = z.object({
+  to: z.array(z.string()), // Email addresses
+  subject: z.string(),
+  body: z.string(),
+  cc: z.array(z.string()).optional(),
+  bcc: z.array(z.string()).optional(),
+  provider: z.enum(['gmail', 'outlook']).optional(),
+});
+
+export const reminderCreatePayloadSchema = z.object({
+  title: z.string(),
+  dueDateTime: z.string(), // ISO datetime
+  notes: z.string().optional(),
+});
+
+export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
+export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
+export type ReminderCreatePayload = z.infer<typeof reminderCreatePayloadSchema>;

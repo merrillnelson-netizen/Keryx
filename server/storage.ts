@@ -1,13 +1,15 @@
 import { 
-  users, logEntries, settings, categories, people,
+  users, logEntries, settings, categories, people, aiActions, aiActionPreferences,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
   type Category, type InsertCategory,
-  type Person, type InsertPerson
+  type Person, type InsertPerson,
+  type AiAction, type InsertAiAction,
+  type AiActionPreference, type InsertAiActionPreference
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -58,6 +60,18 @@ export interface IStorage {
   
   // Time capsule - memories from this day in previous years
   getOnThisDayMemories(userId: string): Promise<LogEntry[]>;
+  
+  // AI Actions (user-scoped)
+  getAiActions(userId: string, status?: string[], limit?: number): Promise<AiAction[]>;
+  getAiAction(id: string, userId: string): Promise<AiAction | undefined>;
+  createAiAction(action: InsertAiAction): Promise<AiAction>;
+  updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined>;
+  getPendingActions(userId: string): Promise<AiAction[]>;
+  
+  // AI Action Preferences (user-scoped)
+  getAiActionPreferences(userId: string): Promise<AiActionPreference[]>;
+  getAiActionPreference(userId: string, actionType: string): Promise<AiActionPreference | undefined>;
+  upsertAiActionPreference(userId: string, actionType: string, policy: string, conditions?: any): Promise<AiActionPreference>;
 }
 
 /**
@@ -790,6 +804,157 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch on this day memories:', error);
       throw new Error('Database error while fetching on this day memories');
+    }
+  }
+
+  /**
+   * AI ACTIONS METHODS
+   * Handle AI-proposed and executed actions with approval workflows
+   */
+
+  async getAiActions(userId: string, status?: string[], limit = 50): Promise<AiAction[]> {
+    try {
+      const conditions = [eq(aiActions.userId, userId)];
+      if (status && status.length > 0) {
+        conditions.push(inArray(aiActions.status, status));
+      }
+      
+      return await db
+        .select()
+        .from(aiActions)
+        .where(and(...conditions))
+        .orderBy(desc(aiActions.createdAt))
+        .limit(limit);
+    } catch (error) {
+      console.error('Failed to fetch AI actions:', error);
+      throw new Error('Database error while fetching AI actions');
+    }
+  }
+
+  async getAiAction(id: string, userId: string): Promise<AiAction | undefined> {
+    try {
+      const [action] = await db
+        .select()
+        .from(aiActions)
+        .where(and(eq(aiActions.id, id), eq(aiActions.userId, userId)));
+      return action;
+    } catch (error) {
+      console.error('Failed to fetch AI action:', error);
+      throw new Error('Database error while fetching AI action');
+    }
+  }
+
+  async createAiAction(action: InsertAiAction): Promise<AiAction> {
+    try {
+      const [created] = await db
+        .insert(aiActions)
+        .values(action)
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Failed to create AI action:', error);
+      throw new Error('Database error while creating AI action');
+    }
+  }
+
+  async updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined> {
+    try {
+      const [updated] = await db
+        .update(aiActions)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(and(eq(aiActions.id, id), eq(aiActions.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to update AI action:', error);
+      throw new Error('Database error while updating AI action');
+    }
+  }
+
+  async getPendingActions(userId: string): Promise<AiAction[]> {
+    try {
+      return await db
+        .select()
+        .from(aiActions)
+        .where(and(
+          eq(aiActions.userId, userId),
+          eq(aiActions.status, 'pending')
+        ))
+        .orderBy(desc(aiActions.createdAt));
+    } catch (error) {
+      console.error('Failed to fetch pending actions:', error);
+      throw new Error('Database error while fetching pending actions');
+    }
+  }
+
+  /**
+   * AI ACTION PREFERENCES METHODS
+   * Handle user preferences for AI action execution policies
+   */
+
+  async getAiActionPreferences(userId: string): Promise<AiActionPreference[]> {
+    try {
+      return await db
+        .select()
+        .from(aiActionPreferences)
+        .where(eq(aiActionPreferences.userId, userId));
+    } catch (error) {
+      console.error('Failed to fetch AI action preferences:', error);
+      throw new Error('Database error while fetching AI action preferences');
+    }
+  }
+
+  async getAiActionPreference(userId: string, actionType: string): Promise<AiActionPreference | undefined> {
+    try {
+      const [pref] = await db
+        .select()
+        .from(aiActionPreferences)
+        .where(and(
+          eq(aiActionPreferences.userId, userId),
+          eq(aiActionPreferences.actionType, actionType)
+        ));
+      return pref;
+    } catch (error) {
+      console.error('Failed to fetch AI action preference:', error);
+      throw new Error('Database error while fetching AI action preference');
+    }
+  }
+
+  async upsertAiActionPreference(
+    userId: string, 
+    actionType: string, 
+    policy: string, 
+    conditions?: any
+  ): Promise<AiActionPreference> {
+    try {
+      const existing = await this.getAiActionPreference(userId, actionType);
+      
+      if (existing) {
+        const [updated] = await db
+          .update(aiActionPreferences)
+          .set({ 
+            policy, 
+            autoApproveConditions: conditions,
+            updatedAt: new Date() 
+          })
+          .where(eq(aiActionPreferences.id, existing.id))
+          .returning();
+        return updated;
+      } else {
+        const [created] = await db
+          .insert(aiActionPreferences)
+          .values({
+            userId,
+            actionType,
+            policy,
+            autoApproveConditions: conditions
+          })
+          .returning();
+        return created;
+      }
+    } catch (error) {
+      console.error('Failed to upsert AI action preference:', error);
+      throw new Error('Database error while upserting AI action preference');
     }
   }
 }
