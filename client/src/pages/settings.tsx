@@ -48,7 +48,17 @@ export default function SettingsPage() {
   // Use combined providers status endpoint for all provider info
   const { data: providersStatus } = useQuery<{
     calendar: { google: boolean; outlook: boolean; activeProvider: string | null; userPreference: string | null };
-    email: { gmail: boolean; outlook: boolean; activeProvider: string | null; userPreference: string | null };
+    email: { 
+      gmail: boolean; 
+      outlook: boolean; 
+      activeProvider: string | null; 
+      userPreference: string | null;
+      enabled: boolean;
+      capabilities: {
+        gmail: { send: boolean; read: boolean };
+        outlook: { send: boolean; read: boolean };
+      };
+    };
     providerSelectionMode: string;
   }>({
     queryKey: ["/api/providers/status"],
@@ -604,6 +614,19 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <span className="text-sm font-medium">Gmail</span>
+                      {providersStatus?.email.gmail && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {providersStatus?.email.capabilities?.gmail?.read ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
+                              Full access
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                              Send only
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                       {providersStatus?.email.gmail && providersStatus?.email.activeProvider === 'gmail' && (
                         <p className="text-xs text-green-500">Active</p>
                       )}
@@ -641,6 +664,19 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <span className="text-sm font-medium">Outlook Mail</span>
+                      {providersStatus?.email.outlook && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {providersStatus?.email.capabilities?.outlook?.read ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
+                              Full access
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                              Send only
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                       {providersStatus?.email.outlook && providersStatus?.email.activeProvider === 'outlook' && (
                         <p className="text-xs text-green-500">Active</p>
                       )}
@@ -661,6 +697,24 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+
+              {(providersStatus?.email.gmail || providersStatus?.email.outlook) && (
+                <div className="flex items-center justify-between pt-2">
+                  <div className="space-y-0.5">
+                    <Label className="text-base">Enable Email Features</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Use email for briefings and AI-generated summaries
+                    </p>
+                  </div>
+                  <Switch
+                    data-testid="switch-email-enabled"
+                    checked={settings.emailIntegrationEnabled !== false}
+                    onCheckedChange={(checked) => 
+                      setSettings(prev => ({ ...prev, emailIntegrationEnabled: checked }))
+                    }
+                  />
+                </div>
+              )}
 
               {!providersStatus?.email.gmail && !providersStatus?.email.outlook && (
                 <p className="text-xs text-muted-foreground mt-2">

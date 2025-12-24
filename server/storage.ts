@@ -506,6 +506,7 @@ export class DatabaseStorage implements IStorage {
           calendarAutoLinkEnabled: true,
           calendarProvider: null,
           emailProvider: null,
+          emailIntegrationEnabled: true,
           emailNotificationsEnabled: false,
           providerSelectionMode: 'default',
           activeProjects: [],
