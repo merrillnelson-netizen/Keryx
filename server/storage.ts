@@ -16,7 +16,9 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
 
   // Memory/Log Entries (user-scoped)
-  getLogEntries(userId: string, limit?: number): Promise<LogEntry[]>;
+  getLogEntries(userId: string, limit?: number, offset?: number): Promise<LogEntry[]>;
+  getLogEntriesLight(userId: string, limit?: number, offset?: number): Promise<Partial<LogEntry>[]>;
+  getLogEntriesCount(userId: string): Promise<number>;
   getLogEntry(id: string, userId: string): Promise<LogEntry | undefined>;
   createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry>;
   updateLogEntry(id: string, userId: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;

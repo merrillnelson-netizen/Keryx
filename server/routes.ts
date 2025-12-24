@@ -1632,7 +1632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Re-processes all memories to extract mood, moodScore, detectedPeople,
    * and link to calendar events. Runs in background and returns immediately.
    */
-  app.post("/api/backfill", requireAuth, backfillLimiter, aiLimiter, async (req, res) => {
+  app.post("/api/backfill", requireAuth, backfillLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = backfillSchema.safeParse(req.body || {});
