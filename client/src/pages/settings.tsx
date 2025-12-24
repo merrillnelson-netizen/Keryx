@@ -23,6 +23,7 @@ interface BackfillStatus {
   total?: number;
   processed?: number;
   calendarLinked?: number;
+  embeddingsGenerated?: number;
   message?: string;
   toProcess?: number;
 }
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
   const [hasShownCompletion, setHasShownCompletion] = useState(false);
   const [newProject, setNewProject] = useState("");
+  const [includeEmbeddings, setIncludeEmbeddings] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { sessionCategory, setSessionCategory } = useSessionCategory();
@@ -92,8 +94,11 @@ export default function SettingsPage() {
   });
 
   const backfillMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/backfill", { force: true });
+    mutationFn: async (options: { includeEmbeddings?: boolean } = {}) => {
+      const response = await apiRequest("POST", "/api/backfill", { 
+        force: true, 
+        includeEmbeddings: options.includeEmbeddings || false 
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -792,9 +797,27 @@ export default function SettingsPage() {
                   </div>
                 )}
 
+                <div className="flex items-center space-x-3 py-2">
+                  <Switch
+                    id="include-embeddings"
+                    checked={includeEmbeddings}
+                    onCheckedChange={setIncludeEmbeddings}
+                    disabled={backfillStatus?.status === 'running'}
+                    data-testid="switch-include-embeddings"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="include-embeddings" className="text-sm font-medium">
+                      Regenerate Search Embeddings
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Also regenerate vector embeddings for improved search accuracy (slower, uses more AI credits)
+                    </p>
+                  </div>
+                </div>
+
                 <Button
                   data-testid="button-backfill"
-                  onClick={() => backfillMutation.mutate()}
+                  onClick={() => backfillMutation.mutate({ includeEmbeddings })}
                   disabled={backfillMutation.isPending || backfillStatus?.status === 'running'}
                   variant="outline"
                   className="w-full"

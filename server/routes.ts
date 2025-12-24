@@ -21,6 +21,7 @@ interface BackfillJob {
   total: number;
   processed: number;
   calendarLinked: number;
+  embeddingsGenerated: number;
   errors: number;
   startedAt: Date;
   completedAt?: Date;
@@ -102,6 +103,7 @@ const insightsQuerySchema = z.object({
 const backfillSchema = z.object({
   force: z.boolean().optional().default(false),
   includeCalendar: z.boolean().optional().default(true),
+  includeEmbeddings: z.boolean().optional().default(false),
 });
 
 /**
@@ -1665,7 +1667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const { force: forceAll, includeCalendar } = validation.data;
+      const { force: forceAll, includeCalendar, includeEmbeddings } = validation.data;
       
       // Get entries and set up job tracking
       const entries = await storage.getLogEntries(user.id, 500);
@@ -1673,7 +1675,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const hasMood = e.mood && e.mood.trim() !== '';
         const hasPeople = Array.isArray(e.detectedPeople) && e.detectedPeople.length > 0;
         const hasCalendar = e.calendarEventId && e.calendarEventId.trim() !== '';
-        return !hasMood || !hasPeople || (includeCalendar && !hasCalendar);
+        const hasAiReasoning = e.aiReasoning && Object.keys(e.aiReasoning).length > 0;
+        const hasEmbedding = Array.isArray(e.embeddingVector) && e.embeddingVector.length > 0 && !e.embeddingVector.every((v: number) => v === 0);
+        return !hasMood || !hasPeople || !hasAiReasoning || (includeCalendar && !hasCalendar) || (includeEmbeddings && !hasEmbedding);
       });
       
       // Initialize job tracking
@@ -1683,6 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: entriesNeedingBackfill.length,
         processed: 0,
         calendarLinked: 0,
+        embeddingsGenerated: 0,
         errors: 0,
         startedAt: new Date(),
         message: `Processing 0 of ${entriesNeedingBackfill.length} memories...`
@@ -1708,12 +1713,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               const metadata = await extractMetadata(entry.memoryText);
               
+              // Build update data with AI reasoning
               const updateData: any = {
                 mood: metadata.mood,
                 moodScore: metadata.moodScore,
                 detectedPeople: metadata.detectedPeople,
               };
               
+              // Include AI reasoning for transparency
+              let calendarReasoning: string | undefined;
+              
+              // Calendar linking if enabled and not already linked
               if (calendarConnected && !entry.calendarEventId && entry.timestamp) {
                 try {
                   const relevantEvent = await findRelevantEvent(entry.timestamp);
@@ -1721,10 +1731,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     updateData.calendarEventId = relevantEvent.id;
                     updateData.calendarEventTitle = relevantEvent.title;
                     updateData.calendarEventAttendees = relevantEvent.attendees || [];
+                    calendarReasoning = `Memory linked to "${relevantEvent.title}" event (recorded during event timeframe)`;
                     job.calendarLinked++;
                   }
                 } catch (calErr) {
                   console.warn(`Calendar lookup failed for entry ${entry.id}:`, calErr);
+                }
+              }
+              
+              // Combine AI reasoning with calendar reasoning
+              if (metadata.aiReasoning || calendarReasoning) {
+                updateData.aiReasoning = {
+                  ...(metadata.aiReasoning || {}),
+                  ...(calendarReasoning ? { calendar: calendarReasoning } : {}),
+                };
+              }
+              
+              // Regenerate embedding if requested and missing/zero
+              if (includeEmbeddings) {
+                const hasValidEmbedding = Array.isArray(entry.embeddingVector) && 
+                  entry.embeddingVector.length > 0 && 
+                  !entry.embeddingVector.every((v: number) => v === 0);
+                  
+                if (!hasValidEmbedding) {
+                  try {
+                    const newEmbedding = await generateEmbedding(entry.memoryText);
+                    if (!newEmbedding.every(v => v === 0)) {
+                      updateData.embeddingVector = newEmbedding;
+                      job.embeddingsGenerated++;
+                    }
+                  } catch (embErr) {
+                    console.warn(`Embedding generation failed for entry ${entry.id}:`, embErr);
+                  }
                 }
               }
               
@@ -1747,10 +1785,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             job.message = `Processing ${i + 1} of ${entriesNeedingBackfill.length} memories...`;
           }
           
-          // Mark complete
+          // Mark complete with detailed summary
           job.status = 'completed';
           job.completedAt = new Date();
-          job.message = `Completed! Analyzed ${job.processed} memories${job.calendarLinked > 0 ? `, linked ${job.calendarLinked} to calendar` : ''}.`;
+          const summaryParts = [`Analyzed ${job.processed} memories`];
+          if (job.calendarLinked > 0) summaryParts.push(`linked ${job.calendarLinked} to calendar`);
+          if (job.embeddingsGenerated > 0) summaryParts.push(`regenerated ${job.embeddingsGenerated} embeddings`);
+          job.message = `Completed! ${summaryParts.join(', ')}.`;
           
         } catch (error) {
           console.error("Background backfill failed:", error);
@@ -1788,6 +1829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: job.total,
         processed: job.processed,
         calendarLinked: job.calendarLinked,
+        embeddingsGenerated: job.embeddingsGenerated,
         errors: job.errors,
         message: job.message,
         startedAt: job.startedAt,
