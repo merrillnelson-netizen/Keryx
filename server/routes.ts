@@ -53,13 +53,10 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const user = req.user as User | undefined;
-    if (!user?.id) {
-      // Return a unique key per IP for unauthenticated requests (these will be blocked by requireAuth anyway)
-      return req.ip || 'unknown';
-    }
-    return user.id.toString();
+    // User ID is the primary key for rate limiting (most reliable)
+    return user?.id?.toString() || 'unauthenticated';
   },
-  validate: { xForwardedForHeader: false },
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false },
 });
 
 // Stricter rate limiter for expensive operations like backfill
@@ -71,9 +68,10 @@ const backfillLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const user = req.user as User | undefined;
-    return user?.id?.toString() || req.ip || 'unknown';
+    // Backfill only works for authenticated users, so user ID is always available
+    return user?.id?.toString() || 'unauthenticated';
   },
-  validate: { xForwardedForHeader: false },
+  validate: { xForwardedForHeader: false, keyGeneratorIpFallback: false },
 });
 
 // Validation schemas for API endpoints
