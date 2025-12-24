@@ -61,7 +61,11 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Dashboard** (`/` for authenticated users): Daily briefing and pattern alerts.
 - **Morning Briefing**: AI-generated personalized summary with greeting, focus areas, reminders, mood trend, and affirmation.
 - **Pattern Alerts**: AI detects positive/negative/insight patterns from recent memories, color-coded cards.
-- **API Endpoints**: `/api/briefing` (7-day analysis), `/api/alerts` (14-day pattern detection).
+- **Active Projects**: Users can mark topics as current focus areas in Settings, which are prioritized in briefings and search results.
+- **AI Decision Log**: Each memory stores AI reasoning in `aiReasoning` JSONB field (topic, mood, people, calendar explanations), displayed in History expandable view.
+- **Enhanced Insights**: Mood trend line chart (daily average scores over time), topic frequency bar chart (top 15 topics).
+- **API Endpoints**: `/api/briefing` (7-day analysis), `/api/alerts` (14-day pattern detection), `/api/mood/trend` (30-day mood scores), `/api/topics/frequency` (top 15 topics).
+- **Settings Schema**: `activeProjects` text array for user focus topics.
 - **AI Functions**: `generateMorningBriefing()`, `detectPatternAlerts()` in `server/ai-service.ts`.
 - **Navigation**: 7 items - Dashboard, Voice Log, History, Insights, People, Timeline, Settings.
 - **Preparation Mode**: Planned for future (requires calendar/event integration).
