@@ -569,21 +569,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * GET /api/logs - Get recent memories/log entries
-   * Returns recent memories ordered by timestamp
+   * GET /api/logs - Get recent memories/log entries with pagination
+   * Query params: limit (default 50), offset (default 0), full (include heavy data)
+   * Returns memories ordered by timestamp with pagination info
    * Requires authentication
    */
   app.get("/api/logs", requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Cap at 100
+      const offset = parseInt(req.query.offset as string) || 0;
+      const full = req.query.full === 'true';
       
-      const entries = await storage.getLogEntries(user.id, limit);
+      // Use light version for list views (excludes embeddings and heavy metadata)
+      const entries = full 
+        ? await storage.getLogEntries(user.id, limit, offset)
+        : await storage.getLogEntriesLight(user.id, limit, offset);
+      
+      // Get total count for pagination (only if offset is 0 to reduce queries)
+      const total = offset === 0 ? await storage.getLogEntriesCount(user.id) : undefined;
       
       res.json({
         status: 'success',
         data: entries,
         count: entries.length,
+        total,
+        limit,
+        offset,
+        hasMore: entries.length === limit,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

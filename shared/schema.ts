@@ -148,6 +148,18 @@ export const logEntries = pgTable("log_entries", {
     table.topicTag,
     table.timestamp.desc()
   ),
+  
+  // Index for mood-based analytics queries
+  userMoodIdx: index("log_entries_user_mood_idx").on(
+    table.userId,
+    table.mood
+  ),
+  
+  // Index for calendar-linked memory queries
+  userCalendarIdx: index("log_entries_user_calendar_idx").on(
+    table.userId,
+    table.calendarEventId
+  ),
 }));
 
 /**

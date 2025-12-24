@@ -143,17 +143,67 @@ export class DatabaseStorage implements IStorage {
    * @returns Promise<LogEntry[]> Array of log entries
    * @throws Error if database query fails
    */
-  async getLogEntries(userId: string, limit = 50): Promise<LogEntry[]> {
+  async getLogEntries(userId: string, limit = 50, offset = 0): Promise<LogEntry[]> {
     try {
       return await db
         .select()
         .from(logEntries)
         .where(eq(logEntries.userId, userId))
         .orderBy(desc(logEntries.timestamp))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
     } catch (error) {
       console.error('Failed to fetch log entries:', error);
       throw new Error('Database error while fetching log entries');
+    }
+  }
+
+  /**
+   * Get log entries with only essential fields for list views (excludes heavy data)
+   * Reduces payload size significantly by omitting embeddings and full metadata
+   */
+  async getLogEntriesLight(userId: string, limit = 50, offset = 0): Promise<Partial<LogEntry>[]> {
+    try {
+      return await db
+        .select({
+          id: logEntries.id,
+          userId: logEntries.userId,
+          memoryText: logEntries.memoryText,
+          topicTag: logEntries.topicTag,
+          mood: logEntries.mood,
+          moodScore: logEntries.moodScore,
+          detectedPeople: logEntries.detectedPeople,
+          timestamp: logEntries.timestamp,
+          calendarEventId: logEntries.calendarEventId,
+          calendarEventTitle: logEntries.calendarEventTitle,
+          calendarEventAttendees: logEntries.calendarEventAttendees,
+          geoPlaceName: logEntries.geoPlaceName,
+          aiReasoning: logEntries.aiReasoning,
+        })
+        .from(logEntries)
+        .where(eq(logEntries.userId, userId))
+        .orderBy(desc(logEntries.timestamp))
+        .limit(limit)
+        .offset(offset);
+    } catch (error) {
+      console.error('Failed to fetch log entries (light):', error);
+      throw new Error('Database error while fetching log entries');
+    }
+  }
+
+  /**
+   * Get total count of log entries for pagination
+   */
+  async getLogEntriesCount(userId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(logEntries)
+        .where(eq(logEntries.userId, userId));
+      return result[0]?.count ?? 0;
+    } catch (error) {
+      console.error('Failed to count log entries:', error);
+      throw new Error('Database error while counting log entries');
     }
   }
 
