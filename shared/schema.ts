@@ -194,6 +194,7 @@ export const settings = pgTable("settings", {
   calendarAutoLink: boolean("calendar_auto_link").default(true), // Auto-link memories to calendar events
   // Email provider settings
   emailProvider: text("email_provider"), // 'gmail' or 'outlook' - default provider for email operations
+  emailIntegrationEnabled: boolean("email_integration_enabled").default(true), // Master toggle for email features
   emailNotificationsEnabled: boolean("email_notifications_enabled").default(false), // Send email summaries/reminders
   // Provider selection mode: 'default' uses settings, 'ask' prompts per-memory
   providerSelectionMode: text("provider_selection_mode").default("default"), // 'default' or 'ask'
