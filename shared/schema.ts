@@ -46,6 +46,19 @@ export type AudioContext = z.infer<typeof audioContextSchema>;
 export type MCPPayload = z.infer<typeof mcpPayloadSchema>;
 
 /**
+ * AI Decision Log schema - stores reasoning for AI decisions
+ * Provides transparency about why the AI made certain classifications
+ */
+export const aiReasoningSchema = z.object({
+  topic: z.string().optional(), // Why this topic was chosen
+  mood: z.string().optional(), // Why this mood was detected
+  people: z.string().optional(), // Why these people were identified
+  calendar: z.string().optional(), // Why this calendar event was linked
+});
+
+export type AIReasoning = z.infer<typeof aiReasoningSchema>;
+
+/**
  * Users table - authentication and user management
  */
 export const users = pgTable("users", {
@@ -105,6 +118,8 @@ export const logEntries = pgTable("log_entries", {
   calendarEventId: text("calendar_event_id"), // Google Calendar event ID
   calendarEventTitle: text("calendar_event_title"), // Meeting title from calendar
   calendarEventAttendees: text("calendar_event_attendees").array(), // Attendee names/emails
+  // AI Decision Log: transparency about AI reasoning
+  aiReasoning: jsonb("ai_reasoning"), // { topic: string, mood: string, people: string, calendar?: string }
 }, (table) => ({
   // Index for user-specific queries (critical for data isolation)
   userIdIdx: index("log_entries_user_id_idx").on(table.userId),

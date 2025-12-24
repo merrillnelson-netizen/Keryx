@@ -292,6 +292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let calendarEventId: string | undefined;
       let calendarEventTitle: string | undefined;
       let calendarEventAttendees: string[] | undefined;
+      let calendarReasoning: string | undefined;
       
       try {
         const settings = await storage.getSettings(user.id);
@@ -301,12 +302,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             calendarEventId = relevantEvent.id;
             calendarEventTitle = relevantEvent.title;
             calendarEventAttendees = relevantEvent.attendees;
+            calendarReasoning = `Memory recorded during "${relevantEvent.title}" event (within event timeframe)`;
           }
         }
       } catch (calendarError) {
         // Calendar not connected or error - continue without it
         // Calendar auto-link not available - this is expected when calendar is not connected
       }
+
+      // Combine AI reasoning with calendar reasoning
+      const aiReasoning = extracted.aiReasoning ? {
+        ...extracted.aiReasoning,
+        ...(calendarReasoning ? { calendar: calendarReasoning } : {})
+      } : calendarReasoning ? { calendar: calendarReasoning } : undefined;
 
       // Save to database with user ID, mood, detected people, geolocation, and calendar
       const logEntry = await storage.createLogEntry({
@@ -327,6 +335,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         calendarEventId,
         calendarEventTitle,
         calendarEventAttendees,
+        // AI decision log for transparency
+        aiReasoning,
       });
 
       // Track people mentions in the people table (non-blocking)

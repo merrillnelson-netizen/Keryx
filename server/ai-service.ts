@@ -9,6 +9,16 @@ const openai = new OpenAI({
 });
 
 /**
+ * AI reasoning for decisions - provides transparency
+ */
+export interface AIReasoning {
+  topic?: string;  // Why this topic was chosen
+  mood?: string;   // Why this mood was detected
+  people?: string; // Why these people were identified
+  calendar?: string; // Why this calendar event was linked
+}
+
+/**
  * AI-extracted metadata structure
  */
 export interface ExtractedMetadata {
@@ -17,6 +27,7 @@ export interface ExtractedMetadata {
   mood: string;
   moodScore: number;
   detectedPeople: string[];
+  aiReasoning?: AIReasoning;
 }
 
 /**
@@ -85,13 +96,20 @@ For food/meal-related entries, use these EXACT field names:
    - Nicknames if used as primary identifier
    Do NOT include generic references like "my friend" or "someone" - only actual names.
 
+6. REASONING: For each decision, provide a brief explanation of why you made that choice. This helps users understand your logic.
+
 Respond with JSON in this exact format: 
 {
   "topicTag": "string",
   "metadataJson": { "field1": "value1", "field2": ["array", "values"], ... },
   "mood": "string (one of the mood options)",
   "moodScore": number (-100 to 100),
-  "detectedPeople": ["name1", "name2", ...]
+  "detectedPeople": ["name1", "name2", ...],
+  "reasoning": {
+    "topic": "Brief explanation of why this topic was chosen",
+    "mood": "Brief explanation of the emotional tone detected",
+    "people": "Brief explanation of people identified (or 'No specific names mentioned')"
+  }
 }
 
 If you cannot extract specific metadata, return empty object for metadataJson.
@@ -115,6 +133,11 @@ If no people are mentioned, return empty array for detectedPeople.`,
       mood: result.mood || "neutral",
       moodScore: typeof result.moodScore === 'number' ? Math.max(-100, Math.min(100, result.moodScore)) : 0,
       detectedPeople: Array.isArray(result.detectedPeople) ? result.detectedPeople : [],
+      aiReasoning: result.reasoning ? {
+        topic: result.reasoning.topic || undefined,
+        mood: result.reasoning.mood || undefined,
+        people: result.reasoning.people || undefined,
+      } : undefined,
     };
   } catch (error) {
     console.error("Error extracting metadata:", error);

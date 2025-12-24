@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category } from "@shared/schema";
 import {
@@ -588,34 +588,74 @@ export default function History() {
                   </div>
                 </CardHeader>
                 
-                {expandedId === entry.id && entry.metadataJson && typeof entry.metadataJson === 'object' ? (
+                {expandedId === entry.id ? (
                   <CardContent className="pt-0 animate-slide-in" data-testid={`metadata-details-${entry.id}`}>
-                    <div className="border-t border-white/10 pt-3">
-                      <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
-                      <div className="glass-card p-3 rounded-lg">
-                        {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => {
-                          let displayValue: string;
-                          if (Array.isArray(value)) {
-                            displayValue = value.map(v => String(v)).join(', ');
-                          } else if (value !== null && value !== undefined) {
-                            displayValue = String(value);
-                          } else {
-                            displayValue = 'N/A';
-                          }
-                          
-                          return (
-                            <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
-                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
-                                {key.replace(/_/g, ' ')}:
-                              </span>
-                              <span className="text-sm text-foreground">
-                                {displayValue}
-                              </span>
-                            </div>
-                          );
-                        })}
+                    {/* Extracted metadata details */}
+                    {entry.metadataJson && typeof entry.metadataJson === 'object' && Object.keys(entry.metadataJson as object).length > 0 && (
+                      <div className="border-t border-white/10 pt-3">
+                        <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
+                        <div className="glass-card p-3 rounded-lg">
+                          {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => {
+                            let displayValue: string;
+                            if (Array.isArray(value)) {
+                              displayValue = value.map(v => String(v)).join(', ');
+                            } else if (value !== null && value !== undefined) {
+                              displayValue = String(value);
+                            } else {
+                              displayValue = 'N/A';
+                            }
+                            
+                            return (
+                              <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
+                                <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
+                                  {key.replace(/_/g, ' ')}:
+                                </span>
+                                <span className="text-sm text-foreground">
+                                  {displayValue}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    
+                    {/* AI Decision Log - transparency about AI reasoning */}
+                    {entry.aiReasoning && typeof entry.aiReasoning === 'object' && (
+                      <div className="border-t border-white/10 pt-3 mt-3">
+                        <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                          <Brain className="w-4 h-4 text-purple-400" />
+                          AI Decision Log
+                        </h4>
+                        <div className="glass-card p-3 rounded-lg space-y-2 text-sm">
+                          {(entry.aiReasoning as Record<string, string>).topic && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Topic:</span>
+                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).topic}</span>
+                            </div>
+                          )}
+                          {(entry.aiReasoning as Record<string, string>).mood && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Mood:</span>
+                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).mood}</span>
+                            </div>
+                          )}
+                          {(entry.aiReasoning as Record<string, string>).people && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">People:</span>
+                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).people}</span>
+                            </div>
+                          )}
+                          {(entry.aiReasoning as Record<string, string>).calendar && (
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Calendar:</span>
+                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).calendar}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     <p className="text-xs text-muted-foreground mt-3">
                       Saved {new Date(entry.timestamp!).toLocaleString()}
                     </p>
