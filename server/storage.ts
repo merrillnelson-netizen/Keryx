@@ -442,6 +442,7 @@ export class DatabaseStorage implements IStorage {
           emailProvider: null,
           emailNotificationsEnabled: false,
           providerSelectionMode: 'default',
+          activeProjects: [],
           ...newSettings,
         };
         
@@ -643,6 +644,72 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch entries by mood:', error);
       throw new Error('Database error while fetching entries by mood');
+    }
+  }
+
+  /**
+   * Get daily mood trend data for line chart visualization
+   */
+  async getMoodTrend(userId: string, days = 30): Promise<{ date: string; avgScore: number; count: number }[]> {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const result = await db
+        .select({
+          date: sql<string>`date_trunc('day', ${logEntries.timestamp})::date::text`,
+          avgScore: sql<number>`avg(${logEntries.moodScore})::int`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          gte(logEntries.timestamp, startDate),
+          sql`${logEntries.moodScore} IS NOT NULL`
+        ))
+        .groupBy(sql`date_trunc('day', ${logEntries.timestamp})`)
+        .orderBy(sql`date_trunc('day', ${logEntries.timestamp})`);
+
+      return result.map(r => ({
+        date: r.date,
+        avgScore: r.avgScore || 0,
+        count: r.count,
+      }));
+    } catch (error) {
+      console.error('Failed to fetch mood trend:', error);
+      throw new Error('Database error while fetching mood trend');
+    }
+  }
+
+  /**
+   * Get topic frequency for bar chart visualization
+   */
+  async getTopicFrequency(userId: string, days = 30): Promise<{ topic: string; count: number }[]> {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const result = await db
+        .select({
+          topic: logEntries.topicTag,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          gte(logEntries.timestamp, startDate)
+        ))
+        .groupBy(logEntries.topicTag)
+        .orderBy(sql`count(*) DESC`)
+        .limit(15);
+
+      return result.map(r => ({
+        topic: r.topic,
+        count: r.count,
+      }));
+    } catch (error) {
+      console.error('Failed to fetch topic frequency:', error);
+      throw new Error('Database error while fetching topic frequency');
     }
   }
 

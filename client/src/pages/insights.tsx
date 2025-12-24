@@ -20,12 +20,23 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend, Tooltip } from "recharts";
 
 interface MoodStat {
   mood: string;
   count: number;
   avgScore: number;
+}
+
+interface MoodTrendPoint {
+  date: string;
+  avgScore: number;
+  count: number;
+}
+
+interface TopicFrequency {
+  topic: string;
+  count: number;
 }
 
 interface ThematicInsight {
@@ -87,6 +98,24 @@ export default function Insights() {
     },
   });
 
+  const { data: moodTrend, isLoading: trendLoading } = useQuery<{ data: MoodTrendPoint[] }>({
+    queryKey: ["/api/mood/trend", days],
+    queryFn: async () => {
+      const response = await fetch(`/api/mood/trend?days=${days}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch mood trend");
+      return response.json();
+    },
+  });
+
+  const { data: topicFrequency, isLoading: topicLoading } = useQuery<{ data: TopicFrequency[] }>({
+    queryKey: ["/api/topics/frequency", days],
+    queryFn: async () => {
+      const response = await fetch(`/api/topics/frequency?days=${days}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch topic frequency");
+      return response.json();
+    },
+  });
+
   const insightsMutation = useMutation({
     mutationFn: async ({ question, days }: { question?: string; days: number }) => {
       const response = await apiRequest("POST", "/api/insights", { question, days });
@@ -116,6 +145,16 @@ export default function Insights() {
   const chartConfig: ChartConfig = Object.fromEntries(
     Object.entries(MOOD_COLORS).map(([mood, color]) => [mood, { label: mood, color }])
   );
+
+  // Format mood trend data for line chart
+  const trendChartData = moodTrend?.data?.map(point => ({
+    date: new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    score: point.avgScore,
+    memories: point.count,
+  })) || [];
+
+  // Topic frequency data (already formatted from API)
+  const topicChartData = topicFrequency?.data || [];
 
   return (
     <AppLayout>
@@ -249,6 +288,114 @@ export default function Insights() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Mood Trend Over Time */}
+        <Card className="glass-card border-white/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-green-500" />
+              Mood Trend Over Time
+            </CardTitle>
+            <CardDescription>Your emotional journey day by day</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {trendLoading ? (
+              <div className="h-64 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : trendChartData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <p>Not enough data to show trends. Keep logging!</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={trendChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis 
+                    dataKey="date" 
+                    stroke="rgba(255,255,255,0.5)"
+                    tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                  />
+                  <YAxis 
+                    domain={[-100, 100]} 
+                    stroke="rgba(255,255,255,0.5)"
+                    tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                    label={{ value: 'Mood Score', angle: -90, position: 'insideLeft', fill: 'rgba(255,255,255,0.5)' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(0,0,0,0.8)', 
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '8px'
+                    }}
+                    labelStyle={{ color: 'rgba(255,255,255,0.9)' }}
+                    formatter={(value: number, name: string) => [
+                      name === 'score' ? `${value} (${value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral'})` : value,
+                      name === 'score' ? 'Mood Score' : 'Memories'
+                    ]}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="score" 
+                    stroke="#a855f7" 
+                    strokeWidth={2}
+                    dot={{ fill: '#a855f7', r: 4 }}
+                    activeDot={{ r: 6, fill: '#d946ef' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Topic Frequency */}
+        <Card className="glass-card border-white/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-orange-500" />
+              Topic Frequency
+            </CardTitle>
+            <CardDescription>What you've been thinking about most</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topicLoading ? (
+              <div className="h-64 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : topicChartData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-muted-foreground">
+                <p>No topic data available yet.</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(280, topicChartData.length * 40)}>
+                <BarChart data={topicChartData} layout="vertical" margin={{ top: 5, right: 30, left: 80, bottom: 5 }}>
+                  <XAxis type="number" stroke="rgba(255,255,255,0.5)" tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }} />
+                  <YAxis 
+                    dataKey="topic" 
+                    type="category" 
+                    width={75}
+                    stroke="rgba(255,255,255,0.5)"
+                    tick={{ fill: 'rgba(255,255,255,0.9)', fontSize: 12 }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(0,0,0,0.8)', 
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: number) => [`${value} memories`, 'Count']}
+                  />
+                  <Bar 
+                    dataKey="count" 
+                    fill="#f97316" 
+                    radius={[0, 4, 4, 0]}
+                    background={{ fill: 'rgba(255,255,255,0.05)' }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
         {/* AI Thematic Synthesis */}
         <Card className="glass-card border-white/20">

@@ -1292,6 +1292,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * GET /api/mood/trend - Get daily mood trend for line chart
+   * Query params: days (default 30)
+   * Requires authentication
+   */
+  app.get("/api/mood/trend", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      const trend = await storage.getMoodTrend(user.id, days);
+      
+      res.json({
+        status: 'success',
+        data: trend,
+        period: `Last ${days} days`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch mood trend", error);
+    }
+  });
+
+  /**
+   * GET /api/topics/frequency - Get topic frequency for visualization
+   * Query params: days (default 30)
+   * Requires authentication
+   */
+  app.get("/api/topics/frequency", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const days = parseInt(req.query.days as string) || 30;
+      
+      const frequency = await storage.getTopicFrequency(user.id, days);
+      
+      res.json({
+        status: 'success',
+        data: frequency,
+        period: `Last ${days} days`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch topic frequency", error);
+    }
+  });
+
+  /**
    * GET /api/mood/:mood - Get all memories with a specific mood
    * Requires authentication
    */
