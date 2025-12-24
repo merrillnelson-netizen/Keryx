@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -128,33 +128,49 @@ export default function Insights() {
     insightsMutation.mutate({ question: question || undefined, days: parseInt(days) });
   };
 
-  const chartData = moodStats?.data?.map((stat) => ({
-    name: stat.mood,
-    value: stat.count,
-    fill: MOOD_COLORS[stat.mood] || "#6b7280",
-    emoji: MOOD_EMOJIS[stat.mood] || "😐",
-  })) || [];
-
-  const barChartData = moodStats?.data?.map((stat) => ({
-    mood: `${MOOD_EMOJIS[stat.mood] || "😐"} ${stat.mood}`,
-    count: stat.count,
-    avgScore: stat.avgScore,
-    fill: MOOD_COLORS[stat.mood] || "#6b7280",
-  })) || [];
-
-  const chartConfig: ChartConfig = Object.fromEntries(
-    Object.entries(MOOD_COLORS).map(([mood, color]) => [mood, { label: mood, color }])
+  // Memoize chart data to prevent unnecessary recalculations on re-renders
+  const chartData = useMemo(() => 
+    moodStats?.data?.map((stat) => ({
+      name: stat.mood,
+      value: stat.count,
+      fill: MOOD_COLORS[stat.mood] || "#6b7280",
+      emoji: MOOD_EMOJIS[stat.mood] || "😐",
+    })) || [],
+    [moodStats?.data]
   );
 
-  // Format mood trend data for line chart
-  const trendChartData = moodTrend?.data?.map(point => ({
-    date: new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    score: point.avgScore,
-    memories: point.count,
-  })) || [];
+  const barChartData = useMemo(() =>
+    moodStats?.data?.map((stat) => ({
+      mood: `${MOOD_EMOJIS[stat.mood] || "😐"} ${stat.mood}`,
+      count: stat.count,
+      avgScore: stat.avgScore,
+      fill: MOOD_COLORS[stat.mood] || "#6b7280",
+    })) || [],
+    [moodStats?.data]
+  );
 
-  // Topic frequency data (already formatted from API)
-  const topicChartData = topicFrequency?.data || [];
+  const chartConfig: ChartConfig = useMemo(() =>
+    Object.fromEntries(
+      Object.entries(MOOD_COLORS).map(([mood, color]) => [mood, { label: mood, color }])
+    ),
+    []
+  );
+
+  // Memoize mood trend data for line chart
+  const trendChartData = useMemo(() =>
+    moodTrend?.data?.map(point => ({
+      date: new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      score: point.avgScore,
+      memories: point.count,
+    })) || [],
+    [moodTrend?.data]
+  );
+
+  // Memoize topic frequency data
+  const topicChartData = useMemo(() => 
+    topicFrequency?.data || [],
+    [topicFrequency?.data]
+  );
 
   return (
     <AppLayout>

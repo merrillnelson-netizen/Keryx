@@ -596,14 +596,11 @@ export default function History() {
                         <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
                         <div className="glass-card p-3 rounded-lg">
                           {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => {
-                            let displayValue: string;
-                            if (Array.isArray(value)) {
-                              displayValue = value.map(v => String(v)).join(', ');
-                            } else if (value !== null && value !== undefined) {
-                              displayValue = String(value);
-                            } else {
-                              displayValue = 'N/A';
-                            }
+                            const displayValue: string = Array.isArray(value) 
+                              ? value.map(v => String(v)).join(', ')
+                              : value !== null && value !== undefined 
+                                ? String(value) 
+                                : 'N/A';
                             
                             return (
                               <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">

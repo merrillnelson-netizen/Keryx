@@ -53,7 +53,25 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const user = req.user as User | undefined;
-    return user?.id?.toString() || 'anonymous';
+    if (!user?.id) {
+      // Return a unique key per IP for unauthenticated requests (these will be blocked by requireAuth anyway)
+      return req.ip || 'unknown';
+    }
+    return user.id.toString();
+  },
+  validate: { xForwardedForHeader: false },
+});
+
+// Stricter rate limiter for expensive operations like backfill
+const backfillLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Only 3 backfill requests per hour per user
+  message: { message: 'Too many re-analysis requests. Please wait before trying again.', status: 'error' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const user = req.user as User | undefined;
+    return user?.id?.toString() || req.ip || 'unknown';
   },
   validate: { xForwardedForHeader: false },
 });
@@ -1616,7 +1634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Re-processes all memories to extract mood, moodScore, detectedPeople,
    * and link to calendar events. Runs in background and returns immediately.
    */
-  app.post("/api/backfill", requireAuth, async (req, res) => {
+  app.post("/api/backfill", requireAuth, backfillLimiter, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = backfillSchema.safeParse(req.body || {});
