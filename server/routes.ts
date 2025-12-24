@@ -1806,6 +1806,226 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // =========================================
+  // AI ACTIONS API ENDPOINTS
+  // =========================================
+
+  /**
+   * GET /api/actions - Get user's AI actions with optional status filter
+   */
+  app.get("/api/actions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const statusFilter = req.query.status 
+        ? (req.query.status as string).split(',') 
+        : undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const actions = await storage.getAiActions(user.id, statusFilter, limit);
+      
+      res.json({
+        status: 'success',
+        data: actions,
+        count: actions.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch actions", error);
+    }
+  });
+
+  /**
+   * GET /api/actions/pending - Get pending actions awaiting approval
+   */
+  app.get("/api/actions/pending", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const pendingActions = await storage.getPendingActions(user.id);
+      
+      res.json({
+        status: 'success',
+        data: pendingActions,
+        count: pendingActions.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch pending actions", error);
+    }
+  });
+
+  /**
+   * GET /api/actions/available - Get available action types with connection status
+   */
+  app.get("/api/actions/available", requireAuth, async (req, res) => {
+    try {
+      const { getAvailableActionTypes } = await import('./ai-actions-service');
+      const actionTypes = await getAvailableActionTypes();
+      
+      res.json({
+        status: 'success',
+        data: actionTypes,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch available actions", error);
+    }
+  });
+
+  /**
+   * GET /api/actions/:id - Get a specific action
+   */
+  app.get("/api/actions/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const action = await storage.getAiAction(req.params.id, user.id);
+      
+      if (!action) {
+        return sendErrorResponse(res, 404, "Action not found");
+      }
+      
+      res.json({
+        status: 'success',
+        data: action,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch action", error);
+    }
+  });
+
+  /**
+   * POST /api/actions/:id/approve - Approve and execute a pending action
+   */
+  app.post("/api/actions/:id/approve", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { approveAction } = await import('./ai-actions-service');
+      
+      const result = await approveAction(req.params.id, user.id);
+      
+      if (!result.success) {
+        return res.status(400).json({
+          status: 'error',
+          message: result.errorMessage,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Action executed successfully',
+        data: result.resultData,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to approve action", error);
+    }
+  });
+
+  /**
+   * POST /api/actions/:id/reject - Reject a pending action
+   */
+  app.post("/api/actions/:id/reject", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { rejectAction } = await import('./ai-actions-service');
+      
+      const success = await rejectAction(req.params.id, user.id);
+      
+      if (!success) {
+        return sendErrorResponse(res, 400, "Failed to reject action");
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Action rejected',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to reject action", error);
+    }
+  });
+
+  /**
+   * POST /api/actions/detect - Detect actions from user input (for testing)
+   */
+  app.post("/api/actions/detect", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { userInput } = req.body;
+      
+      if (!userInput || typeof userInput !== 'string') {
+        return sendErrorResponse(res, 400, "userInput is required");
+      }
+      
+      const { processUserInputForActions } = await import('./ai-actions-service');
+      const result = await processUserInputForActions(user.id, userInput);
+      
+      res.json({
+        status: 'success',
+        actionDetected: result.actionDetected,
+        action: result.action,
+        autoExecuted: result.autoExecuted,
+        executionResult: result.executionResult,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to detect actions", error);
+    }
+  });
+
+  // =========================================
+  // AI ACTION PREFERENCES API ENDPOINTS
+  // =========================================
+
+  /**
+   * GET /api/actions/preferences - Get user's action preferences
+   */
+  app.get("/api/actions/preferences", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const preferences = await storage.getAiActionPreferences(user.id);
+      
+      res.json({
+        status: 'success',
+        data: preferences,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch preferences", error);
+    }
+  });
+
+  /**
+   * PUT /api/actions/preferences/:actionType - Update preference for an action type
+   */
+  app.put("/api/actions/preferences/:actionType", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { actionType } = req.params;
+      const { policy, conditions } = req.body;
+      
+      if (!policy || !['auto', 'confirm', 'disabled'].includes(policy)) {
+        return sendErrorResponse(res, 400, "Invalid policy. Must be 'auto', 'confirm', or 'disabled'");
+      }
+      
+      const preference = await storage.upsertAiActionPreference(
+        user.id, 
+        actionType, 
+        policy, 
+        conditions
+      );
+      
+      res.json({
+        status: 'success',
+        data: preference,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update preference", error);
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
