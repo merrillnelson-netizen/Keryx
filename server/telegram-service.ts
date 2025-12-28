@@ -2,7 +2,19 @@ import OpenAI, { toFile } from "openai";
 import { storage } from "./storage";
 import { extractMetadata, generateEmbedding } from "./ai-service";
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+/**
+ * Get Telegram token dynamically from environment
+ */
+function getTelegramToken(): string | undefined {
+  return process.env.TELEGRAM_BOT_TOKEN;
+}
+
+/**
+ * Get Telegram API base URL
+ */
+function getTelegramApiBase(): string {
+  return `https://api.telegram.org/bot${getTelegramToken()}`;
+}
 
 /**
  * Escape HTML special characters for safe Telegram message rendering
@@ -14,7 +26,6 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
-const TELEGRAM_API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -47,17 +58,17 @@ export interface TelegramUpdate {
 }
 
 export function isTelegramConfigured(): boolean {
-  return !!TELEGRAM_TOKEN;
+  return !!getTelegramToken();
 }
 
 export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
-  if (!TELEGRAM_TOKEN) {
+  if (!getTelegramToken()) {
     console.error('Telegram token not configured');
     return false;
   }
 
   try {
-    const response = await fetch(`${TELEGRAM_API_BASE}/sendMessage`, {
+    const response = await fetch(`${getTelegramApiBase()}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,16 +92,17 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
 }
 
 export async function getFileUrl(fileId: string): Promise<string | null> {
-  if (!TELEGRAM_TOKEN) return null;
+  const token = getTelegramToken();
+  if (!token) return null;
 
   try {
-    const response = await fetch(`${TELEGRAM_API_BASE}/getFile?file_id=${fileId}`);
+    const response = await fetch(`${getTelegramApiBase()}/getFile?file_id=${fileId}`);
     if (!response.ok) return null;
 
     const data = await response.json();
     if (!data.ok || !data.result?.file_path) return null;
 
-    return `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${data.result.file_path}`;
+    return `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
   } catch (error) {
     console.error('Error getting file URL:', error);
     return null;
@@ -341,7 +353,7 @@ export async function generateVerificationCode(): Promise<string> {
 }
 
 export async function setWebhook(webhookUrl: string): Promise<boolean> {
-  if (!TELEGRAM_TOKEN) {
+  if (!getTelegramToken()) {
     console.error('Telegram token not configured');
     return false;
   }
@@ -358,7 +370,7 @@ export async function setWebhook(webhookUrl: string): Promise<boolean> {
       webhookPayload.secret_token = webhookSecret;
     }
 
-    const response = await fetch(`${TELEGRAM_API_BASE}/setWebhook`, {
+    const response = await fetch(`${getTelegramApiBase()}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
