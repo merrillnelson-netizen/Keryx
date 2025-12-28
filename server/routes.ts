@@ -138,6 +138,77 @@ function sendErrorResponse(res: any, statusCode: number, message: string, error?
 }
 
 /**
+ * Format briefing data for Telegram HTML message
+ */
+function formatBriefingForTelegram(briefing: {
+  greeting: string;
+  focusAreas: string[];
+  reminders: string[];
+  moodTrend?: string;
+  emailHighlights?: string[];
+  affirmation: string;
+}): string {
+  let message = `${briefing.greeting}\n\n`;
+  
+  if (briefing.focusAreas.length > 0) {
+    message += `<b>📌 Focus Areas</b>\n`;
+    briefing.focusAreas.forEach(area => {
+      message += `• ${area}\n`;
+    });
+    message += '\n';
+  }
+  
+  if (briefing.reminders.length > 0) {
+    message += `<b>⏰ Reminders</b>\n`;
+    briefing.reminders.forEach(reminder => {
+      message += `• ${reminder}\n`;
+    });
+    message += '\n';
+  }
+  
+  if (briefing.moodTrend) {
+    message += `<b>📊 Mood Trend</b>\n${briefing.moodTrend}\n\n`;
+  }
+  
+  if (briefing.emailHighlights && briefing.emailHighlights.length > 0) {
+    message += `<b>📧 Email Highlights</b>\n`;
+    briefing.emailHighlights.forEach(highlight => {
+      message += `• ${highlight}\n`;
+    });
+    message += '\n';
+  }
+  
+  message += `✨ ${briefing.affirmation}`;
+  
+  return message;
+}
+
+/**
+ * Format alerts for Telegram HTML message
+ */
+function formatAlertsForTelegram(alerts: Array<{
+  type: 'positive' | 'negative' | 'neutral' | 'insight';
+  title: string;
+  description: string;
+  actionSuggestion?: string;
+}>): string {
+  if (alerts.length === 0) return '';
+  
+  let message = '';
+  alerts.forEach(alert => {
+    const icon = alert.type === 'positive' ? '🟢' : alert.type === 'negative' ? '🔴' : alert.type === 'insight' ? '💡' : '⚪';
+    message += `${icon} <b>${alert.title}</b>\n`;
+    message += `${alert.description}\n`;
+    if (alert.actionSuggestion) {
+      message += `💭 ${alert.actionSuggestion}\n`;
+    }
+    message += '\n';
+  });
+  
+  return message;
+}
+
+/**
  * Register all API routes with error handling and validation
  * @param app - Express application instance
  * @returns HTTP server instance
@@ -1604,12 +1675,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailContext.length > 0 ? emailContext : undefined,
         activeProjects
       );
+
+      // Optionally send briefing to Telegram
+      const sendToTelegram = req.query.sendToTelegram === 'true';
+      let telegramSent = false;
+      if (sendToTelegram && userSettings?.telegramEnabled && userSettings?.telegramBriefingsEnabled && userSettings?.telegramChatId) {
+        const { sendBriefingToTelegram } = await import('./telegram-service');
+        const briefingText = formatBriefingForTelegram(briefing);
+        telegramSent = await sendBriefingToTelegram(user.id, briefingText);
+      }
       
       res.json({
         status: 'success',
         data: briefing,
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
+        telegramSent,
         generatedAt: new Date().toISOString()
       });
     } catch (error) {
@@ -1644,12 +1725,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           topicTag: m.topicTag,
         }))
       );
+
+      // Optionally send alerts to Telegram
+      const sendToTelegram = req.query.sendToTelegram === 'true';
+      let telegramSent = false;
+      if (sendToTelegram && alerts.length > 0) {
+        const userSettings = await storage.getSettings(user.id);
+        if (userSettings?.telegramEnabled && userSettings?.telegramAlertsEnabled && userSettings?.telegramChatId) {
+          const { sendAlertToTelegram } = await import('./telegram-service');
+          const alertsText = formatAlertsForTelegram(alerts);
+          telegramSent = await sendAlertToTelegram(user.id, alertsText);
+        }
+      }
       
       res.json({
         status: 'success',
         data: alerts,
         memoriesAnalyzed: recentMemories.length,
         periodDays: days,
+        telegramSent,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
