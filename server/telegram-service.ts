@@ -2,7 +2,7 @@ import OpenAI, { toFile } from "openai";
 import { storage } from "./storage";
 import { extractMetadata, generateEmbedding } from "./ai-service";
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 /**
  * Escape HTML special characters for safe Telegram message rendering
