@@ -61,7 +61,10 @@ export interface TelegramUpdate {
 }
 
 export function isTelegramConfigured(): boolean {
-  return !!getTelegramToken();
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const hasToken = !!token;
+  console.log(`[Telegram] isTelegramConfigured check: hasToken=${hasToken}, tokenLength=${token?.length || 0}`);
+  return hasToken;
 }
 
 export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
