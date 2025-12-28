@@ -137,8 +137,20 @@ export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ s
   if (text?.startsWith('/start')) {
     const code = text.split(' ')[1];
     if (code) {
+      // Rate limit verification attempts to prevent brute force
+      if (isVerificationRateLimited(chatId)) {
+        await sendTelegramMessage(chatId, 
+          `⚠️ Too many verification attempts. Please wait 5 minutes and try again.`
+        );
+        return { success: false, response: 'Rate limited' };
+      }
+
       const userMatch = await findUserByVerificationCode(code);
       if (userMatch) {
+        // Clear rate limit on successful verification
+        clearVerificationAttempts(chatId);
+        
+        // One-time use: immediately clear the verification code
         await storage.updateSettings(userMatch.userId, {
           telegramChatId: chatId,
           telegramEnabled: true,
@@ -270,11 +282,43 @@ function getMoodEmoji(mood: string): string {
   return moodEmojis[mood.toLowerCase()] || '🙂';
 }
 
+// Rate limiting for verification attempts (per chatId)
+const verificationAttempts = new Map<string, { count: number; firstAttempt: number }>();
+const MAX_VERIFICATION_ATTEMPTS = 5;
+const VERIFICATION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+function isVerificationRateLimited(chatId: string): boolean {
+  const now = Date.now();
+  const record = verificationAttempts.get(chatId);
+  
+  if (!record) {
+    verificationAttempts.set(chatId, { count: 1, firstAttempt: now });
+    return false;
+  }
+  
+  // Reset if window has passed
+  if (now - record.firstAttempt > VERIFICATION_WINDOW_MS) {
+    verificationAttempts.set(chatId, { count: 1, firstAttempt: now });
+    return false;
+  }
+  
+  // Increment and check limit
+  record.count++;
+  return record.count > MAX_VERIFICATION_ATTEMPTS;
+}
+
+function clearVerificationAttempts(chatId: string): void {
+  verificationAttempts.delete(chatId);
+}
+
 export async function generateVerificationCode(): Promise<string> {
+  // Use high-entropy code: 12 characters alphanumeric (excluding ambiguous chars)
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const crypto = await import('crypto');
   let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 12; i++) {
+    const randomByte = crypto.randomBytes(1)[0];
+    code += chars.charAt(randomByte % chars.length);
   }
   return code;
 }
@@ -286,13 +330,21 @@ export async function setWebhook(webhookUrl: string): Promise<boolean> {
   }
 
   try {
+    // Include secret token for webhook validation if configured
+    const webhookPayload: Record<string, any> = {
+      url: webhookUrl,
+      allowed_updates: ['message'],
+    };
+    
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      webhookPayload.secret_token = webhookSecret;
+    }
+
     const response = await fetch(`${TELEGRAM_API_BASE}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: webhookUrl,
-        allowed_updates: ['message'],
-      }),
+      body: JSON.stringify(webhookPayload),
     });
 
     if (!response.ok) {

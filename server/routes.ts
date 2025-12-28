@@ -141,26 +141,28 @@ function sendErrorResponse(res: any, statusCode: number, message: string, error?
  * Format briefing data for Telegram HTML message
  */
 function formatBriefingForTelegram(briefing: {
-  greeting: string;
-  focusAreas: string[];
-  reminders: string[];
+  greeting?: string;
+  focusAreas?: string[];
+  reminders?: string[];
   moodTrend?: string;
   emailHighlights?: string[];
-  affirmation: string;
+  affirmation?: string;
 }): string {
-  let message = `${briefing.greeting}\n\n`;
+  let message = briefing.greeting ? `${briefing.greeting}\n\n` : '';
   
-  if (briefing.focusAreas.length > 0) {
+  const focusAreas = briefing.focusAreas || [];
+  if (focusAreas.length > 0) {
     message += `<b>📌 Focus Areas</b>\n`;
-    briefing.focusAreas.forEach(area => {
+    focusAreas.forEach(area => {
       message += `• ${area}\n`;
     });
     message += '\n';
   }
   
-  if (briefing.reminders.length > 0) {
+  const reminders = briefing.reminders || [];
+  if (reminders.length > 0) {
     message += `<b>⏰ Reminders</b>\n`;
-    briefing.reminders.forEach(reminder => {
+    reminders.forEach(reminder => {
       message += `• ${reminder}\n`;
     });
     message += '\n';
@@ -170,17 +172,20 @@ function formatBriefingForTelegram(briefing: {
     message += `<b>📊 Mood Trend</b>\n${briefing.moodTrend}\n\n`;
   }
   
-  if (briefing.emailHighlights && briefing.emailHighlights.length > 0) {
+  const emailHighlights = briefing.emailHighlights || [];
+  if (emailHighlights.length > 0) {
     message += `<b>📧 Email Highlights</b>\n`;
-    briefing.emailHighlights.forEach(highlight => {
+    emailHighlights.forEach(highlight => {
       message += `• ${highlight}\n`;
     });
     message += '\n';
   }
   
-  message += `✨ ${briefing.affirmation}`;
+  if (briefing.affirmation) {
+    message += `✨ ${briefing.affirmation}`;
+  }
   
-  return message;
+  return message || 'Your daily briefing is ready!';
 }
 
 /**
@@ -2343,9 +2348,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/telegram/webhook - Webhook endpoint for Telegram bot updates
    * This is called by Telegram when the bot receives messages
+   * Validates X-Telegram-Bot-Api-Secret-Token header for security
    */
   app.post("/api/telegram/webhook", async (req, res) => {
     try {
+      // Validate webhook secret if configured
+      const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const providedSecret = req.headers['x-telegram-bot-api-secret-token'];
+        if (providedSecret !== webhookSecret) {
+          // Return 200 to prevent retry but log unauthorized attempt
+          console.warn('Unauthorized Telegram webhook attempt');
+          return res.status(200).json({ ok: false });
+        }
+      }
+
       const update = req.body as TelegramUpdate;
       const result = await handleTelegramWebhook(update);
       
