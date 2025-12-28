@@ -1,8 +1,19 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { storage } from "./storage";
 import { extractMetadata, generateEmbedding } from "./ai-service";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+
+/**
+ * Escape HTML special characters for safe Telegram message rendering
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 const TELEGRAM_API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -94,9 +105,9 @@ export async function transcribeVoiceNote(fileUrl: string): Promise<string | nul
       return null;
     }
 
-    const audioBuffer = await response.arrayBuffer();
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg' });
-    const audioFile = new File([audioBlob], 'voice.ogg', { type: 'audio/ogg' });
+    // Use OpenAI's toFile helper for Node.js compatibility
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const audioFile = await toFile(audioBuffer, 'voice.ogg', { type: 'audio/ogg' });
 
     const transcription = await openai.audio.transcriptions.create({
       file: audioFile,
@@ -237,22 +248,28 @@ export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ s
         ).catch(err => console.error("Failed to track people:", err));
       }
 
+      // Escape all dynamic content for HTML safety
+      const safeText = escapeHtml(transcriptText.substring(0, 100));
+      const safeTopic = extracted.topicTag ? escapeHtml(extracted.topicTag) : '';
+      const safeMood = extracted.mood ? escapeHtml(extracted.mood) : '';
+      const safePeople = extracted.detectedPeople?.map(p => escapeHtml(p)) || [];
+
       let responseMessage = `✅ <b>Memory saved!</b>\n\n`;
-      responseMessage += `📝 "${transcriptText.substring(0, 100)}${transcriptText.length > 100 ? '...' : ''}"\n\n`;
+      responseMessage += `📝 "${safeText}${transcriptText.length > 100 ? '...' : ''}"\n\n`;
       
-      if (extracted.topicTag) {
-        responseMessage += `🏷️ Topic: ${extracted.topicTag}\n`;
+      if (safeTopic) {
+        responseMessage += `🏷️ Topic: ${safeTopic}\n`;
       }
-      if (extracted.mood) {
-        const moodEmoji = getMoodEmoji(extracted.mood);
-        responseMessage += `${moodEmoji} Mood: ${extracted.mood}`;
+      if (safeMood) {
+        const moodEmoji = getMoodEmoji(extracted.mood!);
+        responseMessage += `${moodEmoji} Mood: ${safeMood}`;
         if (extracted.moodScore !== undefined) {
           responseMessage += ` (${extracted.moodScore > 0 ? '+' : ''}${extracted.moodScore})`;
         }
         responseMessage += '\n';
       }
-      if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
-        responseMessage += `👥 People: ${extracted.detectedPeople.join(', ')}\n`;
+      if (safePeople.length > 0) {
+        responseMessage += `👥 People: ${safePeople.join(', ')}\n`;
       }
 
       await sendTelegramMessage(chatId, responseMessage);
