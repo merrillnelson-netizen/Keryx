@@ -32,6 +32,10 @@ function validateEnvironment() {
   }
 
   console.log('✅ All required environment variables are configured');
+  
+  // Debug: Log Telegram token availability
+  const telegramToken = process.env.TELEGRAM_TOKEN;
+  console.log(`[Startup] TELEGRAM_TOKEN available: ${!!telegramToken}, length: ${telegramToken?.length || 0}`);
 }
 
 // Validate environment before initializing app
