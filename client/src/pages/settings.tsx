@@ -815,7 +815,7 @@ export default function SettingsPage() {
               ) : !telegramStatus?.configured ? (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
                   <p className="text-sm text-amber-500">
-                    Telegram bot token not configured. Add TELEGRAM_TOKEN to secrets.
+                    Telegram bot token not configured. Add TELEGRAM_BOT_TOKEN to secrets.
                   </p>
                 </div>
               ) : telegramStatus?.connected ? (
