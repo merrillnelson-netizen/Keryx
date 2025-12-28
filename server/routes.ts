@@ -13,6 +13,7 @@ import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
+import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 
 // Background job tracking for re-analysis
 interface BackfillJob {
@@ -2094,6 +2095,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update preference", error);
+    }
+  });
+
+  // =========================================
+  // TELEGRAM INTEGRATION API ENDPOINTS
+  // =========================================
+
+  /**
+   * GET /api/telegram/status - Check Telegram connection status
+   */
+  app.get("/api/telegram/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const userSettings = await storage.getSettings(user.id);
+      
+      res.json({
+        status: 'success',
+        data: {
+          configured: isTelegramConfigured(),
+          connected: !!userSettings?.telegramChatId,
+          enabled: userSettings?.telegramEnabled ?? false,
+          briefingsEnabled: userSettings?.telegramBriefingsEnabled ?? true,
+          alertsEnabled: userSettings?.telegramAlertsEnabled ?? true,
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to check Telegram status", error);
+    }
+  });
+
+  /**
+   * POST /api/telegram/connect - Generate verification code for Telegram connection
+   */
+  app.post("/api/telegram/connect", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      if (!isTelegramConfigured()) {
+        return sendErrorResponse(res, 503, "Telegram is not configured on this server");
+      }
+      
+      const verificationCode = await generateVerificationCode();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      
+      await storage.updateSettings(user.id, {
+        telegramVerificationCode: verificationCode,
+        telegramVerificationExpires: expiresAt,
+      });
+      
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'HelixMemoryBot';
+      
+      res.json({
+        status: 'success',
+        data: {
+          verificationCode,
+          expiresAt: expiresAt.toISOString(),
+          telegramLink: `https://t.me/${botUsername}?start=${verificationCode}`,
+          botUsername,
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to generate verification code", error);
+    }
+  });
+
+  /**
+   * DELETE /api/telegram/disconnect - Disconnect Telegram account
+   */
+  app.delete("/api/telegram/disconnect", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      await storage.updateSettings(user.id, {
+        telegramChatId: null,
+        telegramEnabled: false,
+        telegramVerificationCode: null,
+        telegramVerificationExpires: null,
+      });
+      
+      res.json({
+        status: 'success',
+        message: 'Telegram disconnected',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to disconnect Telegram", error);
+    }
+  });
+
+  /**
+   * PUT /api/telegram/settings - Update Telegram notification settings
+   */
+  app.put("/api/telegram/settings", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { enabled, briefingsEnabled, alertsEnabled } = req.body;
+      
+      const updates: Record<string, any> = {};
+      if (enabled !== undefined) updates.telegramEnabled = enabled;
+      if (briefingsEnabled !== undefined) updates.telegramBriefingsEnabled = briefingsEnabled;
+      if (alertsEnabled !== undefined) updates.telegramAlertsEnabled = alertsEnabled;
+      
+      const updatedSettings = await storage.updateSettings(user.id, updates);
+      
+      res.json({
+        status: 'success',
+        data: {
+          enabled: updatedSettings.telegramEnabled,
+          briefingsEnabled: updatedSettings.telegramBriefingsEnabled,
+          alertsEnabled: updatedSettings.telegramAlertsEnabled,
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update Telegram settings", error);
+    }
+  });
+
+  /**
+   * POST /api/telegram/test - Send a test message to Telegram
+   */
+  app.post("/api/telegram/test", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const userSettings = await storage.getSettings(user.id);
+      
+      if (!userSettings?.telegramChatId) {
+        return sendErrorResponse(res, 400, "Telegram is not connected");
+      }
+      
+      const success = await sendTelegramMessage(
+        userSettings.telegramChatId,
+        '🎉 <b>Test message from Helix!</b>\n\nYour Telegram integration is working correctly.'
+      );
+      
+      if (!success) {
+        return sendErrorResponse(res, 500, "Failed to send test message");
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Test message sent',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to send test message", error);
+    }
+  });
+
+  /**
+   * POST /api/telegram/webhook - Webhook endpoint for Telegram bot updates
+   * This is called by Telegram when the bot receives messages
+   */
+  app.post("/api/telegram/webhook", async (req, res) => {
+    try {
+      const update = req.body as TelegramUpdate;
+      const result = await handleTelegramWebhook(update);
+      
+      // Telegram requires 200 response within 60 seconds
+      res.status(200).json({ ok: true, result: result.response });
+    } catch (error) {
+      console.error('Telegram webhook error:', error);
+      // Still return 200 to prevent Telegram from retrying
+      res.status(200).json({ ok: false, error: 'Internal error' });
+    }
+  });
+
+  /**
+   * POST /api/telegram/setup-webhook - Set up the Telegram webhook (admin endpoint)
+   */
+  app.post("/api/telegram/setup-webhook", requireAuth, async (req, res) => {
+    try {
+      const { webhookUrl } = req.body;
+      
+      if (!webhookUrl) {
+        return sendErrorResponse(res, 400, "webhookUrl is required");
+      }
+      
+      const success = await setWebhook(webhookUrl);
+      
+      if (!success) {
+        return sendErrorResponse(res, 500, "Failed to set webhook");
+      }
+      
+      res.json({
+        status: 'success',
+        message: 'Webhook set successfully',
+        webhookUrl,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to set webhook", error);
     }
   });
 

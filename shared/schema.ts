@@ -200,6 +200,13 @@ export const settings = pgTable("settings", {
   providerSelectionMode: text("provider_selection_mode").default("default"), // 'default' or 'ask'
   // Active projects: topics marked as current focus for higher relevance weighting
   activeProjects: text("active_projects").array(), // Array of topic names marked as active focus areas
+  // Telegram integration settings
+  telegramChatId: text("telegram_chat_id"), // User's Telegram chat ID for sending messages
+  telegramEnabled: boolean("telegram_enabled").default(false), // Master toggle for Telegram features
+  telegramBriefingsEnabled: boolean("telegram_briefings_enabled").default(true), // Send morning briefings via Telegram
+  telegramAlertsEnabled: boolean("telegram_alerts_enabled").default(true), // Send pattern alerts via Telegram
+  telegramVerificationCode: text("telegram_verification_code"), // Temporary code for linking account
+  telegramVerificationExpires: timestamp("telegram_verification_expires"), // Code expiration time
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

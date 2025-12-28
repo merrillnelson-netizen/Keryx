@@ -1,0 +1,329 @@
+import OpenAI from "openai";
+import { storage } from "./storage";
+import { extractMetadata, generateEmbedding } from "./ai-service";
+
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_API_BASE = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export interface TelegramMessage {
+  message_id: number;
+  from: {
+    id: number;
+    first_name: string;
+    last_name?: string;
+    username?: string;
+  };
+  chat: {
+    id: number;
+    type: string;
+  };
+  date: number;
+  text?: string;
+  voice?: {
+    file_id: string;
+    file_unique_id: string;
+    duration: number;
+    mime_type?: string;
+    file_size?: number;
+  };
+}
+
+export interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessage;
+}
+
+export function isTelegramConfigured(): boolean {
+  return !!TELEGRAM_TOKEN;
+}
+
+export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
+  if (!TELEGRAM_TOKEN) {
+    console.error('Telegram token not configured');
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_BASE}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Failed to send Telegram message:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error sending Telegram message:', error);
+    return false;
+  }
+}
+
+export async function getFileUrl(fileId: string): Promise<string | null> {
+  if (!TELEGRAM_TOKEN) return null;
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_BASE}/getFile?file_id=${fileId}`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data.ok || !data.result?.file_path) return null;
+
+    return `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${data.result.file_path}`;
+  } catch (error) {
+    console.error('Error getting file URL:', error);
+    return null;
+  }
+}
+
+export async function transcribeVoiceNote(fileUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      console.error('Failed to download voice note');
+      return null;
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/ogg' });
+    const audioFile = new File([audioBlob], 'voice.ogg', { type: 'audio/ogg' });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: 'whisper-1',
+    });
+
+    return transcription.text;
+  } catch (error) {
+    console.error('Error transcribing voice note:', error);
+    return null;
+  }
+}
+
+export async function findUserByChatId(chatId: string): Promise<{ userId: string } | null> {
+  const userSettings = await storage.findSettingsByTelegramChatId(chatId);
+  if (!userSettings) return null;
+  return { userId: userSettings.userId };
+}
+
+export async function findUserByVerificationCode(code: string): Promise<{ userId: string; settingsId: string } | null> {
+  const userSettings = await storage.findSettingsByTelegramVerificationCode(code);
+  if (!userSettings) return null;
+  if (userSettings.telegramVerificationExpires && new Date(userSettings.telegramVerificationExpires) < new Date()) {
+    return null;
+  }
+  return { userId: userSettings.userId, settingsId: userSettings.id };
+}
+
+export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ success: boolean; response?: string }> {
+  if (!update.message) {
+    return { success: true };
+  }
+
+  const message = update.message;
+  const chatId = String(message.chat.id);
+  const text = message.text;
+
+  if (text?.startsWith('/start')) {
+    const code = text.split(' ')[1];
+    if (code) {
+      const userMatch = await findUserByVerificationCode(code);
+      if (userMatch) {
+        await storage.updateSettings(userMatch.userId, {
+          telegramChatId: chatId,
+          telegramEnabled: true,
+          telegramVerificationCode: null,
+          telegramVerificationExpires: null,
+        });
+
+        await sendTelegramMessage(chatId, 
+          `🎉 <b>Successfully connected!</b>\n\nYour Telegram is now linked to Helix. You can:\n\n` +
+          `📝 Send text messages to record memories\n` +
+          `🎤 Send voice notes to record memories\n` +
+          `🔍 Ask questions about your memories\n\n` +
+          `Try it now - just send a message!`
+        );
+        return { success: true, response: 'Account linked' };
+      } else {
+        await sendTelegramMessage(chatId, 
+          `❌ Invalid or expired verification code.\n\nPlease generate a new code in Helix Settings → Telegram.`
+        );
+        return { success: true, response: 'Invalid code' };
+      }
+    } else {
+      await sendTelegramMessage(chatId, 
+        `👋 <b>Welcome to Helix!</b>\n\n` +
+        `To connect your account, go to Helix Settings → Telegram and click "Connect Telegram".`
+      );
+      return { success: true, response: 'Welcome message sent' };
+    }
+  }
+
+  const user = await findUserByChatId(chatId);
+  if (!user) {
+    await sendTelegramMessage(chatId, 
+      `🔗 <b>Account not linked</b>\n\n` +
+      `Please connect your Telegram in Helix Settings → Telegram first.`
+    );
+    return { success: true, response: 'User not linked' };
+  }
+
+  let transcriptText: string | null = null;
+
+  if (message.voice) {
+    await sendTelegramMessage(chatId, '🎤 Processing your voice note...');
+    
+    const fileUrl = await getFileUrl(message.voice.file_id);
+    if (!fileUrl) {
+      await sendTelegramMessage(chatId, '❌ Could not download voice note. Please try again.');
+      return { success: false, response: 'File download failed' };
+    }
+
+    transcriptText = await transcribeVoiceNote(fileUrl);
+    if (!transcriptText) {
+      await sendTelegramMessage(chatId, '❌ Could not transcribe voice note. Please try again.');
+      return { success: false, response: 'Transcription failed' };
+    }
+  } else if (text && !text.startsWith('/')) {
+    transcriptText = text;
+  }
+
+  if (transcriptText) {
+    try {
+      const [extracted, embeddingVector] = await Promise.all([
+        extractMetadata(transcriptText),
+        generateEmbedding(transcriptText),
+      ]);
+
+      const logEntry = await storage.createLogEntry({
+        userId: user.userId,
+        memoryText: transcriptText,
+        topicTag: extracted.topicTag,
+        metadataJson: extracted.metadataJson,
+        embeddingVector,
+        mood: extracted.mood,
+        moodScore: extracted.moodScore,
+        detectedPeople: extracted.detectedPeople,
+        deviceType: 'phone',
+        deviceConnection: 'direct',
+        aiReasoning: extracted.aiReasoning,
+      });
+
+      if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
+        Promise.all(
+          extracted.detectedPeople.map(name => storage.upsertPerson(user.userId, name))
+        ).catch(err => console.error("Failed to track people:", err));
+      }
+
+      let responseMessage = `✅ <b>Memory saved!</b>\n\n`;
+      responseMessage += `📝 "${transcriptText.substring(0, 100)}${transcriptText.length > 100 ? '...' : ''}"\n\n`;
+      
+      if (extracted.topicTag) {
+        responseMessage += `🏷️ Topic: ${extracted.topicTag}\n`;
+      }
+      if (extracted.mood) {
+        const moodEmoji = getMoodEmoji(extracted.mood);
+        responseMessage += `${moodEmoji} Mood: ${extracted.mood}`;
+        if (extracted.moodScore !== undefined) {
+          responseMessage += ` (${extracted.moodScore > 0 ? '+' : ''}${extracted.moodScore})`;
+        }
+        responseMessage += '\n';
+      }
+      if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
+        responseMessage += `👥 People: ${extracted.detectedPeople.join(', ')}\n`;
+      }
+
+      await sendTelegramMessage(chatId, responseMessage);
+      return { success: true, response: 'Memory saved' };
+
+    } catch (error) {
+      console.error('Error processing memory from Telegram:', error);
+      await sendTelegramMessage(chatId, '❌ Something went wrong. Please try again later.');
+      return { success: false, response: 'Processing error' };
+    }
+  }
+
+  return { success: true };
+}
+
+function getMoodEmoji(mood: string): string {
+  const moodEmojis: Record<string, string> = {
+    happy: '😊',
+    excited: '🎉',
+    hopeful: '🌟',
+    neutral: '😐',
+    anxious: '😰',
+    sad: '😢',
+    frustrated: '😤',
+    angry: '😠',
+  };
+  return moodEmojis[mood.toLowerCase()] || '🙂';
+}
+
+export async function generateVerificationCode(): Promise<string> {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+export async function setWebhook(webhookUrl: string): Promise<boolean> {
+  if (!TELEGRAM_TOKEN) {
+    console.error('Telegram token not configured');
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_BASE}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ['message'],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Failed to set webhook:', error);
+      return false;
+    }
+
+    const result = await response.json();
+    console.log('Webhook set:', result);
+    return result.ok;
+  } catch (error) {
+    console.error('Error setting webhook:', error);
+    return false;
+  }
+}
+
+export async function sendBriefingToTelegram(userId: string, briefingHtml: string): Promise<boolean> {
+  const userSettings = await storage.getSettings(userId);
+  if (!userSettings?.telegramEnabled || !userSettings?.telegramBriefingsEnabled || !userSettings?.telegramChatId) {
+    return false;
+  }
+
+  return sendTelegramMessage(userSettings.telegramChatId, `☀️ <b>Good Morning!</b>\n\n${briefingHtml}`);
+}
+
+export async function sendAlertToTelegram(userId: string, alertHtml: string): Promise<boolean> {
+  const userSettings = await storage.getSettings(userId);
+  if (!userSettings?.telegramEnabled || !userSettings?.telegramAlertsEnabled || !userSettings?.telegramChatId) {
+    return false;
+  }
+
+  return sendTelegramMessage(userSettings.telegramChatId, `⚠️ <b>Pattern Alert</b>\n\n${alertHtml}`);
+}
