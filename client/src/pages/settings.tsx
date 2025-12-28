@@ -85,12 +85,10 @@ export default function SettingsPage() {
   
   const { data: availableActions = [] } = useQuery<AvailableActionType[]>({
     queryKey: ["/api/actions/available"],
-    select: (response: any) => response.data || [],
   });
 
   const { data: actionPreferences = [] } = useQuery<AiActionPreference[]>({
     queryKey: ["/api/actions/preferences"],
-    select: (response: any) => response.data || [],
   });
 
   const updateSettingsMutation = useMutation({
@@ -162,7 +160,6 @@ export default function SettingsPage() {
 
   const { data: telegramStatus, isLoading: isTelegramLoading } = useQuery<TelegramStatus>({
     queryKey: ["/api/telegram/status"],
-    select: (response: any) => response.data,
   });
 
   const [telegramCode, setTelegramCode] = useState<{ code: string; link: string; expiresAt: string } | null>(null);
