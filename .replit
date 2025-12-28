@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_openai:1.0.0", "google-calendar:1.0.0", "outlook:1.0.0", "google-mail:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+TELEGRAM_BOT_USERNAME = "HelixAppBot"
