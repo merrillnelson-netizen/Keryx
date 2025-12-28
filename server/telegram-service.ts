@@ -2,8 +2,11 @@ import OpenAI, { toFile } from "openai";
 import { storage } from "./storage";
 import { extractMetadata, generateEmbedding } from "./ai-service";
 
+// Build timestamp: 2025-12-28T22:05:00Z - Force fresh deployment
+
 /**
  * Get Telegram token dynamically from environment
+ * Reads TELEGRAM_BOT_TOKEN at runtime, not at module load time
  */
 function getTelegramToken(): string | undefined {
   return process.env.TELEGRAM_BOT_TOKEN;
