@@ -6,10 +6,10 @@ import { extractMetadata, generateEmbedding } from "./ai-service";
 
 /**
  * Get Telegram token dynamically from environment
- * Reads TELEGRAM_BOT_TOKEN at runtime, not at module load time
+ * Reads TELEGRAM_TOKEN at runtime (the original secret name from Replit integration)
  */
 function getTelegramToken(): string | undefined {
-  return process.env.TELEGRAM_BOT_TOKEN;
+  return process.env.TELEGRAM_TOKEN;
 }
 
 /**
@@ -61,7 +61,7 @@ export interface TelegramUpdate {
 }
 
 export function isTelegramConfigured(): boolean {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_TOKEN;
   const hasToken = !!token;
   console.log(`[Telegram] isTelegramConfigured check: hasToken=${hasToken}, tokenLength=${token?.length || 0}`);
   return hasToken;
