@@ -105,8 +105,11 @@ export async function getGmailUserEmail(): Promise<string | null> {
   }
 }
 
+let gmailReadPermissionWarned = false;
+
 /**
  * Fetch recent emails from inbox
+ * Note: Gmail connector may have send-only permissions, in which case this returns empty array
  */
 export async function getRecentEmails(maxResults: number = 10): Promise<EmailMessage[]> {
   try {
@@ -149,7 +152,14 @@ export async function getRecentEmails(maxResults: number = 10): Promise<EmailMes
     }
 
     return emails;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 403 || error?.code === 403 || error?.message?.includes('Insufficient Permission')) {
+      if (!gmailReadPermissionWarned) {
+        console.log('[Gmail] Read access not available (send-only permissions). Using Outlook Mail for email features.');
+        gmailReadPermissionWarned = true;
+      }
+      return [];
+    }
     console.error('Failed to fetch recent emails:', error);
     return [];
   }
