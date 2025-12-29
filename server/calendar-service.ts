@@ -17,13 +17,29 @@ import {
 } from './outlook-calendar-service';
 
 let googleConnectionSettings: any;
+let lastTokenFetch: number = 0;
+const TOKEN_CACHE_TTL_MS = 30 * 1000; // Cache tokens for 30 seconds max to ensure freshness
 
 export type CalendarProvider = 'google' | 'outlook' | null;
 
-async function getAccessToken(): Promise<string> {
-  if (googleConnectionSettings && googleConnectionSettings.settings?.expires_at && 
-      new Date(googleConnectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return googleConnectionSettings.settings.access_token;
+export function clearGoogleCalendarTokenCache(): void {
+  googleConnectionSettings = null;
+  lastTokenFetch = 0;
+}
+
+async function getAccessToken(forceRefresh: boolean = false): Promise<string> {
+  const now = Date.now();
+  
+  // Use cached token if it's fresh and not forcing refresh
+  if (!forceRefresh && 
+      googleConnectionSettings && 
+      googleConnectionSettings.settings?.access_token &&
+      (now - lastTokenFetch) < TOKEN_CACHE_TTL_MS) {
+    // Also check if token hasn't expired according to its expiry time
+    const expiresAt = googleConnectionSettings.settings?.expires_at;
+    if (!expiresAt || new Date(expiresAt).getTime() > now + 60000) { // 1 minute buffer
+      return googleConnectionSettings.settings.access_token;
+    }
   }
   
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -49,6 +65,7 @@ async function getAccessToken(): Promise<string> {
   
   const data = await response.json();
   googleConnectionSettings = data.items?.[0];
+  lastTokenFetch = now;
 
   const accessToken = googleConnectionSettings?.settings?.access_token || 
                       googleConnectionSettings?.settings?.oauth?.credentials?.access_token;
@@ -59,8 +76,8 @@ async function getAccessToken(): Promise<string> {
   return accessToken;
 }
 
-async function getCalendarClient(): Promise<calendar_v3.Calendar> {
-  const accessToken = await getAccessToken();
+async function getCalendarClient(forceRefresh: boolean = false): Promise<calendar_v3.Calendar> {
+  const accessToken = await getAccessToken(forceRefresh);
 
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({
@@ -122,10 +139,11 @@ export async function isCalendarConnected(): Promise<boolean> {
  */
 async function getGoogleEventsAroundTime(
   timestamp: Date,
-  windowMinutes: number = 30
+  windowMinutes: number = 30,
+  retryCount: number = 0
 ): Promise<CalendarEvent[]> {
   try {
-    const calendar = await getCalendarClient();
+    const calendar = await getCalendarClient(retryCount > 0);
     
     const timeMin = new Date(timestamp.getTime() - windowMinutes * 60 * 1000);
     const timeMax = new Date(timestamp.getTime() + windowMinutes * 60 * 1000);
@@ -151,7 +169,13 @@ async function getGoogleEventsAroundTime(
       location: event.location || undefined,
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
-  } catch (error) {
+  } catch (error: any) {
+    // Retry once with fresh token on 401 Unauthorized
+    if (error?.code === 401 && retryCount === 0) {
+      console.log('[Calendar] Token expired fetching events, refreshing and retrying...');
+      clearGoogleCalendarTokenCache();
+      return getGoogleEventsAroundTime(timestamp, windowMinutes, 1);
+    }
     console.error('Failed to fetch Google calendar events:', error);
     return [];
   }
@@ -239,7 +263,7 @@ export async function createCalendarEvent(
 }
 
 /**
- * Create a new Google calendar event
+ * Create a new Google calendar event with retry on auth failure
  */
 async function createGoogleCalendarEvent(
   title: string,
@@ -249,10 +273,12 @@ async function createGoogleCalendarEvent(
     attendees?: string[];
     location?: string;
     description?: string;
-  }
+  },
+  retryCount: number = 0
 ): Promise<CalendarEvent | null> {
   try {
-    const calendar = await getCalendarClient();
+    // Force refresh token on retry
+    const calendar = await getCalendarClient(retryCount > 0);
     
     // Ensure datetime strings are valid ISO format
     const startDate = new Date(startDateTime);
@@ -309,6 +335,13 @@ async function createGoogleCalendarEvent(
       meetingLink: created.hangoutLink || undefined,
     };
   } catch (error: any) {
+    // Retry once with fresh token on 401 Unauthorized
+    if (error?.code === 401 && retryCount === 0) {
+      console.log('[Calendar] Token expired, refreshing and retrying...');
+      clearGoogleCalendarTokenCache();
+      return createGoogleCalendarEvent(title, startDateTime, endDateTime, options, 1);
+    }
+    
     console.error('[Calendar] Failed to create event:', {
       message: error?.message,
       code: error?.code,
@@ -326,10 +359,11 @@ async function createGoogleCalendarEvent(
 export async function findDuplicateEvent(
   title: string,
   startDateTime: string,
-  toleranceMinutes: number = 30
+  toleranceMinutes: number = 30,
+  retryCount: number = 0
 ): Promise<CalendarEvent | null> {
   try {
-    const calendar = await getCalendarClient();
+    const calendar = await getCalendarClient(retryCount > 0);
     const startTime = new Date(startDateTime);
     
     // Search window around the event time
@@ -369,7 +403,13 @@ export async function findDuplicateEvent(
     }
     
     return null;
-  } catch (error) {
+  } catch (error: any) {
+    // Retry once with fresh token on 401 Unauthorized
+    if (error?.code === 401 && retryCount === 0) {
+      console.log('[Calendar] Token expired checking duplicates, refreshing and retrying...');
+      clearGoogleCalendarTokenCache();
+      return findDuplicateEvent(title, startDateTime, toleranceMinutes, 1);
+    }
     console.error('Failed to check for duplicate event:', error);
     return null;
   }
@@ -392,9 +432,9 @@ export async function getTodaysEvents(): Promise<CalendarEvent[]> {
 /**
  * Get today's Google calendar events
  */
-async function getGoogleTodaysEvents(): Promise<CalendarEvent[]> {
+async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEvent[]> {
   try {
-    const calendar = await getCalendarClient();
+    const calendar = await getCalendarClient(retryCount > 0);
     
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -421,7 +461,13 @@ async function getGoogleTodaysEvents(): Promise<CalendarEvent[]> {
       location: event.location || undefined,
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
-  } catch (error) {
+  } catch (error: any) {
+    // Retry once with fresh token on 401 Unauthorized
+    if (error?.code === 401 && retryCount === 0) {
+      console.log('[Calendar] Token expired fetching today events, refreshing and retrying...');
+      clearGoogleCalendarTokenCache();
+      return getGoogleTodaysEvents(1);
+    }
     console.error('Failed to fetch today\'s Google events:', error);
     return [];
   }
