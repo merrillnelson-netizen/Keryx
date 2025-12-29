@@ -69,10 +69,28 @@ async function getAccessToken(forceRefresh: boolean = false): Promise<string> {
 
   const accessToken = googleConnectionSettings?.settings?.access_token || 
                       googleConnectionSettings?.settings?.oauth?.credentials?.access_token;
+  const expiresAt = googleConnectionSettings?.settings?.expires_at;
 
   if (!googleConnectionSettings || !accessToken) {
+    console.error('[Calendar] Google Calendar not connected or no access token. Connection data:', {
+      hasItems: !!data.items?.length,
+      hasSettings: !!googleConnectionSettings?.settings,
+      hasToken: !!accessToken
+    });
     throw new Error('Google Calendar not connected');
   }
+  
+  // Log token info for debugging
+  if (expiresAt) {
+    const expiryTime = new Date(expiresAt);
+    const isExpired = expiryTime.getTime() < now;
+    console.log('[Calendar] Token fetched from connector:', {
+      expiresAt: expiryTime.toISOString(),
+      isExpired,
+      tokenLength: accessToken.length
+    });
+  }
+  
   return accessToken;
 }
 
