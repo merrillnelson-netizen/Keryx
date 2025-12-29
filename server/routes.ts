@@ -2043,6 +2043,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * GET /api/actions/preferences - Get user's action preferences
+   * NOTE: Must be defined BEFORE /api/actions/:id to prevent route conflicts
+   */
+  app.get("/api/actions/preferences", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const preferences = await storage.getAiActionPreferences(user.id);
+      
+      res.json({
+        status: 'success',
+        data: preferences,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch preferences", error);
+    }
+  });
+
+  /**
+   * PUT /api/actions/preferences/:actionType - Update preference for an action type
+   * NOTE: Must be defined BEFORE /api/actions/:id to prevent route conflicts
+   */
+  app.put("/api/actions/preferences/:actionType", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { actionType } = req.params;
+      const { policy, conditions } = req.body;
+      
+      if (!policy || !['auto', 'confirm', 'disabled'].includes(policy)) {
+        return sendErrorResponse(res, 400, "Invalid policy. Must be 'auto', 'confirm', or 'disabled'");
+      }
+      
+      const preference = await storage.upsertAiActionPreference(
+        user.id, 
+        actionType, 
+        policy, 
+        conditions
+      );
+      
+      res.json({
+        status: 'success',
+        data: preference,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update preference", error);
+    }
+  });
+
+  /**
    * GET /api/actions/:id - Get a specific action
    */
   app.get("/api/actions/:id", requireAuth, async (req, res) => {
@@ -2142,58 +2192,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to detect actions", error);
-    }
-  });
-
-  // =========================================
-  // AI ACTION PREFERENCES API ENDPOINTS
-  // =========================================
-
-  /**
-   * GET /api/actions/preferences - Get user's action preferences
-   */
-  app.get("/api/actions/preferences", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const preferences = await storage.getAiActionPreferences(user.id);
-      
-      res.json({
-        status: 'success',
-        data: preferences,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to fetch preferences", error);
-    }
-  });
-
-  /**
-   * PUT /api/actions/preferences/:actionType - Update preference for an action type
-   */
-  app.put("/api/actions/preferences/:actionType", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const { actionType } = req.params;
-      const { policy, conditions } = req.body;
-      
-      if (!policy || !['auto', 'confirm', 'disabled'].includes(policy)) {
-        return sendErrorResponse(res, 400, "Invalid policy. Must be 'auto', 'confirm', or 'disabled'");
-      }
-      
-      const preference = await storage.upsertAiActionPreference(
-        user.id, 
-        actionType, 
-        policy, 
-        conditions
-      );
-      
-      res.json({
-        status: 'success',
-        data: preference,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to update preference", error);
     }
   });
 
