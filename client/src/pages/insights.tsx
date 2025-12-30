@@ -207,9 +207,9 @@ export default function Insights() {
         </div>
 
         {/* Mood Analytics */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-2 gap-6 w-full overflow-hidden">
           {/* Mood Distribution Chart */}
-          <Card className="glass-card border-white/20">
+          <Card className="glass-card border-white/20 min-w-0">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-primary" />
@@ -254,7 +254,7 @@ export default function Insights() {
           </Card>
 
           {/* Mood Breakdown */}
-          <Card className="glass-card border-white/20">
+          <Card className="glass-card border-white/20 min-w-0">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" />

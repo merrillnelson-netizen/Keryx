@@ -176,16 +176,6 @@ export default function LandingPage() {
                 Start Free
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
-              <Button 
-                size="lg"
-                variant="outline"
-                onClick={() => navigate("/login")}
-                className="text-lg px-8 py-6 border-2"
-                data-testid="button-login-hero"
-              >
-                <MessageSquare className="w-5 h-5 mr-2" />
-                See Demo
-              </Button>
             </motion.div>
 
             {/* Trust Indicators */}
