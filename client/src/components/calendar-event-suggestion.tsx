@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
-import { Calendar, Check, X, Clock, MapPin, Users, Loader2, AlertCircle } from "lucide-react";
+import { Calendar, Check, X, Clock, MapPin, Users, Loader2, AlertCircle, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DetectedEvent {
@@ -15,6 +15,11 @@ interface DetectedEvent {
   attendees?: string[];
   location?: string;
   description?: string;
+}
+
+interface ActionPreference {
+  actionType: string;
+  policy: string;
 }
 
 interface CalendarEventSuggestionProps {
@@ -31,11 +36,21 @@ export default function CalendarEventSuggestion({
   onCreated,
 }: CalendarEventSuggestionProps) {
   const [dismissed, setDismissed] = useState(false);
+  const [autoExecuted, setAutoExecuted] = useState(false);
+  const autoExecuteTriggered = useRef(false);
   const queryClient = useQueryClient();
 
   const { data: calendarStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["/api/calendar/status"],
   });
+
+  const { data: actionPreferences } = useQuery<ActionPreference[]>({
+    queryKey: ["/api/actions/preferences"],
+  });
+
+  const isAutoMode = actionPreferences?.find(
+    (p) => p.actionType === "calendar.create"
+  )?.policy === "auto";
 
   const detectMutation = useMutation({
     mutationFn: async () => {
@@ -77,6 +92,7 @@ export default function CalendarEventSuggestion({
     if (calendarStatus?.connected && memoryText) {
       // Reset any previous detection state before running new detection
       detectMutation.reset();
+      autoExecuteTriggered.current = false;
       // Small delay to ensure reset completes
       const timer = setTimeout(() => {
         detectMutation.mutate();
@@ -84,6 +100,25 @@ export default function CalendarEventSuggestion({
       return () => clearTimeout(timer);
     }
   }, [calendarStatus?.connected, memoryText]);
+
+  // Auto-execute if policy is set to auto and event is detected
+  useEffect(() => {
+    const detectedEvent = detectMutation.data?.data as DetectedEvent | undefined;
+    if (
+      isAutoMode &&
+      detectedEvent?.detected &&
+      detectedEvent.title &&
+      detectedEvent.startDateTime &&
+      detectedEvent.endDateTime &&
+      !autoExecuteTriggered.current &&
+      !createMutation.isPending &&
+      !createMutation.isSuccess
+    ) {
+      autoExecuteTriggered.current = true;
+      setAutoExecuted(true);
+      createMutation.mutate(detectedEvent);
+    }
+  }, [isAutoMode, detectMutation.data, createMutation.isPending, createMutation.isSuccess]);
 
   if (dismissed || !calendarStatus?.connected) {
     return null;
@@ -181,9 +216,15 @@ export default function CalendarEventSuggestion({
             </>
           ) : (
             <>
-              <Check className="w-5 h-5 text-green-400" />
+              {autoExecuted ? (
+                <Zap className="w-5 h-5 text-green-400" />
+              ) : (
+                <Check className="w-5 h-5 text-green-400" />
+              )}
               <div>
-                <p className="text-sm font-medium text-green-400">Added to calendar</p>
+                <p className="text-sm font-medium text-green-400">
+                  {autoExecuted ? "Auto-added to calendar" : "Added to calendar"}
+                </p>
                 <p className="text-xs text-muted-foreground">{result?.event?.title}</p>
               </div>
             </>
