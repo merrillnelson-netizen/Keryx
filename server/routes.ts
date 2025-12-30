@@ -1142,7 +1142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userPreference: userSettings?.emailProvider || null,
           enabled: userSettings?.emailIntegrationEnabled !== false,
           capabilities: {
-            gmail: { send: true, read: false },
+            gmail: { send: true, read: true },
             outlook: { send: true, read: true },
           },
         },
@@ -1160,7 +1160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userPreference: null, 
           enabled: true,
           capabilities: {
-            gmail: { send: true, read: false },
+            gmail: { send: true, read: true },
             outlook: { send: true, read: true },
           },
         },
