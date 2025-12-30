@@ -386,7 +386,6 @@ export async function setWebhook(webhookUrl: string): Promise<boolean> {
     }
 
     const result = await response.json();
-    console.log('Webhook set:', result);
     return result.ok;
   } catch (error) {
     console.error('Error setting webhook:', error);
