@@ -80,17 +80,6 @@ async function getAccessToken(forceRefresh: boolean = false): Promise<string> {
     throw new Error('Google Calendar not connected');
   }
   
-  // Log token info for debugging
-  if (expiresAt) {
-    const expiryTime = new Date(expiresAt);
-    const isExpired = expiryTime.getTime() < now;
-    console.log('[Calendar] Token fetched from connector:', {
-      expiresAt: expiryTime.toISOString(),
-      isExpired,
-      tokenLength: accessToken.length
-    });
-  }
-  
   return accessToken;
 }
 
