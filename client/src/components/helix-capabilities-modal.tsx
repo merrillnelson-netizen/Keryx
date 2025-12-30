@@ -186,13 +186,13 @@ export function HelixCapabilitiesModal() {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+          className="w-full gap-2 justify-start text-foreground bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/30 hover:from-primary/20 hover:to-secondary/20 hover:border-primary/50"
           data-testid="button-help-capabilities"
         >
-          <HelpCircle className="w-4 h-4" />
-          <span className="hidden sm:inline">What can Helix do?</span>
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span>What can Helix do?</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[85vh] glass-card-strong border-white/20 p-0 overflow-hidden">
