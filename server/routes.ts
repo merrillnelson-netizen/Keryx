@@ -987,34 +987,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getSettings(user.id)
       ]);
       
+      // Check user's enabled/disabled settings for each provider
+      const googleCalendarUserEnabled = userSettings?.googleCalendarEnabled !== false;
+      const outlookCalendarUserEnabled = userSettings?.outlookCalendarEnabled !== false;
+      const gmailUserEnabled = userSettings?.gmailEnabled !== false;
+      const outlookMailUserEnabled = userSettings?.outlookMailEnabled !== false;
+      
+      // Effective availability = connected AND user-enabled
+      const googleCalendarAvailable = googleCalendar && googleCalendarUserEnabled;
+      const outlookCalendarAvailable = outlookCalendar && outlookCalendarUserEnabled;
+      const gmailAvailable = gmail && gmailUserEnabled;
+      const outlookMailAvailable = outlookMail && outlookMailUserEnabled;
+      
       // Determine active calendar provider based on user preference, then fallback to availability
       let activeCalendarProvider: string | null = null;
       if (userSettings?.calendarProvider) {
-        // User has a preference - use it if that provider is connected
-        if (userSettings.calendarProvider === 'google' && googleCalendar) {
+        // User has a preference - use it if that provider is connected AND enabled
+        if (userSettings.calendarProvider === 'google' && googleCalendarAvailable) {
           activeCalendarProvider = 'google';
-        } else if (userSettings.calendarProvider === 'outlook' && outlookCalendar) {
+        } else if (userSettings.calendarProvider === 'outlook' && outlookCalendarAvailable) {
           activeCalendarProvider = 'outlook';
         }
       }
-      // Fallback: auto-detect (prefer Google when both connected)
+      // Fallback: auto-detect from available providers (prefer Google when both available)
       if (!activeCalendarProvider) {
-        activeCalendarProvider = googleCalendar ? 'google' : outlookCalendar ? 'outlook' : null;
+        activeCalendarProvider = googleCalendarAvailable ? 'google' : outlookCalendarAvailable ? 'outlook' : null;
       }
       
       // Determine active email provider based on user preference, then fallback to availability
       let activeEmailProvider: string | null = null;
       if (userSettings?.emailProvider) {
-        // User has a preference - use it if that provider is connected
-        if (userSettings.emailProvider === 'gmail' && gmail) {
+        // User has a preference - use it if that provider is connected AND enabled
+        if (userSettings.emailProvider === 'gmail' && gmailAvailable) {
           activeEmailProvider = 'gmail';
-        } else if (userSettings.emailProvider === 'outlook' && outlookMail) {
+        } else if (userSettings.emailProvider === 'outlook' && outlookMailAvailable) {
           activeEmailProvider = 'outlook';
         }
       }
-      // Fallback: auto-detect (prefer Gmail when both connected)
+      // Fallback: auto-detect from available providers (prefer Gmail when both available)
       if (!activeEmailProvider) {
-        activeEmailProvider = gmail ? 'gmail' : outlookMail ? 'outlook' : null;
+        activeEmailProvider = gmailAvailable ? 'gmail' : outlookMailAvailable ? 'outlook' : null;
       }
       
       res.json({

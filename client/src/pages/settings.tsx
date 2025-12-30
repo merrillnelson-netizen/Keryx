@@ -553,76 +553,116 @@ export default function SettingsPage() {
               
               <div className="space-y-3">
                 <div 
-                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg transition-colors ${
                     providersStatus?.calendar.google 
-                      ? providersStatus?.calendar.activeProvider === 'google'
-                        ? 'bg-blue-500/10 border border-blue-500/30'
-                        : 'bg-muted/30 hover:bg-blue-500/5'
+                      ? settings.googleCalendarEnabled !== false
+                        ? providersStatus?.calendar.activeProvider === 'google'
+                          ? 'bg-blue-500/10 border border-blue-500/30'
+                          : 'bg-muted/30'
+                        : 'bg-muted/30 opacity-60'
                       : 'bg-muted/30 opacity-60'
                   }`}
-                  onClick={() => providersStatus?.calendar.google && handleProviderSelect('calendar', 'google')}
                   data-testid="calendar-provider-google"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                      <span className="text-blue-500 text-xs font-bold">G</span>
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className={`flex items-center gap-3 flex-1 ${providersStatus?.calendar.google && settings.googleCalendarEnabled !== false ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => providersStatus?.calendar.google && settings.googleCalendarEnabled !== false && handleProviderSelect('calendar', 'google')}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                        <span className="text-blue-500 text-xs font-bold">G</span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Google Calendar</span>
+                        {providersStatus?.calendar.google && settings.googleCalendarEnabled !== false && providersStatus?.calendar.activeProvider === 'google' && (
+                          <p className="text-xs text-green-500">Active</p>
+                        )}
+                        {providersStatus?.calendar.google && settings.googleCalendarEnabled !== false && providersStatus?.calendar.activeProvider !== 'google' && (
+                          <p className="text-xs text-muted-foreground">Click to make active</p>
+                        )}
+                        {providersStatus?.calendar.google && settings.googleCalendarEnabled === false && (
+                          <p className="text-xs text-muted-foreground">Disabled by user</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Google Calendar</span>
-                      {providersStatus?.calendar.google && providersStatus?.calendar.activeProvider === 'google' && (
-                        <p className="text-xs text-green-500">Active</p>
-                      )}
-                      {providersStatus?.calendar.google && providersStatus?.calendar.activeProvider !== 'google' && (
-                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {providersStatus?.calendar.google ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={`text-xs ${providersStatus?.calendar.google ? 'text-green-500' : 'text-muted-foreground'}`}>
+                          {providersStatus?.calendar.google ? 'Connected' : 'Not connected'}
+                        </span>
+                      </div>
+                      {providersStatus?.calendar.google && (
+                        <Switch
+                          data-testid="switch-google-calendar-enabled"
+                          checked={settings.googleCalendarEnabled !== false}
+                          onCheckedChange={(checked) => 
+                            setSettings(prev => ({ ...prev, googleCalendarEnabled: checked }))
+                          }
+                        />
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {providersStatus?.calendar.google ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
-                    )}
-                    <span className={`text-sm ${providersStatus?.calendar.google ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {providersStatus?.calendar.google ? 'Connected' : 'Not connected'}
-                    </span>
                   </div>
                 </div>
 
                 <div 
-                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg transition-colors ${
                     providersStatus?.calendar.outlook 
-                      ? providersStatus?.calendar.activeProvider === 'outlook'
-                        ? 'bg-cyan-500/10 border border-cyan-500/30'
-                        : 'bg-muted/30 hover:bg-cyan-500/5'
+                      ? settings.outlookCalendarEnabled !== false
+                        ? providersStatus?.calendar.activeProvider === 'outlook'
+                          ? 'bg-cyan-500/10 border border-cyan-500/30'
+                          : 'bg-muted/30'
+                        : 'bg-muted/30 opacity-60'
                       : 'bg-muted/30 opacity-60'
                   }`}
-                  onClick={() => providersStatus?.calendar.outlook && handleProviderSelect('calendar', 'outlook')}
                   data-testid="calendar-provider-outlook"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                      <span className="text-cyan-500 text-xs font-bold">O</span>
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className={`flex items-center gap-3 flex-1 ${providersStatus?.calendar.outlook && settings.outlookCalendarEnabled !== false ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => providersStatus?.calendar.outlook && settings.outlookCalendarEnabled !== false && handleProviderSelect('calendar', 'outlook')}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                        <span className="text-cyan-500 text-xs font-bold">O</span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Outlook Calendar</span>
+                        {providersStatus?.calendar.outlook && settings.outlookCalendarEnabled !== false && providersStatus?.calendar.activeProvider === 'outlook' && (
+                          <p className="text-xs text-green-500">Active</p>
+                        )}
+                        {providersStatus?.calendar.outlook && settings.outlookCalendarEnabled !== false && providersStatus?.calendar.activeProvider !== 'outlook' && (
+                          <p className="text-xs text-muted-foreground">Click to make active</p>
+                        )}
+                        {providersStatus?.calendar.outlook && settings.outlookCalendarEnabled === false && (
+                          <p className="text-xs text-muted-foreground">Disabled by user</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Outlook Calendar</span>
-                      {providersStatus?.calendar.outlook && providersStatus?.calendar.activeProvider === 'outlook' && (
-                        <p className="text-xs text-green-500">Active</p>
-                      )}
-                      {providersStatus?.calendar.outlook && providersStatus?.calendar.activeProvider !== 'outlook' && (
-                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {providersStatus?.calendar.outlook ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={`text-xs ${providersStatus?.calendar.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
+                          {providersStatus?.calendar.outlook ? 'Connected' : 'Not connected'}
+                        </span>
+                      </div>
+                      {providersStatus?.calendar.outlook && (
+                        <Switch
+                          data-testid="switch-outlook-calendar-enabled"
+                          checked={settings.outlookCalendarEnabled !== false}
+                          onCheckedChange={(checked) => 
+                            setSettings(prev => ({ ...prev, outlookCalendarEnabled: checked }))
+                          }
+                        />
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {providersStatus?.calendar.outlook ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
-                    )}
-                    <span className={`text-sm ${providersStatus?.calendar.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {providersStatus?.calendar.outlook ? 'Connected' : 'Not connected'}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -667,102 +707,142 @@ export default function SettingsPage() {
               
               <div className="space-y-3">
                 <div 
-                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg transition-colors ${
                     providersStatus?.email.gmail 
-                      ? providersStatus?.email.activeProvider === 'gmail'
-                        ? 'bg-red-500/10 border border-red-500/30'
-                        : 'bg-muted/30 hover:bg-red-500/5'
+                      ? settings.gmailEnabled !== false
+                        ? providersStatus?.email.activeProvider === 'gmail'
+                          ? 'bg-red-500/10 border border-red-500/30'
+                          : 'bg-muted/30'
+                        : 'bg-muted/30 opacity-60'
                       : 'bg-muted/30 opacity-60'
                   }`}
-                  onClick={() => providersStatus?.email.gmail && handleProviderSelect('email', 'gmail')}
                   data-testid="email-provider-gmail"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
-                      <span className="text-red-500 text-xs font-bold">G</span>
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className={`flex items-center gap-3 flex-1 ${providersStatus?.email.gmail && settings.gmailEnabled !== false ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => providersStatus?.email.gmail && settings.gmailEnabled !== false && handleProviderSelect('email', 'gmail')}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                        <span className="text-red-500 text-xs font-bold">G</span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Gmail</span>
+                        {providersStatus?.email.gmail && settings.gmailEnabled !== false && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {providersStatus?.email.capabilities?.gmail?.read ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
+                                Full access
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                                Send only
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        {providersStatus?.email.gmail && settings.gmailEnabled !== false && providersStatus?.email.activeProvider === 'gmail' && (
+                          <p className="text-xs text-green-500">Active</p>
+                        )}
+                        {providersStatus?.email.gmail && settings.gmailEnabled !== false && providersStatus?.email.activeProvider !== 'gmail' && (
+                          <p className="text-xs text-muted-foreground">Click to make active</p>
+                        )}
+                        {providersStatus?.email.gmail && settings.gmailEnabled === false && (
+                          <p className="text-xs text-muted-foreground">Disabled by user</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Gmail</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {providersStatus?.email.gmail ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={`text-xs ${providersStatus?.email.gmail ? 'text-green-500' : 'text-muted-foreground'}`}>
+                          {providersStatus?.email.gmail ? 'Connected' : 'Not connected'}
+                        </span>
+                      </div>
                       {providersStatus?.email.gmail && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          {providersStatus?.email.capabilities?.gmail?.read ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
-                              Full access
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
-                              Send only
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                      {providersStatus?.email.gmail && providersStatus?.email.activeProvider === 'gmail' && (
-                        <p className="text-xs text-green-500">Active</p>
-                      )}
-                      {providersStatus?.email.gmail && providersStatus?.email.activeProvider !== 'gmail' && (
-                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                        <Switch
+                          data-testid="switch-gmail-enabled"
+                          checked={settings.gmailEnabled !== false}
+                          onCheckedChange={(checked) => 
+                            setSettings(prev => ({ ...prev, gmailEnabled: checked }))
+                          }
+                        />
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {providersStatus?.email.gmail ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
-                    )}
-                    <span className={`text-sm ${providersStatus?.email.gmail ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {providersStatus?.email.gmail ? 'Connected' : 'Not connected'}
-                    </span>
                   </div>
                 </div>
 
                 <div 
-                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                  className={`p-3 rounded-lg transition-colors ${
                     providersStatus?.email.outlook 
-                      ? providersStatus?.email.activeProvider === 'outlook'
-                        ? 'bg-cyan-500/10 border border-cyan-500/30'
-                        : 'bg-muted/30 hover:bg-cyan-500/5'
+                      ? settings.outlookMailEnabled !== false
+                        ? providersStatus?.email.activeProvider === 'outlook'
+                          ? 'bg-cyan-500/10 border border-cyan-500/30'
+                          : 'bg-muted/30'
+                        : 'bg-muted/30 opacity-60'
                       : 'bg-muted/30 opacity-60'
                   }`}
-                  onClick={() => providersStatus?.email.outlook && handleProviderSelect('email', 'outlook')}
                   data-testid="email-provider-outlook"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                      <span className="text-cyan-500 text-xs font-bold">O</span>
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className={`flex items-center gap-3 flex-1 ${providersStatus?.email.outlook && settings.outlookMailEnabled !== false ? 'cursor-pointer hover:opacity-80' : ''}`}
+                      onClick={() => providersStatus?.email.outlook && settings.outlookMailEnabled !== false && handleProviderSelect('email', 'outlook')}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                        <span className="text-cyan-500 text-xs font-bold">O</span>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Outlook Mail</span>
+                        {providersStatus?.email.outlook && settings.outlookMailEnabled !== false && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {providersStatus?.email.capabilities?.outlook?.read ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
+                                Full access
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                                Send only
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        {providersStatus?.email.outlook && settings.outlookMailEnabled !== false && providersStatus?.email.activeProvider === 'outlook' && (
+                          <p className="text-xs text-green-500">Active</p>
+                        )}
+                        {providersStatus?.email.outlook && settings.outlookMailEnabled !== false && providersStatus?.email.activeProvider !== 'outlook' && (
+                          <p className="text-xs text-muted-foreground">Click to make active</p>
+                        )}
+                        {providersStatus?.email.outlook && settings.outlookMailEnabled === false && (
+                          <p className="text-xs text-muted-foreground">Disabled by user</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Outlook Mail</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        {providersStatus?.email.outlook ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <span className={`text-xs ${providersStatus?.email.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
+                          {providersStatus?.email.outlook ? 'Connected' : 'Not connected'}
+                        </span>
+                      </div>
                       {providersStatus?.email.outlook && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          {providersStatus?.email.capabilities?.outlook?.read ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
-                              Full access
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
-                              Send only
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                      {providersStatus?.email.outlook && providersStatus?.email.activeProvider === 'outlook' && (
-                        <p className="text-xs text-green-500">Active</p>
-                      )}
-                      {providersStatus?.email.outlook && providersStatus?.email.activeProvider !== 'outlook' && (
-                        <p className="text-xs text-muted-foreground">Click to make active</p>
+                        <Switch
+                          data-testid="switch-outlook-mail-enabled"
+                          checked={settings.outlookMailEnabled !== false}
+                          onCheckedChange={(checked) => 
+                            setSettings(prev => ({ ...prev, outlookMailEnabled: checked }))
+                          }
+                        />
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {providersStatus?.email.outlook ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
-                    )}
-                    <span className={`text-sm ${providersStatus?.email.outlook ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {providersStatus?.email.outlook ? 'Connected' : 'Not connected'}
-                    </span>
                   </div>
                 </div>
               </div>
