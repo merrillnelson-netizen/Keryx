@@ -71,6 +71,80 @@ const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string 
   motivated: { emoji: "💪", color: "bg-lime-500/20 text-lime-400 border-lime-500/30", label: "Motivated" },
 };
 
+function formatMetadataValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(v => String(v)).join(', ');
+  } else if (value !== null && value !== undefined) {
+    return String(value);
+  }
+  return 'N/A';
+}
+
+function MetadataDetails({ metadataJson }: { metadataJson: unknown }) {
+  if (!metadataJson || typeof metadataJson !== 'object') return null;
+  const entries = Object.entries(metadataJson as Record<string, unknown>);
+  if (entries.length === 0) return null;
+  
+  return (
+    <div className="border-t border-white/10 pt-3">
+      <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
+      <div className="glass-card p-3 rounded-lg">
+        {entries.map(([key, value]) => (
+          <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
+            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
+              {key.replace(/_/g, ' ')}:
+            </span>
+            <span className="text-sm text-foreground">
+              {formatMetadataValue(value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AIReasoningLog({ aiReasoning }: { aiReasoning: unknown }) {
+  if (!aiReasoning || typeof aiReasoning !== 'object') return null;
+  const reasoning = aiReasoning as Record<string, string>;
+  if (!reasoning.topic && !reasoning.mood && !reasoning.people && !reasoning.calendar) return null;
+  
+  return (
+    <div className="border-t border-white/10 pt-3 mt-3">
+      <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+        <Brain className="w-4 h-4 text-purple-400" />
+        AI Decision Log
+      </h4>
+      <div className="glass-card p-3 rounded-lg space-y-2 text-sm">
+        {reasoning.topic && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Topic:</span>
+            <span className="text-foreground">{reasoning.topic}</span>
+          </div>
+        )}
+        {reasoning.mood && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Mood:</span>
+            <span className="text-foreground">{reasoning.mood}</span>
+          </div>
+        )}
+        {reasoning.people && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">People:</span>
+            <span className="text-foreground">{reasoning.people}</span>
+          </div>
+        )}
+        {reasoning.calendar && (
+          <div className="flex items-start gap-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Calendar:</span>
+            <span className="text-foreground">{reasoning.calendar}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MoodBadge({ mood, score }: { mood?: string | null; score?: number | null }) {
   if (!mood) return null;
   const config = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
@@ -647,76 +721,19 @@ export default function History() {
                   </div>
                 </CardHeader>
                 
-                {expandedId === entry.id ? (
+                {expandedId === entry.id && (
                   <CardContent className="pt-0 animate-slide-in" data-testid={`metadata-details-${entry.id}`}>
                     {/* Extracted metadata details */}
-                    {entry.metadataJson && typeof entry.metadataJson === 'object' && Object.keys(entry.metadataJson as object).length > 0 && (
-                      <div className="border-t border-white/10 pt-3">
-                        <h4 className="text-sm font-medium text-foreground mb-2">Extracted Details</h4>
-                        <div className="glass-card p-3 rounded-lg">
-                          {Object.entries(entry.metadataJson as Record<string, unknown>).map(([key, value]) => {
-                            const displayValue: string = Array.isArray(value) 
-                              ? value.map(v => String(v)).join(', ')
-                              : value !== null && value !== undefined 
-                                ? String(value) 
-                                : 'N/A';
-                            
-                            return (
-                              <div key={key} className="flex items-start gap-2 mb-1 last:mb-0">
-                                <span className="text-xs font-medium text-muted-foreground uppercase min-w-[80px]">
-                                  {key.replace(/_/g, ' ')}:
-                                </span>
-                                <span className="text-sm text-foreground">
-                                  {displayValue}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    <MetadataDetails metadataJson={entry.metadataJson} />
                     
                     {/* AI Decision Log - transparency about AI reasoning */}
-                    {entry.aiReasoning && typeof entry.aiReasoning === 'object' && (
-                      <div className="border-t border-white/10 pt-3 mt-3">
-                        <h4 className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
-                          <Brain className="w-4 h-4 text-purple-400" />
-                          AI Decision Log
-                        </h4>
-                        <div className="glass-card p-3 rounded-lg space-y-2 text-sm">
-                          {(entry.aiReasoning as Record<string, string>).topic && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Topic:</span>
-                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).topic}</span>
-                            </div>
-                          )}
-                          {(entry.aiReasoning as Record<string, string>).mood && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Mood:</span>
-                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).mood}</span>
-                            </div>
-                          )}
-                          {(entry.aiReasoning as Record<string, string>).people && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">People:</span>
-                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).people}</span>
-                            </div>
-                          )}
-                          {(entry.aiReasoning as Record<string, string>).calendar && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-xs font-medium text-muted-foreground uppercase min-w-[70px]">Calendar:</span>
-                              <span className="text-foreground">{(entry.aiReasoning as Record<string, string>).calendar}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    <AIReasoningLog aiReasoning={entry.aiReasoning} />
                     
                     <p className="text-xs text-muted-foreground mt-3">
                       Saved {new Date(entry.timestamp!).toLocaleString()}
                     </p>
                   </CardContent>
-                ) : null}
+                )}
               </Card>
               ))}
               
