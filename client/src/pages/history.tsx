@@ -342,7 +342,8 @@ export default function History() {
   const handleSaveEdit = () => {
     if (editingEntry) {
       try {
-        const metadata = editMetadata ? JSON.parse(editMetadata) : null;
+        // Parse metadata or use empty object (never null - DB constraint)
+        const metadata = editMetadata ? JSON.parse(editMetadata) : {};
         updateMutation.mutate({
           id: editingEntry.id,
           data: {

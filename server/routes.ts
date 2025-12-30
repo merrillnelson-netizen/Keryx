@@ -851,6 +851,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate update data (partial schema)
       const updateData = { ...req.body };
       
+      // Ensure metadataJson is never null (DB constraint: NOT NULL)
+      if (updateData.metadataJson === null) {
+        updateData.metadataJson = {};
+      }
+      
       // If memoryText is being updated, check if it actually changed
       if (updateData.memoryText) {
         const existingEntry = await storage.getLogEntry(id, user.id);
