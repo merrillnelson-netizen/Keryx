@@ -104,11 +104,13 @@ export async function detectActionFromInput(
     currentTime?: Date;
     recentMemories?: string[];
     connectedProviders?: { calendar?: string; email?: string };
+    timezone?: string;
   }
 ): Promise<DetectedAction | null> {
   try {
     const currentTime = contextInfo?.currentTime || new Date();
     const providers = contextInfo?.connectedProviders || {};
+    const userTimezone = contextInfo?.timezone || 'UTC';
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -127,6 +129,7 @@ AVAILABLE ACTIONS:
 
 CURRENT CONTEXT:
 - Current time: ${currentTime.toISOString()}
+- User's timezone: ${userTimezone}
 - Calendar provider: ${providers.calendar || 'not connected'}
 - Email provider: ${providers.email || 'not connected'}
 
@@ -153,10 +156,11 @@ Respond with JSON:
     // For calendar.create:
     "summary": "Event title",
     "description": "Event description",
-    "startDateTime": "ISO 8601 datetime",
-    "endDateTime": "ISO 8601 datetime",
+    "startDateTime": "ISO 8601 datetime WITHOUT timezone suffix (e.g., 2025-01-03T11:00:00)",
+    "endDateTime": "ISO 8601 datetime WITHOUT timezone suffix",
     "attendees": ["email@example.com"],
-    "location": "optional location"
+    "location": "optional location",
+    "timezone": "${userTimezone}"
     
     // For email.send:
     "to": ["email or name"],
@@ -171,6 +175,8 @@ Respond with JSON:
   "reasoning": "Explanation of why this was detected as an action and how parameters were extracted",
   "confidence": 0.0-1.0
 }
+
+IMPORTANT: For calendar events, the datetime should represent the time in the user's timezone (${userTimezone}). Do NOT append 'Z' or timezone offset to the datetime string - just use format like "2025-01-03T11:00:00".
 
 If no action is detected, respond with: { "detected": false }`,
         },
@@ -341,6 +347,7 @@ async function executeCalendarCreate(action: AiAction): Promise<ActionExecutionR
         attendees: payload.attendees,
         location: payload.location,
         description: payload.description,
+        timezone: payload.timezone,
       }
     );
     
@@ -500,15 +507,19 @@ export async function processUserInputForActions(
   userId: string,
   userInput: string,
   sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' = 'voice_input',
-  sourceId?: string
+  sourceId?: string,
+  contextInfo?: { timezone?: string }
 ): Promise<{ 
   actionDetected: boolean; 
   action?: AiAction; 
   autoExecuted?: boolean;
   executionResult?: ActionExecutionResult;
 }> {
-  // Detect action from input
-  const detected = await detectActionFromInput(userInput);
+  // Detect action from input with user's timezone context
+  const detected = await detectActionFromInput(userInput, {
+    currentTime: new Date(),
+    timezone: contextInfo?.timezone,
+  });
   
   if (!detected) {
     return { actionDetected: false };

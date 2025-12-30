@@ -268,16 +268,19 @@ export async function createCalendarEvent(
     attendees?: string[];
     location?: string;
     description?: string;
+    timezone?: string;
   }
 ): Promise<CalendarEvent | null> {
   const provider = await getConnectedCalendarProvider();
+  // Use provided timezone or default to UTC
+  const userTimezone = options?.timezone || 'UTC';
   
   if (provider === 'outlook') {
-    return createOutlookCalendarEvent(title, startDateTime, endDateTime, options);
+    return createOutlookCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone });
   }
   
   // Default to Google Calendar
-  return createGoogleCalendarEvent(title, startDateTime, endDateTime, options);
+  return createGoogleCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone });
 }
 
 /**
@@ -291,6 +294,7 @@ async function createGoogleCalendarEvent(
     attendees?: string[];
     location?: string;
     description?: string;
+    timezone?: string;
   },
   retryCount: number = 0
 ): Promise<CalendarEvent | null> {
@@ -298,7 +302,12 @@ async function createGoogleCalendarEvent(
     // Force refresh token on retry
     const calendar = await getCalendarClient(retryCount > 0);
     
-    // Ensure datetime strings are valid ISO format
+    // Use the user's timezone for proper time interpretation
+    const userTimezone = options?.timezone || 'UTC';
+    
+    // Parse the datetime - keep original time, don't convert to UTC
+    // The datetime string should be in format like "2025-01-03T11:00:00" (local time)
+    // Google Calendar API will interpret it in the specified timezone
     const startDate = new Date(startDateTime);
     const endDate = new Date(endDateTime);
     
@@ -307,15 +316,37 @@ async function createGoogleCalendarEvent(
       return null;
     }
     
+    // Format datetime for Google Calendar: use the original local time string
+    // If startDateTime already has timezone info, use it directly
+    // Otherwise, we need to format it without the Z suffix
+    const formatLocalDateTime = (dateStr: string, date: Date): string => {
+      // If it already has timezone offset (e.g., +07:00), use as-is
+      if (/[+-]\d{2}:\d{2}$/.test(dateStr)) {
+        return dateStr;
+      }
+      // If it's a plain datetime (no Z, no offset), use as-is
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+        return dateStr;
+      }
+      // Otherwise, format as local time in YYYY-MM-DDTHH:mm:ss format
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      const seconds = String(date.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    };
+    
     const event: calendar_v3.Schema$Event = {
       summary: title,
       start: {
-        dateTime: startDate.toISOString(),
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        dateTime: formatLocalDateTime(startDateTime, startDate),
+        timeZone: userTimezone,
       },
       end: {
-        dateTime: endDate.toISOString(),
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        dateTime: formatLocalDateTime(endDateTime, endDate),
+        timeZone: userTimezone,
       },
     };
 

@@ -64,6 +64,9 @@ export default function CalendarEventSuggestion({
 
   const createMutation = useMutation({
     mutationFn: async (event: DetectedEvent) => {
+      // Get the user's browser timezone for correct time interpretation
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      
       const response = await apiRequest("POST", "/api/calendar/events/create", {
         title: event.title,
         startDateTime: event.startDateTime,
@@ -72,6 +75,7 @@ export default function CalendarEventSuggestion({
         location: event.location,
         description: event.description,
         memoryId,
+        timezone: userTimezone,
       });
       if (!response.ok) throw new Error("Failed to create event");
       return response.json();

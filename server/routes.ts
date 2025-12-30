@@ -89,6 +89,7 @@ const calendarEventCreateSchema = z.object({
   location: z.string().max(500).optional(),
   description: z.string().max(2000).optional(),
   memoryId: z.string().uuid().optional(),
+  timezone: z.string().optional(),
 });
 
 const calendarDuplicateCheckSchema = z.object({
@@ -405,6 +406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         geoLng,
         geoAccuracyMeters,
         geoPlaceName,
+        timezone,
       } = req.body;
       const user = req.user as any;
       
@@ -497,7 +499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // AI Action Detection: Fire-and-forget - runs in background without blocking response
       // This ensures memory save is fast while action detection happens asynchronously
       import('./ai-actions-service').then(({ processUserInputForActions }) => {
-        processUserInputForActions(user.id, memoryText, 'memory', logEntry.id)
+        processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone })
           .then(result => {
             if (result.actionDetected) {
               console.log(`AI action detected for memory ${logEntry.id}: ${result.action?.actionType || 'unknown'}`);
@@ -1237,7 +1239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validation.success) {
         return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
-      const { title, startDateTime, endDateTime, attendees, location, description, memoryId } = validation.data;
+      const { title, startDateTime, endDateTime, attendees, location, description, memoryId, timezone } = validation.data;
 
       // Check if calendar is connected
       const connected = await isCalendarConnected();
@@ -1260,11 +1262,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Create the event
+      // Create the event with user's timezone for correct time interpretation
       const createdEvent = await createCalendarEvent(title, startDateTime, endDateTime, {
         attendees,
         location,
         description,
+        timezone,
       });
 
       if (!createdEvent) {
@@ -2351,14 +2354,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/actions/detect", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
-      const { userInput } = req.body;
+      const { userInput, timezone } = req.body;
       
       if (!userInput || typeof userInput !== 'string') {
         return sendErrorResponse(res, 400, "userInput is required");
       }
       
       const { processUserInputForActions } = await import('./ai-actions-service');
-      const result = await processUserInputForActions(user.id, userInput);
+      const result = await processUserInputForActions(user.id, userInput, 'manual', undefined, { timezone });
       
       res.json({
         status: 'success',

@@ -86,13 +86,17 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // Mutation for saving memories with AI extraction, manual category, and geolocation
   const saveMutation = useMutation({
     mutationFn: async (memoryText: string) => {
+      // Capture user's timezone for accurate calendar event scheduling
+      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      
       const body: { 
         memoryText: string; 
         topicTag?: string;
         geoLat?: number;
         geoLng?: number;
         geoAccuracyMeters?: number;
-      } = { memoryText };
+        timezone?: string;
+      } = { memoryText, timezone: userTimezone };
       
       // Include topicTag if user manually selected a category
       if (manualCategory) {

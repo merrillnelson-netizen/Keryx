@@ -414,6 +414,7 @@ export const calendarCreatePayloadSchema = z.object({
   attendees: z.array(z.string()).optional(), // Email addresses
   location: z.string().optional(),
   provider: z.enum(['google', 'outlook']).optional(),
+  timezone: z.string().optional(), // IANA timezone (e.g., 'America/New_York')
 });
 
 export const emailSendPayloadSchema = z.object({

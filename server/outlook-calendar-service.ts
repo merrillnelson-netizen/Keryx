@@ -193,20 +193,37 @@ export async function createOutlookCalendarEvent(
     attendees?: string[];
     location?: string;
     description?: string;
+    timezone?: string;
   }
 ): Promise<OutlookCalendarEvent | null> {
   try {
     const client = await getOutlookClient();
     
+    // Use the user's timezone for proper time interpretation
+    const userTimezone = options?.timezone || 'UTC';
+    
+    // Format datetime for Outlook: remove Z suffix if present to treat as local time
+    const formatLocalDateTime = (dateStr: string): string => {
+      // If it already has timezone offset, strip it (Outlook uses separate timeZone field)
+      if (/[+-]\d{2}:\d{2}$/.test(dateStr)) {
+        return dateStr.slice(0, -6);
+      }
+      // Remove Z suffix if present
+      if (dateStr.endsWith('Z')) {
+        return dateStr.slice(0, -1);
+      }
+      return dateStr;
+    };
+    
     const eventData: any = {
       subject: title,
       start: {
-        dateTime: startDateTime,
-        timeZone: 'UTC'
+        dateTime: formatLocalDateTime(startDateTime),
+        timeZone: userTimezone
       },
       end: {
-        dateTime: endDateTime,
-        timeZone: 'UTC'
+        dateTime: formatLocalDateTime(endDateTime),
+        timeZone: userTimezone
       }
     };
 
