@@ -784,6 +784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * PATCH /api/logs/:id - Update log entry
    * Requires authentication
+   * Regenerates embedding only if memoryText changes (performance optimization)
    */
   app.patch("/api/logs/:id", requireAuth, async (req, res) => {
     try {
@@ -795,7 +796,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate update data (partial schema)
-      const updateData = req.body;
+      const updateData = { ...req.body };
+      
+      // If memoryText is being updated, check if it actually changed
+      if (updateData.memoryText) {
+        const existingEntry = await storage.getLogEntry(id, user.id);
+        if (!existingEntry) {
+          return sendErrorResponse(res, 404, "Log entry not found");
+        }
+        
+        // Only regenerate embedding if text actually changed
+        if (updateData.memoryText !== existingEntry.memoryText) {
+          const newEmbedding = await generateEmbedding(updateData.memoryText);
+          if (!newEmbedding.every(v => v === 0)) {
+            updateData.embeddingVector = newEmbedding;
+          }
+        }
+      }
       
       const updated = await storage.updateLogEntry(id, user.id, updateData);
       
