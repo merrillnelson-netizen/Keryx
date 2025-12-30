@@ -517,12 +517,8 @@ export async function processUserInputForActions(
   // Check user's policy for this action type
   const { policy } = await getActionPolicy(userId, detected.actionType);
   
-  console.log(`[AI Actions] Policy check - userId: ${userId}, actionType: ${detected.actionType}, policy: ${policy}`);
-  console.log(`[AI Actions] Policy comparison - policy === AUTO: ${policy === AI_ACTION_POLICIES.AUTO}, AUTO value: '${AI_ACTION_POLICIES.AUTO}'`);
-  
   if (policy === AI_ACTION_POLICIES.DISABLED) {
     // User has disabled this action type
-    console.log('[AI Actions] Action disabled by policy');
     return { actionDetected: true };
   }
   
@@ -537,7 +533,6 @@ export async function processUserInputForActions(
   
   if (policy === AI_ACTION_POLICIES.AUTO) {
     // Auto-execute if policy allows
-    console.log('[AI Actions] Auto-executing action');
     const executionResult = await executeAction(action);
     return { 
       actionDetected: true, 
@@ -546,8 +541,6 @@ export async function processUserInputForActions(
       executionResult 
     };
   }
-  
-  console.log('[AI Actions] Action requires confirmation');
   
   // Default: require confirmation
   return { 
