@@ -7,6 +7,7 @@ import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain,
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { HelixLogoIcon } from "@/components/helix-logo";
+import { HelixCapabilitiesModal } from "@/components/helix-capabilities-modal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -84,8 +85,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
             })}
           </nav>
           
-          {/* User Info & Logout */}
+          {/* Help & User Info */}
           <div className="p-4 border-t border-white/10 space-y-3">
+            <HelixCapabilitiesModal />
             <div className="glass-card p-3 rounded-xl">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
