@@ -331,6 +331,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   /**
+   * DASHBOARD STATS ENDPOINT
+   * Lightweight consolidated statistics endpoint for dashboard efficiency
+   */
+
+  /**
+   * GET /api/dashboard/stats - Get consolidated dashboard statistics
+   * Returns counts, recent activity summary, and key metrics in one request
+   * Requires authentication
+   */
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      
+      // Fetch all stats in parallel for efficiency
+      const [
+        totalCount,
+        moodStats,
+        topicFrequency,
+        recentPeople,
+      ] = await Promise.all([
+        storage.getLogEntriesCount(user.id),
+        storage.getMoodStats(user.id, 7), // Last 7 days for quick stats
+        storage.getTopicFrequency(user.id, 7),
+        storage.getPeople(user.id),
+      ]);
+      
+      // Calculate summary metrics
+      const topMood = moodStats.length > 0 
+        ? moodStats.reduce((a, b) => a.count > b.count ? a : b).mood 
+        : 'neutral';
+      const topTopic = topicFrequency.length > 0 
+        ? topicFrequency[0].topic 
+        : 'General';
+      const activePeopleCount = recentPeople.filter(p => p.mentionCount > 0).length;
+      
+      res.json({
+        status: 'success',
+        data: {
+          totalMemories: totalCount,
+          memoriesThisWeek: moodStats.reduce((sum, m) => sum + m.count, 0),
+          topMood,
+          topTopic,
+          activePeople: activePeopleCount,
+          moodDistribution: moodStats.slice(0, 5),
+          topTopics: topicFrequency.slice(0, 5),
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch dashboard stats", error);
+    }
+  });
+
+  /**
    * MEMORY/LOG ENTRY ROUTES
    * Handle memory storage with AI-powered metadata extraction
    * All routes require authentication
