@@ -872,7 +872,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as any;
       
-      const settingsData = insertSettingsSchema.partial().parse(req.body);
+      // Remove internal fields that shouldn't be updated via this endpoint
+      const { 
+        telegramVerificationExpires, 
+        telegramVerificationCode,
+        telegramChatId,
+        createdAt,
+        updatedAt,
+        id,
+        userId,
+        ...userEditableSettings 
+      } = req.body;
+      
+      const settingsData = insertSettingsSchema.partial().parse(userEditableSettings);
       const updated = await storage.updateSettings(user.id, settingsData);
       
       res.json({
