@@ -2,9 +2,9 @@ import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar, Brain } from "lucide-react";
+import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Category } from "@shared/schema";
 import {
@@ -213,9 +213,45 @@ export default function History() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: logEntries, isLoading } = useQuery<LogEntry[]>({
-    queryKey: ["/api/logs"],
+  const PAGE_SIZE = 30;
+  
+  interface LogsResponse {
+    status: string;
+    data: LogEntry[];
+    count: number;
+    total?: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  }
+
+  const {
+    data: paginatedData,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery<LogsResponse>({
+    queryKey: ["/api/logs", "paginated"],
+    queryFn: async ({ pageParam = 0 }) => {
+      const response = await fetch(`/api/logs?limit=${PAGE_SIZE}&offset=${pageParam}`);
+      if (!response.ok) throw new Error("Failed to fetch logs");
+      return response.json();
+    },
+    getNextPageParam: (lastPage) => {
+      if (lastPage.hasMore) {
+        return lastPage.offset + lastPage.limit;
+      }
+      return undefined;
+    },
+    initialPageParam: 0,
   });
+  
+  const logEntries = useMemo(() => {
+    return paginatedData?.pages.flatMap(page => page.data) || [];
+  }, [paginatedData]);
+  
+  const totalCount = paginatedData?.pages[0]?.total;
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -230,7 +266,7 @@ export default function History() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs", "paginated"] });
       toast({
         title: "Memory deleted",
         description: "Memory has been successfully deleted",
@@ -255,7 +291,7 @@ export default function History() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs", "paginated"] });
       toast({
         title: "Memory updated",
         description: "Memory has been successfully updated",
@@ -280,7 +316,7 @@ export default function History() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/logs", "paginated"] });
       toast({
         title: "Category updated",
         description: "Memory category has been successfully changed",
@@ -495,6 +531,28 @@ export default function History() {
                   ))}
                 </TableBody>
               </Table>
+              
+              {/* Load More button for table view */}
+              {hasNextPage && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="border-primary/30 hover:bg-primary/20"
+                    data-testid="button-load-more-table"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      `Load More ${totalCount ? `(${logEntries.length} of ${totalCount})` : ''}`
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -660,6 +718,28 @@ export default function History() {
                 ) : null}
               </Card>
               ))}
+              
+              {/* Load More button for pagination */}
+              {hasNextPage && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="border-primary/30 hover:bg-primary/20"
+                    data-testid="button-load-more"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      `Load More ${totalCount ? `(${logEntries.length} of ${totalCount})` : ''}`
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
