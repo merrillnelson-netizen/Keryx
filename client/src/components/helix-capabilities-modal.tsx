@@ -195,21 +195,21 @@ export function HelixCapabilitiesModal() {
           <span>What can Helix do?</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[85vh] glass-card-strong border-white/20 p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="text-2xl font-bold flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
+      <DialogContent className="max-w-3xl h-[85vh] sm:h-auto sm:max-h-[85vh] glass-card-strong border-white/20 p-0 flex flex-col">
+        <DialogHeader className="p-4 sm:p-6 pb-0 shrink-0">
+          <DialogTitle className="text-xl sm:text-2xl font-bold flex items-center gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             What Helix Can Do For You
           </DialogTitle>
-          <DialogDescription className="text-muted-foreground mt-2">
+          <DialogDescription className="text-muted-foreground mt-2 text-sm">
             Explore all the ways Helix can help manage your memories, calendar, email, and more
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="calendar" className="flex flex-col h-full">
-          <div className="px-6 pt-4">
+        <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
+          <div className="px-4 sm:px-6 pt-4 shrink-0">
             <TabsList className="w-full grid grid-cols-5 bg-white/5 p-1 rounded-xl">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
@@ -217,7 +217,7 @@ export function HelixCapabilitiesModal() {
                   <TabsTrigger
                     key={cat.id}
                     value={cat.id}
-                    className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-white/10"
+                    className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-white/10 px-1 sm:px-3"
                     data-testid={`tab-capability-${cat.id}`}
                   >
                     <Icon className={cn("w-4 h-4", cat.color)} />
@@ -228,7 +228,7 @@ export function HelixCapabilitiesModal() {
             </TabsList>
           </div>
 
-          <ScrollArea className="flex-1 px-6 pb-6">
+          <ScrollArea className="flex-1 min-h-0 px-4 sm:px-6 pb-4 sm:pb-6">
             {capabilities.map(cat => {
               const Icon = cat.icon;
               return (
