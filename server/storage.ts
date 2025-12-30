@@ -52,6 +52,7 @@ export interface IStorage {
   // People tracking (user-scoped)
   getPeople(userId: string): Promise<Person[]>;
   getPerson(userId: string, name: string): Promise<Person | undefined>;
+  getActivePeopleCount(userId: string): Promise<number>;
   upsertPerson(userId: string, name: string): Promise<Person>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
   deletePerson(userId: string, id: string): Promise<boolean>;
@@ -591,6 +592,25 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch person:', error);
       throw new Error('Database error while fetching person');
+    }
+  }
+
+  /**
+   * Get count of people with at least one mention (lightweight query)
+   */
+  async getActivePeopleCount(userId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(people)
+        .where(and(
+          eq(people.userId, userId),
+          sql`${people.mentionCount} > 0`
+        ));
+      return result[0]?.count ?? 0;
+    } catch (error) {
+      console.error('Failed to count active people:', error);
+      throw new Error('Database error while counting active people');
     }
   }
 

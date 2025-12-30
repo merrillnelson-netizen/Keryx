@@ -28,8 +28,15 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache` tables.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
+
+### Performance Optimizations
+- **AI Caching**: 30-minute TTL cache for briefings and alerts in `ai_cache` table, invalidated on memory changes.
+- **Frontend Pagination**: `useInfiniteQuery` with "Load More" buttons (30 items per page) for memory lists.
+- **Embedding Optimization**: Embeddings only regenerated when `memoryText` content actually changes.
+- **Lightweight Endpoints**: Consolidated `/api/dashboard/stats` endpoint with parallel COUNT queries.
+- **Database Indexes**: Comprehensive indexes on user_id, timestamp, topic, mood, calendar fields, and HNSW vector index.
 
 ### Core Features & Design Principles
 - **AI Processing**: OpenAI GPT for metadata extraction, GPT-4o-mini for query decomposition and action detection, `text-embedding-3-small` for embeddings.

@@ -344,27 +344,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as any;
       
-      // Fetch all stats in parallel for efficiency
+      // Fetch all stats in parallel with efficient COUNT queries
       const [
         totalCount,
         moodStats,
         topicFrequency,
-        recentPeople,
+        activePeopleCount,
       ] = await Promise.all([
         storage.getLogEntriesCount(user.id),
-        storage.getMoodStats(user.id, 7), // Last 7 days for quick stats
-        storage.getTopicFrequency(user.id, 7),
-        storage.getPeople(user.id),
+        storage.getMoodStats(user.id, 7), // Last 7 days with date-filtered GROUP BY
+        storage.getTopicFrequency(user.id, 7), // Last 7 days with date-filtered GROUP BY
+        storage.getActivePeopleCount(user.id), // Efficient COUNT query
       ]);
       
-      // Calculate summary metrics
+      // Calculate summary metrics from already-aggregated data
       const topMood = moodStats.length > 0 
         ? moodStats.reduce((a, b) => a.count > b.count ? a : b).mood 
         : 'neutral';
       const topTopic = topicFrequency.length > 0 
         ? topicFrequency[0].topic 
         : 'General';
-      const activePeopleCount = recentPeople.filter(p => p.mentionCount > 0).length;
       
       res.json({
         status: 'success',
