@@ -738,6 +738,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         embeddingVector,
       });
       
+      // Invalidate AI cache when new memory is added
+      await storage.invalidateAiCache(user.id);
+      
       res.status(201).json({
         status: 'success',
         data: logEntry,
@@ -800,6 +803,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
       
+      // Invalidate AI cache when memory is updated
+      await storage.invalidateAiCache(user.id);
+      
       res.json({
         status: 'success',
         data: updated,
@@ -829,6 +835,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
+      
+      // Invalidate AI cache when memory is deleted
+      await storage.invalidateAiCache(user.id);
       
       res.json({
         status: 'success',
@@ -1634,11 +1643,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * Returns an AI-generated summary of recent memories with focus areas,
    * reminders, mood trends, email highlights, and an encouraging affirmation.
+   * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
   app.get("/api/briefing", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const localHour = parseInt(req.query.localHour as string) || new Date().getHours();
+      const forceRefresh = req.query.refresh === 'true';
+      
+      // Cache key based on date (daily briefing)
+      const today = new Date().toISOString().split('T')[0];
+      const cacheKey = `${today}`;
+      
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = await storage.getAiCache(user.id, 'briefing', cacheKey);
+        if (cached) {
+          // Check if memory count has changed significantly
+          const currentCount = await storage.getLogEntriesCount(user.id);
+          const latestTimestamp = await storage.getLatestMemoryTimestamp(user.id);
+          const cacheTime = new Date(cached.generatedAt).getTime();
+          const latestTime = latestTimestamp?.getTime() || 0;
+          
+          // Return cached if no new memories since cache was generated
+          if (latestTime <= cacheTime && Math.abs(currentCount - (cached.memoriesCount || 0)) < 3) {
+            return res.json({
+              status: 'success',
+              data: cached.data,
+              memoriesAnalyzed: cached.memoriesCount,
+              emailsAnalyzed: 0,
+              telegramSent: false,
+              cached: true,
+              generatedAt: cached.generatedAt.toISOString()
+            });
+          }
+        }
+      }
       
       // Get memories from last 7 days
       const sevenDaysAgo = new Date();
@@ -1705,6 +1745,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activeProjects
       );
 
+      // Cache the result (30 minute TTL)
+      const memoriesHash = recentMemories.map(m => m.id).join(',');
+      await storage.setAiCache(user.id, 'briefing', cacheKey, briefing, memoriesHash, recentMemories.length, 30);
+
       // Optionally send briefing to Telegram
       const sendToTelegram = req.query.sendToTelegram === 'true';
       let telegramSent = false;
@@ -1720,6 +1764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
         telegramSent,
+        cached: false,
         generatedAt: new Date().toISOString()
       });
     } catch (error) {
@@ -1733,11 +1778,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * 
    * Analyzes recent memories to detect significant patterns
    * and returns actionable alerts.
+   * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
   app.get("/api/alerts", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 14;
+      const forceRefresh = req.query.refresh === 'true';
+      
+      // Cache key based on days parameter
+      const cacheKey = `days-${days}`;
+      
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = await storage.getAiCache(user.id, 'alerts', cacheKey);
+        if (cached) {
+          // Check if memory count has changed
+          const latestTimestamp = await storage.getLatestMemoryTimestamp(user.id);
+          const cacheTime = new Date(cached.generatedAt).getTime();
+          const latestTime = latestTimestamp?.getTime() || 0;
+          
+          // Return cached if no new memories since cache was generated
+          if (latestTime <= cacheTime) {
+            return res.json({
+              status: 'success',
+              data: cached.data,
+              memoriesAnalyzed: cached.memoriesCount,
+              periodDays: days,
+              telegramSent: false,
+              cached: true,
+              timestamp: cached.generatedAt.toISOString()
+            });
+          }
+        }
+      }
       
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
@@ -1754,6 +1828,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           topicTag: m.topicTag,
         }))
       );
+
+      // Cache the result (30 minute TTL)
+      const memoriesHash = recentMemories.map(m => m.id).join(',');
+      await storage.setAiCache(user.id, 'alerts', cacheKey, alerts, memoriesHash, recentMemories.length, 30);
 
       // Optionally send alerts to Telegram
       const sendToTelegram = req.query.sendToTelegram === 'true';
@@ -1773,6 +1851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memoriesAnalyzed: recentMemories.length,
         periodDays: days,
         telegramSent,
+        cached: false,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

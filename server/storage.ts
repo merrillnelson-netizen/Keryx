@@ -1,12 +1,13 @@
 import { 
-  users, logEntries, settings, categories, people, aiActions, aiActionPreferences,
+  users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
   type Category, type InsertCategory,
   type Person, type InsertPerson,
   type AiAction, type InsertAiAction,
-  type AiActionPreference, type InsertAiActionPreference
+  type AiActionPreference, type InsertAiActionPreference,
+  type AiCache
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -74,6 +75,12 @@ export interface IStorage {
   getAiActionPreferences(userId: string): Promise<AiActionPreference[]>;
   getAiActionPreference(userId: string, actionType: string): Promise<AiActionPreference | undefined>;
   upsertAiActionPreference(userId: string, actionType: string, policy: string, conditions?: any): Promise<AiActionPreference>;
+
+  // AI Cache (performance optimization)
+  getAiCache(userId: string, cacheType: string, cacheKey: string): Promise<AiCache | undefined>;
+  setAiCache(userId: string, cacheType: string, cacheKey: string, data: any, memoriesHash: string, memoriesCount: number, ttlMinutes?: number): Promise<AiCache>;
+  invalidateAiCache(userId: string, cacheType?: string): Promise<void>;
+  getLatestMemoryTimestamp(userId: string): Promise<Date | null>;
 }
 
 /**
@@ -986,6 +993,107 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to upsert AI action preference:', error);
       throw new Error('Database error while upserting AI action preference');
+    }
+  }
+
+  /**
+   * AI CACHE METHODS
+   * Performance optimization: cache AI-generated content to avoid regenerating on every request
+   */
+
+  async getAiCache(userId: string, cacheType: string, cacheKey: string): Promise<AiCache | undefined> {
+    try {
+      const [cached] = await db
+        .select()
+        .from(aiCache)
+        .where(and(
+          eq(aiCache.userId, userId),
+          eq(aiCache.cacheType, cacheType),
+          eq(aiCache.cacheKey, cacheKey),
+          gte(aiCache.expiresAt, new Date())
+        ));
+      return cached;
+    } catch (error) {
+      console.error('Failed to fetch AI cache:', error);
+      return undefined; // Don't throw - cache miss is acceptable
+    }
+  }
+
+  async setAiCache(
+    userId: string, 
+    cacheType: string, 
+    cacheKey: string, 
+    data: any, 
+    memoriesHash: string, 
+    memoriesCount: number, 
+    ttlMinutes = 30
+  ): Promise<AiCache> {
+    try {
+      const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+      
+      // Upsert the cache entry
+      const [cached] = await db
+        .insert(aiCache)
+        .values({
+          userId,
+          cacheType,
+          cacheKey,
+          data,
+          memoriesHash,
+          memoriesCount,
+          expiresAt
+        })
+        .onConflictDoUpdate({
+          target: [aiCache.userId, aiCache.cacheType, aiCache.cacheKey],
+          set: {
+            data,
+            memoriesHash,
+            memoriesCount,
+            generatedAt: new Date(),
+            expiresAt
+          }
+        })
+        .returning();
+      
+      return cached;
+    } catch (error) {
+      console.error('Failed to set AI cache:', error);
+      throw new Error('Database error while setting AI cache');
+    }
+  }
+
+  async invalidateAiCache(userId: string, cacheType?: string): Promise<void> {
+    try {
+      if (cacheType) {
+        await db
+          .delete(aiCache)
+          .where(and(
+            eq(aiCache.userId, userId),
+            eq(aiCache.cacheType, cacheType)
+          ));
+      } else {
+        await db
+          .delete(aiCache)
+          .where(eq(aiCache.userId, userId));
+      }
+    } catch (error) {
+      console.error('Failed to invalidate AI cache:', error);
+      // Don't throw - cache invalidation failure is non-critical
+    }
+  }
+
+  async getLatestMemoryTimestamp(userId: string): Promise<Date | null> {
+    try {
+      const [result] = await db
+        .select({ timestamp: logEntries.timestamp })
+        .from(logEntries)
+        .where(eq(logEntries.userId, userId))
+        .orderBy(desc(logEntries.timestamp))
+        .limit(1);
+      return result?.timestamp || null;
+    } catch (error) {
+      console.error('Failed to get latest memory timestamp:', error);
+      return null;
     }
   }
 }

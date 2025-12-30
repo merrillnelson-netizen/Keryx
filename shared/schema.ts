@@ -274,6 +274,25 @@ export const aiActionPreferences = pgTable("ai_action_preferences", {
   userActionTypeIdx: uniqueIndex("ai_action_prefs_user_action_idx").on(table.userId, table.actionType),
 }));
 
+/**
+ * AI Cache table - stores pre-generated AI content for performance
+ * Caches briefings, alerts, and insights to avoid regenerating on every request
+ */
+export const aiCache = pgTable("ai_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  cacheType: text("cache_type").notNull(), // 'briefing', 'alerts', 'insights', 'thematic'
+  cacheKey: text("cache_key").notNull(), // Additional key (e.g., date for briefing, topic for insights)
+  data: jsonb("data").notNull(), // The cached AI response
+  memoriesHash: text("memories_hash"), // Hash of memory IDs used to generate this cache
+  memoriesCount: integer("memories_count"), // Number of memories analyzed
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(), // When this cache becomes stale
+}, (table) => ({
+  userTypeKeyIdx: uniqueIndex("ai_cache_user_type_key_idx").on(table.userId, table.cacheType, table.cacheKey),
+  expiresAtIdx: index("ai_cache_expires_at_idx").on(table.expiresAt),
+}));
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -341,6 +360,16 @@ export type AiAction = typeof aiActions.$inferSelect;
 
 export type InsertAiActionPreference = z.infer<typeof insertAiActionPreferenceSchema>;
 export type AiActionPreference = typeof aiActionPreferences.$inferSelect;
+
+export type AiCache = typeof aiCache.$inferSelect;
+
+// Cache type constants
+export const AI_CACHE_TYPES = {
+  BRIEFING: 'briefing',
+  ALERTS: 'alerts',
+  INSIGHTS: 'insights',
+  THEMATIC: 'thematic',
+} as const;
 
 // Action type constants for type safety
 export const AI_ACTION_TYPES = {
