@@ -180,8 +180,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       })}
                     </nav>
                     
-                    {/* Mobile User Info & Logout */}
+                    {/* Mobile Help & User Info */}
                     <div className="p-4 border-t border-white/10 space-y-3">
+                      <HelixCapabilitiesModal />
                       <div className="glass-card p-3 rounded-xl">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
