@@ -48,13 +48,13 @@ const capabilities: CapabilityCategory[] = [
     name: "Email",
     icon: Mail,
     color: "text-green-500",
-    description: "Read, summarize, and manage your inbox intelligently",
+    description: "Send emails via Gmail, read and summarize via Outlook",
     examples: [
-      { phrase: "Summarize my unread emails from today", description: "Gives you a quick overview of what's in your inbox" },
-      { phrase: "Any important emails I should know about?", description: "Highlights priority messages that need attention" },
-      { phrase: "What did John send me last week?", description: "Searches your email for specific conversations" },
+      { phrase: "Summarize my unread emails from today", description: "Gives you a quick overview of what's in your Outlook inbox" },
+      { phrase: "Any important emails I should know about?", description: "Highlights priority messages that need attention (via Outlook)" },
+      { phrase: "Send an email to John about the meeting", description: "Composes and sends an email via Gmail or Outlook" },
       { phrase: "Draft a reply to the project proposal email", description: "Helps compose a response to a specific message" },
-      { phrase: "Clear my spam folder", description: "Removes unwanted emails from spam" },
+      { phrase: "What emails did I get this week?", description: "Summarizes recent emails from your Outlook inbox" },
     ]
   },
   {
@@ -92,7 +92,6 @@ const capabilities: CapabilityCategory[] = [
     color: "text-rose-500",
     description: "Advanced cross-integration capabilities for power users",
     examples: [
-      { phrase: "Empty my Gmail spam folder", description: "Bulk cleanup of unwanted spam emails" },
       { phrase: "Summarize my calendar and emails for the week", description: "Cross-integration overview of your schedule and messages" },
       { phrase: "After my meeting with Lisa, remind me to send the proposal", description: "Intelligent follow-up scheduling based on events" },
       { phrase: "Track my energy levels after each meeting today", description: "Automatic memory prompts tied to calendar events" },
@@ -109,7 +108,7 @@ const hintExamples = [
   "Remind me to call the dentist Monday at 9am",
   "Summarize my unread emails",
   "Remember I met Jake at the coffee shop",
-  "Empty my spam folder",
+  "Send an email to John about the project",
   "How was I feeling yesterday?",
   "Block Friday afternoon for focused work",
   "What did Mom say about the vacation?",

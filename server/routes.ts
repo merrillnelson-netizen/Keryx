@@ -1770,6 +1770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Fetch recent emails from user's preferred provider (or any connected provider)
       let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
+      let emailSource: string | null = null;
       try {
         const userSettings = await storage.getSettings(user.id);
         const preferredEmailProvider = userSettings?.emailProvider;
@@ -1778,14 +1779,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
           const gmailConnected = await isGmailConnected();
           if (gmailConnected) {
-            const { getRecentEmails } = await import('./gmail-service');
-            const emails = await getRecentEmails(10);
-            emailContext = emails.map(e => ({
-              subject: e.subject,
-              from: e.from,
-              snippet: e.snippet,
-              date: e.date
-            }));
+            const { getRecentEmails, getGmailCapabilities } = await import('./gmail-service');
+            const gmailCaps = await getGmailCapabilities();
+            if (gmailCaps.canRead) {
+              const emails = await getRecentEmails(10);
+              emailContext = emails.map(e => ({
+                subject: e.subject,
+                from: e.from,
+                snippet: e.snippet,
+                date: e.date
+              }));
+              if (emailContext.length > 0) emailSource = 'gmail';
+            }
           }
         }
         
@@ -1801,6 +1806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               snippet: e.snippet,
               date: e.date
             }));
+            if (emailContext.length > 0) emailSource = 'outlook';
           }
         }
       } catch (emailError) {
@@ -1844,6 +1850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: briefing,
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
+        emailSource,
         telegramSent,
         cached: false,
         generatedAt: new Date().toISOString()
