@@ -71,6 +71,57 @@ export async function isGmailConnected(): Promise<boolean> {
   }
 }
 
+// Track whether we've tested read permissions
+let gmailReadCapabilityTested = false;
+let gmailCanRead = false;
+
+/**
+ * Check Gmail capabilities (send vs read permissions)
+ * Returns detailed capability info based on actual OAuth scopes
+ */
+export async function getGmailCapabilities(): Promise<{
+  connected: boolean;
+  canSend: boolean;
+  canRead: boolean;
+  message?: string;
+}> {
+  try {
+    const connected = await isGmailConnected();
+    if (!connected) {
+      return { connected: false, canSend: false, canRead: false };
+    }
+    
+    // Gmail send is always available with the connector
+    const canSend = true;
+    
+    // Test read capability if not already tested
+    if (!gmailReadCapabilityTested) {
+      try {
+        const gmail = await getGmailClient();
+        await gmail.users.messages.list({
+          userId: 'me',
+          maxResults: 1,
+          labelIds: ['INBOX'],
+        });
+        gmailCanRead = true;
+      } catch (error: any) {
+        if (error?.status === 403 || error?.code === 403 || error?.message?.includes('Insufficient Permission')) {
+          gmailCanRead = false;
+        }
+      }
+      gmailReadCapabilityTested = true;
+    }
+    
+    const message = gmailCanRead 
+      ? undefined 
+      : 'Gmail has send-only permissions. Email reading uses Outlook.';
+    
+    return { connected, canSend, canRead: gmailCanRead, message };
+  } catch {
+    return { connected: false, canSend: false, canRead: false };
+  }
+}
+
 export interface EmailMessage {
   id: string;
   threadId: string;

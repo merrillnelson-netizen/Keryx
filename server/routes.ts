@@ -10,7 +10,7 @@ import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
 import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
-import { isGmailConnected } from "./gmail-service";
+import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
@@ -1077,12 +1077,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as User;
       
       // Fetch connection status and user settings in parallel
-      const [googleCalendar, outlookCalendar, gmail, outlookMail, userSettings] = await Promise.all([
+      const [googleCalendar, outlookCalendar, gmail, outlookMail, userSettings, gmailCaps] = await Promise.all([
         isGoogleCalendarConnected(),
         isOutlookConnected(),
         isGmailConnected(),
         isOutlookMailConnected(),
-        storage.getSettings(user.id)
+        storage.getSettings(user.id),
+        getGmailCapabilities()
       ]);
       
       // Check user's enabled/disabled settings for each provider
@@ -1142,9 +1143,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userPreference: userSettings?.emailProvider || null,
           enabled: userSettings?.emailIntegrationEnabled !== false,
           capabilities: {
-            gmail: { send: true, read: true },
+            gmail: { send: gmailCaps.canSend, read: gmailCaps.canRead },
             outlook: { send: true, read: true },
           },
+          gmailLimitation: gmailCaps.message || null,
         },
         providerSelectionMode: userSettings?.providerSelectionMode || 'default',
         timestamp: new Date().toISOString()
@@ -1160,9 +1162,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userPreference: null, 
           enabled: true,
           capabilities: {
-            gmail: { send: true, read: true },
+            gmail: { send: false, read: false },
             outlook: { send: true, read: true },
           },
+          gmailLimitation: null,
         },
         providerSelectionMode: 'default',
         timestamp: new Date().toISOString()
