@@ -121,11 +121,13 @@ export async function detectActionFromInput(
 
 AVAILABLE ACTIONS:
 1. calendar.create - Create a calendar event (schedule meeting, book appointment, set up call)
-2. calendar.update - Update existing event (reschedule, change time)
-3. calendar.delete - Delete/cancel an event
-4. email.send - Send a new email to someone
-5. email.reply - Reply to an existing email
-6. reminder.create - Set a reminder for the user
+2. email.send - Send a new email to someone
+3. reminder.create - Set a reminder for the user
+
+NOT SUPPORTED (do not detect these):
+- calendar.update - Updating existing events is not yet supported
+- calendar.delete - Deleting events is not yet supported
+- email.reply - Replying to emails is not yet supported
 
 CURRENT CONTEXT:
 - Current time: ${currentTime.toISOString()}
@@ -148,7 +150,7 @@ If an action is detected, extract:
 Respond with JSON:
 {
   "detected": boolean,
-  "actionType": "calendar.create" | "calendar.update" | "calendar.delete" | "email.send" | "email.reply" | "reminder.create" | null,
+  "actionType": "calendar.create" | "email.send" | "reminder.create" | null,
   "actionCategory": "calendar" | "email" | "reminder" | null,
   "title": "Brief description of the action",
   "description": "Detailed explanation of what will be done",
@@ -291,9 +293,16 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
         result = await executeReminderCreate(action);
         break;
       default:
+        // Provide helpful error messages for not-yet-implemented actions
+        const notImplementedActions: Record<string, string> = {
+          'calendar.update': 'Updating existing calendar events is not yet supported. Please modify the event directly in your calendar app.',
+          'calendar.delete': 'Deleting calendar events is not yet supported. Please cancel the event directly in your calendar app.',
+          'email.reply': 'Replying to emails is not yet supported. Please compose a new email instead.',
+        };
+        const helpfulMessage = notImplementedActions[action.actionType];
         result = { 
           success: false, 
-          errorMessage: `Unsupported action type: ${action.actionType}` 
+          errorMessage: helpfulMessage || `This action type is not currently supported: ${action.actionType}` 
         };
     }
     
