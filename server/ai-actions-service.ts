@@ -2,10 +2,14 @@
  * AI Actions Service
  * Handles detection, approval, and execution of AI-proposed actions
  * 
- * Supports:
- * - Calendar: create, update, delete events
- * - Email: send, reply to emails
+ * Currently Supported:
+ * - Calendar: create events
+ * - Email: send emails
  * - Reminders: create reminders
+ * 
+ * Future (not yet implemented):
+ * - Calendar: update, delete events
+ * - Email: reply to emails
  */
 
 import OpenAI from "openai";
@@ -24,8 +28,8 @@ import {
   emailSendPayloadSchema,
 } from "@shared/schema";
 import { createCalendarEvent, isGoogleCalendarConnected } from "./calendar-service";
-import { sendEmail as sendGmailEmail, isGmailConnected } from "./gmail-service";
-import { createOutlookCalendarEvent, isOutlookConnected } from "./outlook-calendar-service";
+import { sendEmail as sendGmailEmail, isGmailConnected, getGmailCapabilities } from "./gmail-service";
+import { isOutlookConnected } from "./outlook-calendar-service";
 import { sendOutlookEmail, isOutlookMailConnected } from "./outlook-mail-service";
 
 const openai = new OpenAI({ 
@@ -59,38 +63,27 @@ export interface ActionExecutionResult {
 }
 
 /**
- * Available action types with their descriptions
+ * Supported action types with their descriptions
+ * Only includes actions that are actually implemented
  */
 export const ACTION_DEFINITIONS = {
   [AI_ACTION_TYPES.CALENDAR_CREATE]: {
     category: AI_ACTION_CATEGORIES.CALENDAR,
     description: 'Create a new calendar event',
     examples: ['schedule a meeting', 'add an appointment', 'book time for', 'set up a call'],
-  },
-  [AI_ACTION_TYPES.CALENDAR_UPDATE]: {
-    category: AI_ACTION_CATEGORIES.CALENDAR,
-    description: 'Update an existing calendar event',
-    examples: ['reschedule', 'change the meeting time', 'move the appointment'],
-  },
-  [AI_ACTION_TYPES.CALENDAR_DELETE]: {
-    category: AI_ACTION_CATEGORIES.CALENDAR,
-    description: 'Delete a calendar event',
-    examples: ['cancel the meeting', 'remove the appointment', 'delete the event'],
+    supported: true,
   },
   [AI_ACTION_TYPES.EMAIL_SEND]: {
     category: AI_ACTION_CATEGORIES.EMAIL,
     description: 'Send a new email',
     examples: ['send an email to', 'email them about', 'write to', 'message them'],
-  },
-  [AI_ACTION_TYPES.EMAIL_REPLY]: {
-    category: AI_ACTION_CATEGORIES.EMAIL,
-    description: 'Reply to an email',
-    examples: ['reply to', 'respond to their email', 'get back to them'],
+    supported: true,
   },
   [AI_ACTION_TYPES.REMINDER_CREATE]: {
     category: AI_ACTION_CATEGORIES.REMINDER,
     description: 'Create a reminder',
     examples: ['remind me to', 'set a reminder for', "don't let me forget"],
+    supported: true,
   },
 };
 
@@ -587,6 +580,7 @@ export async function getAvailableActionTypes(): Promise<{
     isOutlookMailConnected(),
   ]);
   
+  // Only return supported action types
   return [
     {
       actionType: AI_ACTION_TYPES.CALENDAR_CREATE,
@@ -596,30 +590,9 @@ export async function getAvailableActionTypes(): Promise<{
       provider: googleCalendar ? 'google' : outlookCalendar ? 'outlook' : undefined,
     },
     {
-      actionType: AI_ACTION_TYPES.CALENDAR_UPDATE,
-      category: AI_ACTION_CATEGORIES.CALENDAR,
-      description: 'Update calendar events',
-      available: googleCalendar || outlookCalendar,
-      provider: googleCalendar ? 'google' : outlookCalendar ? 'outlook' : undefined,
-    },
-    {
-      actionType: AI_ACTION_TYPES.CALENDAR_DELETE,
-      category: AI_ACTION_CATEGORIES.CALENDAR,
-      description: 'Delete calendar events',
-      available: googleCalendar || outlookCalendar,
-      provider: googleCalendar ? 'google' : outlookCalendar ? 'outlook' : undefined,
-    },
-    {
       actionType: AI_ACTION_TYPES.EMAIL_SEND,
       category: AI_ACTION_CATEGORIES.EMAIL,
       description: 'Send emails',
-      available: gmail || outlookMail,
-      provider: gmail ? 'gmail' : outlookMail ? 'outlook' : undefined,
-    },
-    {
-      actionType: AI_ACTION_TYPES.EMAIL_REPLY,
-      category: AI_ACTION_CATEGORIES.EMAIL,
-      description: 'Reply to emails',
       available: gmail || outlookMail,
       provider: gmail ? 'gmail' : outlookMail ? 'outlook' : undefined,
     },

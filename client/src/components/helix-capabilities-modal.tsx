@@ -40,7 +40,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Remind me to call the dentist next Monday at 9am", description: "Sets up a reminder event on your calendar" },
       { phrase: "Block off Friday afternoon for focused work", description: "Creates a time block to protect your schedule" },
       { phrase: "Set up a weekly team standup every Tuesday at 10am", description: "Creates a recurring calendar event" },
-      { phrase: "Move my 3pm meeting to 4pm", description: "Reschedules an existing calendar event" },
+      { phrase: "Schedule a monthly review on the first Monday at 9am", description: "Creates a recurring monthly event" },
     ]
   },
   {
@@ -53,7 +53,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Summarize my unread emails from today", description: "Gives you a quick overview of what's in your Outlook inbox" },
       { phrase: "Any important emails I should know about?", description: "Highlights priority messages that need attention (via Outlook)" },
       { phrase: "Send an email to John about the meeting", description: "Composes and sends an email via Gmail or Outlook" },
-      { phrase: "Draft a reply to the project proposal email", description: "Helps compose a response to a specific message" },
+      { phrase: "Email the team about the project update", description: "Sends a message to multiple recipients" },
       { phrase: "What emails did I get this week?", description: "Summarizes recent emails from your Outlook inbox" },
     ]
   },
