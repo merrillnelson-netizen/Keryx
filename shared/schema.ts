@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, json, vector, index, uniqueIndex, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, json, vector, index, uniqueIndex, real, foreignKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -75,7 +75,9 @@ export const session = pgTable("session", {
   sid: varchar("sid").primaryKey(),
   sess: json("sess").notNull(),
   expire: timestamp("expire", { precision: 6 }).notNull(),
-});
+}, (table) => ({
+  expireIdx: index("IDX_session_expire").on(table.expire),
+}));
 
 /**
  * Categories table - user-defined memory categories
@@ -264,7 +266,7 @@ export const aiActions = pgTable("ai_actions", {
   userIdIdx: index("ai_actions_user_id_idx").on(table.userId),
   statusIdx: index("ai_actions_status_idx").on(table.status),
   userStatusIdx: index("ai_actions_user_status_idx").on(table.userId, table.status),
-  createdAtIdx: index("ai_actions_created_at_idx").on(table.createdAt.desc()),
+  createdAtIdx: index("ai_actions_created_at_idx").on(table.createdAt),
 }));
 
 /**
@@ -290,7 +292,7 @@ export const aiActionPreferences = pgTable("ai_action_preferences", {
  */
 export const aiCache = pgTable("ai_cache", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull(),
   cacheType: text("cache_type").notNull(), // 'briefing', 'alerts', 'insights', 'thematic'
   cacheKey: text("cache_key").notNull(), // Additional key (e.g., date for briefing, topic for insights)
   data: jsonb("data").notNull(), // The cached AI response
@@ -301,6 +303,11 @@ export const aiCache = pgTable("ai_cache", {
 }, (table) => ({
   userTypeKeyIdx: uniqueIndex("ai_cache_user_type_key_idx").on(table.userId, table.cacheType, table.cacheKey),
   expiresAtIdx: index("ai_cache_expires_at_idx").on(table.expiresAt),
+  userIdFk: foreignKey({
+    name: "ai_cache_user_id_fkey",
+    columns: [table.userId],
+    foreignColumns: [users.id],
+  }).onDelete("cascade"),
 }));
 
 // Insert schemas for validation
