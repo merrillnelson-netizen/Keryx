@@ -16,6 +16,9 @@ import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 
+// Feature flags - Plaid integration is disabled until full production setup
+const PLAID_FEATURE_ENABLED = false;
+
 // Background job tracking for re-analysis
 interface BackfillJob {
   status: 'running' | 'completed' | 'failed';
@@ -1818,19 +1821,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userSettings = await storage.getSettings(user.id);
       const activeProjects = userSettings?.activeProjects || undefined;
       
-      // Get financial summary if Plaid is enabled
-      let financialSummary = undefined;
-      if (userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
-        try {
-          const spending = await plaidService.getSpendingSummary(user.id, 7);
-          if (spending.transactionCount > 0) {
-            financialSummary = spending;
-          }
-        } catch (finError) {
-          // Financial data fetch failed, continue without it
-        }
-      }
-      
       const briefing = await generateMorningBriefing(
         recentMemories.map((m: any) => ({
           memoryText: m.memoryText,
@@ -1843,8 +1833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.username,
         localHour,
         emailContext.length > 0 ? emailContext : undefined,
-        activeProjects,
-        financialSummary
+        activeProjects
       );
 
       // Cache the result (30 minute TTL)
@@ -1866,7 +1855,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
         emailSource,
-        financialDataIncluded: !!financialSummary,
         telegramSent,
         cached: false,
         generatedAt: new Date().toISOString()
@@ -2609,32 +2597,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // Plaid / Financial Integration Routes
+  // Plaid / Financial Integration Routes (Feature Disabled)
   // ============================================================================
 
   /**
    * GET /api/plaid/status - Check if Plaid is configured
+   * Note: Feature is currently disabled
    */
   app.get("/api/plaid/status", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const settings = await storage.getSettings(user.id);
-      
-      res.json({
-        configured: plaidService.isPlaidConfigured(),
-        enabled: settings?.plaidEnabled || false,
-        includeInBriefings: settings?.plaidIncludeInBriefings ?? true,
-        transactionDays: settings?.plaidTransactionDaysToShow ?? 7,
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to get Plaid status", error);
-    }
+    // Feature is disabled - return safe defaults
+    res.json({
+      configured: false,
+      enabled: false,
+      featureDisabled: true,
+      includeInBriefings: false,
+      transactionDays: 7,
+    });
   });
 
   /**
    * POST /api/plaid/link-token - Create a Plaid Link token to start the connection flow
+   * Note: Feature is currently disabled
    */
   app.post("/api/plaid/link-token", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return sendErrorResponse(res, 503, "Financial integration is not available");
+    }
     try {
       if (!plaidService.isPlaidConfigured()) {
         return sendErrorResponse(res, 503, "Plaid integration is not configured");
@@ -2651,8 +2639,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * POST /api/plaid/exchange-token - Exchange public token for access token after user connects
+   * Note: Feature is currently disabled
    */
   app.post("/api/plaid/exchange-token", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return sendErrorResponse(res, 503, "Financial integration is not available");
+    }
     try {
       const user = req.user as User;
       const { publicToken, institutionId, institutionName } = req.body;
@@ -2686,8 +2678,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/plaid/institutions - Get user's connected financial institutions
+   * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/institutions", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return res.json([]);
+    }
     try {
       const user = req.user as User;
       const institutions = await plaidService.getConnectedInstitutions(user.id);
@@ -2699,8 +2695,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * DELETE /api/plaid/institutions/:itemId - Disconnect a financial institution
+   * Note: Feature is currently disabled
    */
   app.delete("/api/plaid/institutions/:itemId", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return sendErrorResponse(res, 503, "Financial integration is not available");
+    }
     try {
       const user = req.user as User;
       const { itemId } = req.params;
@@ -2715,8 +2715,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/plaid/accounts - Get user's financial accounts
+   * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/accounts", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return res.json([]);
+    }
     try {
       const user = req.user as User;
       const accounts = await plaidService.getAccounts(user.id);
@@ -2728,8 +2732,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * PATCH /api/plaid/accounts/:accountId/visibility - Hide/show an account
+   * Note: Feature is currently disabled
    */
   app.patch("/api/plaid/accounts/:accountId/visibility", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return sendErrorResponse(res, 503, "Financial integration is not available");
+    }
     try {
       const user = req.user as User;
       const { accountId } = req.params;
@@ -2749,8 +2757,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * POST /api/plaid/sync/:itemId - Sync transactions for an institution
+   * Note: Feature is currently disabled
    */
   app.post("/api/plaid/sync/:itemId", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return sendErrorResponse(res, 503, "Financial integration is not available");
+    }
     try {
       const user = req.user as User;
       const { itemId } = req.params;
@@ -2771,8 +2783,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/plaid/transactions - Get recent transactions
+   * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/transactions", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return res.json([]);
+    }
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 7;
@@ -2787,8 +2803,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/plaid/spending-summary - Get spending summary for briefings
+   * Note: Feature is currently disabled - returns empty summary
    */
   app.get("/api/plaid/spending-summary", requireAuth, async (req, res) => {
+    if (!PLAID_FEATURE_ENABLED) {
+      return res.json({ totalSpent: 0, transactionCount: 0, categories: {} });
+    }
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 7;
