@@ -399,6 +399,16 @@ export interface EmailContext {
 }
 
 /**
+ * Financial summary for briefings
+ */
+export interface FinancialSummary {
+  totalSpending: number;
+  transactionCount: number;
+  categoryBreakdown: Array<{ category: string; amount: number }>;
+  topMerchants: Array<{ merchant: string; amount: number }>;
+}
+
+/**
  * Morning briefing result
  */
 export interface MorningBriefing {
@@ -409,10 +419,11 @@ export interface MorningBriefing {
   moodTrend: string;
   affirmation: string;
   emailHighlights?: string[];
+  financialInsights?: string[];
 }
 
 /**
- * Generate a personalized morning briefing based on recent memories and emails
+ * Generate a personalized morning briefing based on recent memories, emails, and financial data
  * Provides context-aware daily summary with reminders, insights, and email highlights
  * 
  * @param recentMemories - Last 7 days of memories
@@ -420,6 +431,7 @@ export interface MorningBriefing {
  * @param localHour - Local hour for time-of-day greeting
  * @param recentEmails - Recent emails to cross-reference with memories
  * @param activeProjects - Topics marked as current focus areas (prioritized in briefing)
+ * @param financialSummary - Optional spending summary from connected financial accounts
  * @returns Promise<MorningBriefing>
  */
 export async function generateMorningBriefing(
@@ -427,7 +439,8 @@ export async function generateMorningBriefing(
   userName?: string,
   localHour?: number,
   recentEmails?: EmailContext[],
-  activeProjects?: string[]
+  activeProjects?: string[],
+  financialSummary?: FinancialSummary
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -459,6 +472,16 @@ export async function generateMorningBriefing(
       activeProjectsContext = `\n\nACTIVE FOCUS AREAS (prioritize these topics): ${activeProjects.join(', ')}`;
     }
 
+    // Format financial context if available
+    let financialContext = '';
+    if (financialSummary && financialSummary.transactionCount > 0) {
+      const topCategories = financialSummary.categoryBreakdown.slice(0, 3)
+        .map(c => `${c.category}: $${c.amount.toFixed(2)}`).join(', ');
+      const topSpending = financialSummary.topMerchants.slice(0, 3)
+        .map(m => `${m.merchant}: $${m.amount.toFixed(2)}`).join(', ');
+      financialContext = `\n\nFINANCIAL SUMMARY (last 7 days):\n- Total spending: $${financialSummary.totalSpending.toFixed(2)}\n- Transactions: ${financialSummary.transactionCount}\n- Top categories: ${topCategories}\n- Top merchants: ${topSpending}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -466,7 +489,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ' and emails' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}, create a personalized briefing that:
 1. GREETING: A warm, personalized greeting mentioning their name if provided
 2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
 3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
@@ -474,6 +497,7 @@ Based on their recent memories${recentEmails?.length ? ' and emails' : ''}${acti
 5. MOOD_TREND: A supportive observation about their emotional patterns
 6. AFFIRMATION: An encouraging statement or positive affirmation
 ${recentEmails?.length ? `7. EMAIL_HIGHLIGHTS: 1-3 relevant emails that relate to people or topics from their memories (if any match). Only include emails that genuinely connect to something in their memories - don't force connections.` : ''}
+${financialSummary ? `8. FINANCIAL_INSIGHTS: 1-2 brief, non-judgmental observations about spending patterns. Focus on facts and any connections to their memories/activities. Keep it supportive, not preachy.` : ''}
 
 Be warm but not overly effusive. Be practical and helpful. Focus on actionable insights.
 
@@ -485,14 +509,15 @@ Respond with JSON:
   "reminders": ["reminder 1", "reminder 2", ...],
   "moodTrend": "observation about their emotional state",
   "affirmation": "encouraging statement"${recentEmails?.length ? `,
-  "emailHighlights": ["Email from X about Y relates to your project...", ...]` : ''}
+  "emailHighlights": ["Email from X about Y relates to your project...", ...]` : ''}${financialSummary ? `,
+  "financialInsights": ["You spent $X on Y this week...", ...]` : ''}
 }`
         },
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${activeProjectsContext}${emailContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${activeProjectsContext}${emailContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },
@@ -508,6 +533,7 @@ Respond with JSON:
       moodTrend: result.moodTrend || "Log some memories to track your emotional patterns.",
       affirmation: result.affirmation || "Every day is a new opportunity.",
       emailHighlights: Array.isArray(result.emailHighlights) ? result.emailHighlights : undefined,
+      financialInsights: Array.isArray(result.financialInsights) ? result.financialInsights : undefined,
     };
   } catch (error) {
     console.error("Error generating morning briefing:", error);

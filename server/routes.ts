@@ -1818,6 +1818,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userSettings = await storage.getSettings(user.id);
       const activeProjects = userSettings?.activeProjects || undefined;
       
+      // Get financial summary if Plaid is enabled
+      let financialSummary = undefined;
+      if (userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
+        try {
+          const spending = await plaidService.getSpendingSummary(user.id, 7);
+          if (spending.transactionCount > 0) {
+            financialSummary = spending;
+          }
+        } catch (finError) {
+          // Financial data fetch failed, continue without it
+        }
+      }
+      
       const briefing = await generateMorningBriefing(
         recentMemories.map((m: any) => ({
           memoryText: m.memoryText,
@@ -1830,7 +1843,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.username,
         localHour,
         emailContext.length > 0 ? emailContext : undefined,
-        activeProjects
+        activeProjects,
+        financialSummary
       );
 
       // Cache the result (30 minute TTL)
@@ -1852,6 +1866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
         emailSource,
+        financialDataIncluded: !!financialSummary,
         telegramSent,
         cached: false,
         generatedAt: new Date().toISOString()
