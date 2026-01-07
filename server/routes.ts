@@ -14,6 +14,7 @@ import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
+import * as plaidService from "./plaid-service";
 
 // Background job tracking for re-analysis
 interface BackfillJob {
@@ -2589,6 +2590,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to set webhook", error);
+    }
+  });
+
+  // ============================================================================
+  // Plaid / Financial Integration Routes
+  // ============================================================================
+
+  /**
+   * GET /api/plaid/status - Check if Plaid is configured
+   */
+  app.get("/api/plaid/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const settings = await storage.getSettingsByUserId(user.id);
+      
+      res.json({
+        configured: plaidService.isPlaidConfigured(),
+        enabled: settings?.plaidEnabled || false,
+        includeInBriefings: settings?.plaidIncludeInBriefings ?? true,
+        transactionDays: settings?.plaidTransactionDaysToShow ?? 7,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get Plaid status", error);
+    }
+  });
+
+  /**
+   * POST /api/plaid/link-token - Create a Plaid Link token to start the connection flow
+   */
+  app.post("/api/plaid/link-token", requireAuth, async (req, res) => {
+    try {
+      if (!plaidService.isPlaidConfigured()) {
+        return sendErrorResponse(res, 503, "Plaid integration is not configured");
+      }
+      
+      const user = req.user as User;
+      const linkToken = await plaidService.createLinkToken(user.id);
+      
+      res.json({ linkToken });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create link token", error);
+    }
+  });
+
+  /**
+   * POST /api/plaid/exchange-token - Exchange public token for access token after user connects
+   */
+  app.post("/api/plaid/exchange-token", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { publicToken, institutionId, institutionName } = req.body;
+      
+      if (!publicToken) {
+        return sendErrorResponse(res, 400, "publicToken is required");
+      }
+      
+      const result = await plaidService.exchangePublicToken(
+        user.id,
+        publicToken,
+        institutionId,
+        institutionName
+      );
+      
+      // Also enable Plaid in settings if this is first connection
+      const settings = await storage.getSettingsByUserId(user.id);
+      if (settings && !settings.plaidEnabled) {
+        await storage.updateSettings(user.id, { plaidEnabled: true });
+      }
+      
+      res.json({
+        status: 'success',
+        itemId: result.itemId,
+        accountsConnected: result.accounts.length,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to connect account", error);
+    }
+  });
+
+  /**
+   * GET /api/plaid/institutions - Get user's connected financial institutions
+   */
+  app.get("/api/plaid/institutions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const institutions = await plaidService.getConnectedInstitutions(user.id);
+      res.json(institutions);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get institutions", error);
+    }
+  });
+
+  /**
+   * DELETE /api/plaid/institutions/:itemId - Disconnect a financial institution
+   */
+  app.delete("/api/plaid/institutions/:itemId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { itemId } = req.params;
+      
+      await plaidService.disconnectItem(user.id, itemId);
+      
+      res.json({ status: 'success', message: 'Institution disconnected' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to disconnect institution", error);
+    }
+  });
+
+  /**
+   * GET /api/plaid/accounts - Get user's financial accounts
+   */
+  app.get("/api/plaid/accounts", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const accounts = await plaidService.getAccounts(user.id);
+      res.json(accounts);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get accounts", error);
+    }
+  });
+
+  /**
+   * PATCH /api/plaid/accounts/:accountId/visibility - Hide/show an account
+   */
+  app.patch("/api/plaid/accounts/:accountId/visibility", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { accountId } = req.params;
+      const { hidden } = req.body;
+      
+      if (typeof hidden !== 'boolean') {
+        return sendErrorResponse(res, 400, "hidden must be a boolean");
+      }
+      
+      await plaidService.hideAccount(user.id, accountId, hidden);
+      
+      res.json({ status: 'success' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update account visibility", error);
+    }
+  });
+
+  /**
+   * POST /api/plaid/sync/:itemId - Sync transactions for an institution
+   */
+  app.post("/api/plaid/sync/:itemId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { itemId } = req.params;
+      
+      const result = await plaidService.syncTransactions(user.id, itemId);
+      await plaidService.updateAccountBalances(user.id, itemId);
+      
+      res.json({
+        status: 'success',
+        added: result.added,
+        modified: result.modified,
+        removed: result.removed,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to sync transactions", error);
+    }
+  });
+
+  /**
+   * GET /api/plaid/transactions - Get recent transactions
+   */
+  app.get("/api/plaid/transactions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const days = parseInt(req.query.days as string) || 7;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const transactions = await plaidService.getRecentTransactions(user.id, days, limit);
+      res.json(transactions);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get transactions", error);
+    }
+  });
+
+  /**
+   * GET /api/plaid/spending-summary - Get spending summary for briefings
+   */
+  app.get("/api/plaid/spending-summary", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const days = parseInt(req.query.days as string) || 7;
+      
+      const summary = await plaidService.getSpendingSummary(user.id, days);
+      res.json(summary);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get spending summary", error);
     }
   });
 
