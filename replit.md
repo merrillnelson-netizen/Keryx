@@ -28,7 +28,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `plaid_items`, `financial_accounts`, `financial_transactions` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache` tables.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Performance Optimizations
@@ -50,7 +50,6 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **AI Task Execution**: Detection of actionable requests (calendar, email, reminders) with policy-based approval and rollback capability.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
-- **Financial Integration**: Plaid API for bank account linking, transaction syncing, spending summaries in briefings.
 
 ## External Dependencies
 
@@ -74,7 +73,6 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Outlook Calendar**: Replit outlook connector.
 - **Gmail**: Replit google-mail connector.
 - **Telegram**: Telegram Bot API.
-- **Plaid**: Bank account linking and transaction sync (requires PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV secrets).
 - **Wake Word Detection**: Picovoice Porcupine SDK.
 - **Google Places API**: For reverse geocoding (optional).
 
