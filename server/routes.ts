@@ -2603,7 +2603,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/plaid/status", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const settings = await storage.getSettingsByUserId(user.id);
+      const settings = await storage.getSettings(user.id);
       
       res.json({
         configured: plaidService.isPlaidConfigured(),
@@ -2654,7 +2654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Also enable Plaid in settings if this is first connection
-      const settings = await storage.getSettingsByUserId(user.id);
+      const settings = await storage.getSettings(user.id);
       if (settings && !settings.plaidEnabled) {
         await storage.updateSettings(user.id, { plaidEnabled: true });
       }
