@@ -223,6 +223,10 @@ export const settings = pgTable("settings", {
   telegramAlertsEnabled: boolean("telegram_alerts_enabled").default(true), // Send pattern alerts via Telegram
   telegramVerificationCode: text("telegram_verification_code"), // Temporary code for linking account
   telegramVerificationExpires: timestamp("telegram_verification_expires"), // Code expiration time
+  // Plaid/Financial integration settings
+  plaidEnabled: boolean("plaid_enabled").default(false), // Master toggle for financial features
+  plaidIncludeInBriefings: boolean("plaid_include_in_briefings").default(true), // Include spending insights in morning briefings
+  plaidTransactionDaysToShow: integer("plaid_transaction_days_to_show").default(7), // Days of transactions to display
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -310,6 +314,82 @@ export const aiCache = pgTable("ai_cache", {
   }).onDelete("cascade"),
 }));
 
+/**
+ * Plaid Items table - stores connected financial institutions
+ * Each item represents a connection to one financial institution via Plaid
+ */
+export const plaidItems = pgTable("plaid_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  itemId: text("item_id").notNull().unique(), // Plaid's item_id
+  accessToken: text("access_token").notNull(), // Encrypted Plaid access_token
+  institutionId: text("institution_id"), // Plaid institution ID
+  institutionName: text("institution_name"), // Human-readable institution name
+  status: text("status").notNull().default("active"), // 'active', 'needs_reauth', 'removed'
+  lastSyncedAt: timestamp("last_synced_at"),
+  cursor: text("cursor"), // Plaid sync cursor for incremental transaction updates
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("plaid_items_user_id_idx").on(table.userId),
+}));
+
+/**
+ * Financial Accounts table - stores individual bank accounts from Plaid
+ * Each Plaid item can have multiple accounts (checking, savings, credit cards, etc.)
+ */
+export const financialAccounts = pgTable("financial_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  plaidItemId: varchar("plaid_item_id").notNull().references(() => plaidItems.id, { onDelete: 'cascade' }),
+  accountId: text("account_id").notNull().unique(), // Plaid's account_id
+  name: text("name").notNull(), // Account name from institution
+  officialName: text("official_name"), // Official account name
+  type: text("type").notNull(), // 'depository', 'credit', 'loan', 'investment', etc.
+  subtype: text("subtype"), // 'checking', 'savings', 'credit card', etc.
+  mask: text("mask"), // Last 4 digits of account number
+  currentBalance: real("current_balance"),
+  availableBalance: real("available_balance"),
+  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  isHidden: boolean("is_hidden").default(false), // User can hide accounts they don't want to track
+  lastBalanceUpdate: timestamp("last_balance_update"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("financial_accounts_user_id_idx").on(table.userId),
+  plaidItemIdIdx: index("financial_accounts_plaid_item_idx").on(table.plaidItemId),
+}));
+
+/**
+ * Financial Transactions table - stores transaction data from Plaid
+ * Transactions are synced incrementally using Plaid's sync endpoint
+ */
+export const financialTransactions = pgTable("financial_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  accountId: varchar("account_id").notNull().references(() => financialAccounts.id, { onDelete: 'cascade' }),
+  transactionId: text("transaction_id").notNull().unique(), // Plaid's transaction_id
+  amount: real("amount").notNull(), // Positive for debits, negative for credits
+  isoCurrencyCode: text("iso_currency_code").default("USD"),
+  date: timestamp("date").notNull(), // Transaction date
+  name: text("name").notNull(), // Merchant name or description
+  merchantName: text("merchant_name"), // Cleaned merchant name
+  category: text("category").array(), // Plaid category hierarchy
+  primaryCategory: text("primary_category"), // Primary category for simpler filtering
+  pending: boolean("pending").default(false),
+  // Additional metadata
+  paymentChannel: text("payment_channel"), // 'online', 'in store', 'other'
+  location: jsonb("location"), // Store location if available
+  // For linking transactions to memories
+  linkedMemoryId: varchar("linked_memory_id").references(() => logEntries.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("financial_transactions_user_id_idx").on(table.userId),
+  accountIdIdx: index("financial_transactions_account_idx").on(table.accountId),
+  dateIdx: index("financial_transactions_date_idx").on(table.date.desc()),
+  userDateIdx: index("financial_transactions_user_date_idx").on(table.userId, table.date.desc()),
+  categoryIdx: index("financial_transactions_category_idx").on(table.primaryCategory),
+}));
+
 // Insert schemas for validation
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -379,6 +459,32 @@ export type InsertAiActionPreference = z.infer<typeof insertAiActionPreferenceSc
 export type AiActionPreference = typeof aiActionPreferences.$inferSelect;
 
 export type AiCache = typeof aiCache.$inferSelect;
+
+// Plaid/Financial types
+export const insertPlaidItemSchema = createInsertSchema(plaidItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFinancialAccountSchema = createInsertSchema(financialAccounts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFinancialTransactionSchema = createInsertSchema(financialTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPlaidItem = z.infer<typeof insertPlaidItemSchema>;
+export type PlaidItem = typeof plaidItems.$inferSelect;
+
+export type InsertFinancialAccount = z.infer<typeof insertFinancialAccountSchema>;
+export type FinancialAccount = typeof financialAccounts.$inferSelect;
+
+export type InsertFinancialTransaction = z.infer<typeof insertFinancialTransactionSchema>;
+export type FinancialTransaction = typeof financialTransactions.$inferSelect;
 
 // Cache type constants
 export const AI_CACHE_TYPES = {
