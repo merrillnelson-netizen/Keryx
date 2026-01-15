@@ -37,13 +37,12 @@ export function isPlaidConfigured(): boolean {
 export async function createLinkToken(userId: string): Promise<string> {
   const client = getPlaidClient();
   
-  // Use Balance as primary product (fewer approval requirements than Transactions)
-  // Transactions will be available as an optional add-on if approved
+  // Use Balance as primary product (approved for production)
+  // Transactions can be added later once approved
   const response = await client.linkTokenCreate({
     user: { client_user_id: userId },
     client_name: 'Helix',
     products: [Products.Balance],
-    optional_products: [Products.Transactions],
     country_codes: [CountryCode.Us],
     language: 'en',
   });
