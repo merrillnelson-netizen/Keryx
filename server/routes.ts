@@ -17,8 +17,10 @@ import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, 
 import * as plaidService from "./plaid-service";
 
 // Feature flags - Plaid integration controlled by environment
-// Set PLAID_FEATURE_ENABLED=true in environment to enable
-const PLAID_FEATURE_ENABLED = process.env.PLAID_FEATURE_ENABLED !== 'false' && plaidService.isPlaidConfigured();
+// Dynamic check to handle runtime config changes
+function isPlaidFeatureEnabled(): boolean {
+  return process.env.PLAID_FEATURE_ENABLED !== 'false' && plaidService.isPlaidConfigured();
+}
 
 // Background job tracking for re-analysis
 interface BackfillJob {
@@ -1824,7 +1826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Fetch financial summary if Plaid is enabled and feature is available
       let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
-      if (PLAID_FEATURE_ENABLED && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
+      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
           if (rawSummary && rawSummary.transactionCount > 0) {
@@ -2627,7 +2629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/plaid/status", requireAuth, async (req, res) => {
     // Check if feature is enabled
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return res.json({
         configured: false,
         enabled: false,
@@ -2657,7 +2659,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/plaid/link-token - Create a Plaid Link token to start the connection flow
    */
   app.post("/api/plaid/link-token", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
     try {
@@ -2689,7 +2691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled
    */
   app.post("/api/plaid/exchange-token", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
     try {
@@ -2728,7 +2730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/institutions", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
     try {
@@ -2745,7 +2747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled
    */
   app.delete("/api/plaid/institutions/:itemId", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
     try {
@@ -2765,7 +2767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/accounts", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
     try {
@@ -2782,7 +2784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled
    */
   app.patch("/api/plaid/accounts/:accountId/visibility", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
     try {
@@ -2807,7 +2809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled
    */
   app.post("/api/plaid/sync/:itemId", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
     try {
@@ -2833,7 +2835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled - returns empty array
    */
   app.get("/api/plaid/transactions", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
     try {
@@ -2853,7 +2855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Note: Feature is currently disabled - returns empty summary
    */
   app.get("/api/plaid/spending-summary", requireAuth, async (req, res) => {
-    if (!PLAID_FEATURE_ENABLED) {
+    if (!isPlaidFeatureEnabled()) {
       return res.json({ totalSpent: 0, transactionCount: 0, categories: {} });
     }
     try {
