@@ -75,6 +75,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Telegram**: Telegram Bot API.
 - **Wake Word Detection**: Picovoice Porcupine SDK.
 - **Google Places API**: For reverse geocoding (optional).
+- **Plaid**: Financial integration for bank accounts and spending insights. Uses Balance as primary product (less approval requirements), Transactions as optional. Batch-optimized database operations for sync.
 
 ### Analytics
 - **Google Analytics 4**: For user behavior tracking.
