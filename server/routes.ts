@@ -16,8 +16,9 @@ import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 
-// Feature flags - Plaid integration enabled for production
-const PLAID_FEATURE_ENABLED = true;
+// Feature flags - Plaid integration controlled by environment
+// Set PLAID_FEATURE_ENABLED=true in environment to enable
+const PLAID_FEATURE_ENABLED = process.env.PLAID_FEATURE_ENABLED !== 'false' && plaidService.isPlaidConfigured();
 
 // Background job tracking for re-analysis
 interface BackfillJob {

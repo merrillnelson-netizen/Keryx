@@ -1221,10 +1221,29 @@ export default function SettingsPage() {
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
               ) : plaidStatus?.featureDisabled ? (
-                <div className="p-3 rounded-lg bg-muted/20 border border-white/10">
-                  <p className="text-sm text-muted-foreground">
-                    Financial integration is not available.
-                  </p>
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <div className="flex gap-2 text-sm text-muted-foreground">
+                    <Landmark className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-600 dark:text-amber-400">Financial integration is not configured</p>
+                      <p className="text-xs mt-1">
+                        Plaid credentials are required to enable bank account connections. 
+                        Please add your PLAID_CLIENT_ID and PLAID_SECRET to enable this feature.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : !plaidStatus?.configured ? (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <div className="flex gap-2 text-sm text-muted-foreground">
+                    <Landmark className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-600 dark:text-amber-400">Plaid credentials not found</p>
+                      <p className="text-xs mt-1">
+                        Add your Plaid API credentials to connect bank accounts for spending insights.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>
