@@ -2677,8 +2677,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Plaid link-token error:", JSON.stringify(plaidError || error.message || error));
       
       if (plaidError?.error_code === 'INVALID_PRODUCT') {
-        const product = plaidError.error_message?.includes('balance') ? 'Balance' : 'Transactions';
-        return sendErrorResponse(res, 503, `The ${product} product is not yet enabled for your Plaid account. Please check your Plaid Dashboard to request production access.`);
+        return sendErrorResponse(res, 503, "Plaid production access required. Please wait for Plaid to approve your Transactions product access, then try again.");
+      }
+      if (plaidError?.error_code === 'INVALID_CONFIGURATION') {
+        return sendErrorResponse(res, 503, "Plaid configuration issue. A primary product (Transactions or Auth) must be approved in your Plaid Dashboard.");
       }
       if (plaidError?.error_code) {
         return sendErrorResponse(res, 503, `Plaid error: ${plaidError.error_message || plaidError.error_code}`);

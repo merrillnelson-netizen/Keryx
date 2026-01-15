@@ -37,12 +37,12 @@ export function isPlaidConfigured(): boolean {
 export async function createLinkToken(userId: string): Promise<string> {
   const client = getPlaidClient();
   
-  // Use Auth product which includes balance information
-  // Auth provides a proper Link flow for bank connections
+  // Transactions is the primary product for financial insights
+  // Balance is included automatically with Transactions
   const response = await client.linkTokenCreate({
     user: { client_user_id: userId },
     client_name: 'Helix',
-    products: [Products.Auth],
+    products: [Products.Transactions],
     country_codes: [CountryCode.Us],
     language: 'en',
   });
