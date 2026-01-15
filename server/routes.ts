@@ -2674,13 +2674,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       // Handle specific Plaid API errors
       const plaidError = error?.response?.data;
+      console.error("Plaid link-token error:", JSON.stringify(plaidError || error.message || error));
+      
       if (plaidError?.error_code === 'INVALID_PRODUCT') {
-        console.error("Plaid product access error:", plaidError.error_message);
-        return sendErrorResponse(res, 503, "The transactions product is not yet enabled for this Plaid account. Please check your Plaid Dashboard to request production access for the transactions product.");
+        const product = plaidError.error_message?.includes('balance') ? 'Balance' : 'Transactions';
+        return sendErrorResponse(res, 503, `The ${product} product is not yet enabled for your Plaid account. Please check your Plaid Dashboard to request production access.`);
       }
       if (plaidError?.error_code) {
-        console.error("Plaid API error:", plaidError.error_code, plaidError.error_message);
-        return sendErrorResponse(res, 503, `Plaid configuration error: ${plaidError.error_message || plaidError.error_code}`);
+        return sendErrorResponse(res, 503, `Plaid error: ${plaidError.error_message || plaidError.error_code}`);
       }
       sendErrorResponse(res, 500, "Failed to create link token", error);
     }
