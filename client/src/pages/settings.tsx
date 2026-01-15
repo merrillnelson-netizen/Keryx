@@ -8,14 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Settings, Category, AiActionPreference, AI_ACTION_TYPES, AI_ACTION_POLICIES } from "@shared/schema";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { usePlaidLink } from "react-plaid-link";
 
 interface BackfillStatus {
   status: 'idle' | 'running' | 'completed' | 'failed' | 'started' | 'already_running';
@@ -213,6 +214,153 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/telegram/status"] });
     },
   });
+
+  // Plaid / Financial Integration
+  interface PlaidStatus {
+    configured: boolean;
+    enabled: boolean;
+    featureDisabled?: boolean;
+    includeInBriefings: boolean;
+    transactionDays: number;
+  }
+
+  interface PlaidInstitution {
+    id: number;
+    itemId: string;
+    institutionName: string | null;
+    status: string;
+    lastSyncedAt: string | null;
+    createdAt: string;
+  }
+
+  interface PlaidAccount {
+    id: number;
+    accountId: string;
+    name: string;
+    officialName: string | null;
+    type: string;
+    subtype: string | null;
+    currentBalance: number | null;
+    availableBalance: number | null;
+    isHidden: boolean;
+    institutionName?: string;
+  }
+
+  const { data: plaidStatus, isLoading: isPlaidLoading } = useQuery<PlaidStatus>({
+    queryKey: ["/api/plaid/status"],
+  });
+
+  const { data: plaidInstitutions = [], refetch: refetchInstitutions } = useQuery<PlaidInstitution[]>({
+    queryKey: ["/api/plaid/institutions"],
+    enabled: plaidStatus?.configured && !plaidStatus?.featureDisabled,
+  });
+
+  const { data: plaidAccounts = [], refetch: refetchAccounts } = useQuery<PlaidAccount[]>({
+    queryKey: ["/api/plaid/accounts"],
+    enabled: plaidStatus?.configured && !plaidStatus?.featureDisabled,
+  });
+
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+
+  const createLinkTokenMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/plaid/link-token");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.linkToken) {
+        setLinkToken(data.linkToken);
+      }
+    },
+    onError: () => {
+      toast({ title: "Failed to initialize bank connection", variant: "destructive" });
+    },
+  });
+
+  const exchangeTokenMutation = useMutation({
+    mutationFn: async ({ publicToken, institutionId, institutionName }: { publicToken: string; institutionId?: string; institutionName?: string }) => {
+      const response = await apiRequest("POST", "/api/plaid/exchange-token", { publicToken, institutionId, institutionName });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/institutions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/status"] });
+      setLinkToken(null);
+      toast({ title: "Bank account connected successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to connect bank account", variant: "destructive" });
+    },
+  });
+
+  const disconnectInstitutionMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      await apiRequest("DELETE", `/api/plaid/institutions/${itemId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/institutions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/accounts"] });
+      toast({ title: "Bank disconnected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect bank", variant: "destructive" });
+    },
+  });
+
+  const toggleAccountVisibilityMutation = useMutation({
+    mutationFn: async ({ accountId, hidden }: { accountId: string; hidden: boolean }) => {
+      await apiRequest("PATCH", `/api/plaid/accounts/${accountId}/visibility`, { hidden });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/accounts"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to update account visibility", variant: "destructive" });
+    },
+  });
+
+  const syncTransactionsMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const response = await apiRequest("POST", `/api/plaid/sync/${itemId}`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/plaid/transactions"] });
+      toast({ 
+        title: "Transactions synced", 
+        description: `Added: ${data.added}, Modified: ${data.modified}, Removed: ${data.removed}`
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to sync transactions", variant: "destructive" });
+    },
+  });
+
+  const onPlaidSuccess = useCallback((publicToken: string, metadata: any) => {
+    exchangeTokenMutation.mutate({
+      publicToken,
+      institutionId: metadata?.institution?.institution_id,
+      institutionName: metadata?.institution?.name,
+    });
+  }, [exchangeTokenMutation]);
+
+  const onPlaidExit = useCallback(() => {
+    setLinkToken(null);
+  }, []);
+
+  const { open: openPlaidLink, ready: plaidLinkReady } = usePlaidLink({
+    token: linkToken,
+    onSuccess: onPlaidSuccess,
+    onExit: onPlaidExit,
+  });
+
+  useEffect(() => {
+    if (linkToken && plaidLinkReady) {
+      openPlaidLink();
+    }
+  }, [linkToken, plaidLinkReady, openPlaidLink]);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -1056,6 +1204,189 @@ export default function SettingsPage() {
                     </Button>
                   )}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Landmark className="w-5 h-5 text-emerald-500" />
+                Financial Accounts
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isPlaidLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : plaidStatus?.featureDisabled ? (
+                <div className="p-3 rounded-lg bg-muted/20 border border-white/10">
+                  <p className="text-sm text-muted-foreground">
+                    Financial integration is not available.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Connect your bank accounts to include spending insights in your morning briefings.
+                  </p>
+
+                  {plaidInstitutions.length > 0 && (
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">Connected Banks</Label>
+                      {plaidInstitutions.map((institution) => (
+                        <div 
+                          key={institution.itemId}
+                          className="p-3 rounded-lg bg-muted/20 border border-white/10"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Building2 className="w-5 h-5 text-emerald-500" />
+                              <div>
+                                <span className="text-sm font-medium">
+                                  {institution.institutionName || 'Unknown Bank'}
+                                </span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Badge 
+                                    variant={institution.status === 'active' ? 'default' : 'destructive'}
+                                    className="text-xs"
+                                  >
+                                    {institution.status}
+                                  </Badge>
+                                  {institution.lastSyncedAt && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Last synced: {new Date(institution.lastSyncedAt).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => syncTransactionsMutation.mutate(institution.itemId)}
+                                disabled={syncTransactionsMutation.isPending}
+                                title="Sync transactions"
+                                data-testid={`button-sync-${institution.itemId}`}
+                              >
+                                <RefreshCcw className={`w-4 h-4 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => disconnectInstitutionMutation.mutate(institution.itemId)}
+                                disabled={disconnectInstitutionMutation.isPending}
+                                title="Disconnect bank"
+                                data-testid={`button-disconnect-${institution.itemId}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {plaidAccounts.filter(a => {
+                            const inst = plaidInstitutions.find(i => i.id === (a as any).plaidItemId);
+                            return inst?.itemId === institution.itemId;
+                          }).length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                              {plaidAccounts
+                                .filter(a => {
+                                  const inst = plaidInstitutions.find(i => i.id === (a as any).plaidItemId);
+                                  return inst?.itemId === institution.itemId;
+                                })
+                                .map((account) => (
+                                  <div 
+                                    key={account.accountId}
+                                    className={`flex items-center justify-between p-2 rounded ${account.isHidden ? 'opacity-50' : ''}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <CreditCard className="w-4 h-4 text-muted-foreground" />
+                                      <div>
+                                        <span className="text-sm">{account.name}</span>
+                                        <span className="text-xs text-muted-foreground ml-2">
+                                          {account.type}{account.subtype ? ` - ${account.subtype}` : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      {account.currentBalance !== null && (
+                                        <span className="text-sm font-medium">
+                                          ${account.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      )}
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => toggleAccountVisibilityMutation.mutate({ 
+                                          accountId: account.accountId, 
+                                          hidden: !account.isHidden 
+                                        })}
+                                        title={account.isHidden ? 'Show in briefings' : 'Hide from briefings'}
+                                        data-testid={`button-visibility-${account.accountId}`}
+                                      >
+                                        {account.isHidden ? (
+                                          <EyeOff className="w-4 h-4" />
+                                        ) : (
+                                          <Eye className="w-4 h-4" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    onClick={() => createLinkTokenMutation.mutate()}
+                    disabled={createLinkTokenMutation.isPending || exchangeTokenMutation.isPending}
+                    data-testid="button-connect-bank"
+                  >
+                    {createLinkTokenMutation.isPending || exchangeTokenMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4 mr-2" />
+                    )}
+                    {plaidInstitutions.length > 0 ? 'Connect Another Bank' : 'Connect Bank Account'}
+                  </Button>
+
+                  {plaidInstitutions.length > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                      <div className="space-y-0.5">
+                        <Label>Include in Briefings</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Show spending insights in morning briefings
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings.plaidIncludeInBriefings ?? true}
+                        onCheckedChange={(checked) => {
+                          const newSettings = { ...settings, plaidIncludeInBriefings: checked };
+                          setSettings(newSettings);
+                          updateSettingsMutation.mutate(newSettings);
+                        }}
+                        data-testid="switch-plaid-briefings"
+                      />
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <Landmark className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      <p>
+                        Bank connections are secured by Plaid and never share your login credentials with Helix.
+                        Your data is encrypted and used only for spending insights.
+                      </p>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

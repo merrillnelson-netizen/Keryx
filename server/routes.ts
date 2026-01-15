@@ -1821,6 +1821,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userSettings = await storage.getSettings(user.id);
       const activeProjects = userSettings?.activeProjects || undefined;
       
+      // Fetch financial summary if Plaid is enabled and feature is available
+      let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
+      if (PLAID_FEATURE_ENABLED && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
+        try {
+          const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
+          if (rawSummary && rawSummary.transactionCount > 0) {
+            financialSummary = {
+              totalSpending: rawSummary.totalSpending,
+              transactionCount: rawSummary.transactionCount,
+              categoryBreakdown: rawSummary.categoryBreakdown,
+              topMerchants: rawSummary.topMerchants
+            };
+          }
+        } catch (finError) {
+          // Financial fetch failed, continue without financial context
+          console.log("Financial data fetch skipped:", finError instanceof Error ? finError.message : finError);
+        }
+      }
+      
       const briefing = await generateMorningBriefing(
         recentMemories.map((m: any) => ({
           memoryText: m.memoryText,
@@ -1833,7 +1852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.username,
         localHour,
         emailContext.length > 0 ? emailContext : undefined,
-        activeProjects
+        activeProjects,
+        financialSummary
       );
 
       // Cache the result (30 minute TTL)
@@ -1855,6 +1875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         memoriesAnalyzed: recentMemories.length,
         emailsAnalyzed: emailContext.length,
         emailSource,
+        hasFinancialData: !!financialSummary,
         telegramSent,
         cached: false,
         generatedAt: new Date().toISOString()
