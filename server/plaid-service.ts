@@ -170,23 +170,22 @@ export async function syncTransactions(userId: string, plaidItemId: string): Pro
       added += toInsert.length;
     }
     
-    // Batch update modified transactions (still individual due to different values per row)
+    // Parallel update modified transactions (individual updates due to different values per row)
     if (data.modified.length > 0) {
-      await Promise.all(data.modified
-        .filter(txn => accountIdMap.has(txn.account_id))
-        .map(txn => 
-          db.update(financialTransactions)
-            .set({
-              amount: txn.amount,
-              name: txn.name,
-              merchantName: txn.merchant_name || null,
-              category: txn.category || [],
-              primaryCategory: txn.category?.[0] || null,
-              pending: txn.pending,
-            })
-            .where(eq(financialTransactions.transactionId, txn.transaction_id))
-        ));
-      modified += data.modified.length;
+      const toModify = data.modified.filter(txn => accountIdMap.has(txn.account_id));
+      await Promise.all(toModify.map(txn => 
+        db.update(financialTransactions)
+          .set({
+            amount: txn.amount,
+            name: txn.name,
+            merchantName: txn.merchant_name || null,
+            category: txn.category || [],
+            primaryCategory: txn.category?.[0] || null,
+            pending: txn.pending,
+          })
+          .where(eq(financialTransactions.transactionId, txn.transaction_id))
+      ));
+      modified += toModify.length;
     }
     
     // Batch delete removed transactions using inArray
