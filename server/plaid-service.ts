@@ -1,7 +1,7 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransactionsSyncRequest } from 'plaid';
 import { db } from './db';
 import { plaidItems, financialAccounts, financialTransactions } from '@shared/schema';
-import { eq, and, desc, gte } from 'drizzle-orm';
+import { eq, and, desc, gte, inArray } from 'drizzle-orm';
 
 const PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID;
 const PLAID_SECRET = process.env.PLAID_SECRET;
@@ -78,24 +78,25 @@ export async function exchangePublicToken(
   const accountsResponse = await client.accountsGet({ access_token: accessToken });
   const accounts = accountsResponse.data.accounts;
   
-  const insertedAccounts = [];
-  for (const account of accounts) {
-    const [inserted] = await db.insert(financialAccounts).values({
-      userId,
-      plaidItemId: plaidItem.id,
-      accountId: account.account_id,
-      name: account.name,
-      officialName: account.official_name || null,
-      type: account.type,
-      subtype: account.subtype || null,
-      mask: account.mask || null,
-      currentBalance: account.balances.current,
-      availableBalance: account.balances.available,
-      isoCurrencyCode: account.balances.iso_currency_code || 'USD',
-      lastBalanceUpdate: new Date(),
-    }).returning();
-    insertedAccounts.push(inserted);
-  }
+  // Batch insert all accounts
+  const accountValues = accounts.map(account => ({
+    userId,
+    plaidItemId: plaidItem.id,
+    accountId: account.account_id,
+    name: account.name,
+    officialName: account.official_name || null,
+    type: account.type,
+    subtype: account.subtype || null,
+    mask: account.mask || null,
+    currentBalance: account.balances.current,
+    availableBalance: account.balances.available,
+    isoCurrencyCode: account.balances.iso_currency_code || 'USD',
+    lastBalanceUpdate: new Date(),
+  }));
+  
+  const insertedAccounts = accountValues.length > 0
+    ? await db.insert(financialAccounts).values(accountValues).returning()
+    : [];
   
   return { itemId: plaidItem.id, accounts: insertedAccounts };
 }
@@ -137,59 +138,63 @@ export async function syncTransactions(userId: string, plaidItemId: string): Pro
     const response = await client.transactionsSync(request);
     const data = response.data;
     
-    for (const txn of data.added) {
-      const dbAccountId = accountIdMap.get(txn.account_id);
-      if (!dbAccountId) continue;
-      
-      await db.insert(financialTransactions)
-        .values({
-          userId,
-          accountId: dbAccountId,
-          transactionId: txn.transaction_id,
-          amount: txn.amount,
-          isoCurrencyCode: txn.iso_currency_code || 'USD',
-          date: new Date(txn.date),
-          name: txn.name,
-          merchantName: txn.merchant_name || null,
-          category: txn.category || [],
-          primaryCategory: txn.category?.[0] || null,
-          pending: txn.pending,
-          paymentChannel: txn.payment_channel || null,
-          location: txn.location ? {
-            address: txn.location.address,
-            city: txn.location.city,
-            region: txn.location.region,
-            postalCode: txn.location.postal_code,
-            country: txn.location.country,
-            lat: txn.location.lat,
-            lon: txn.location.lon,
-          } : null,
-        })
-        .onConflictDoNothing();
-      added++;
+    // Batch insert added transactions
+    const toInsert = data.added
+      .filter(txn => accountIdMap.has(txn.account_id))
+      .map(txn => ({
+        userId,
+        accountId: accountIdMap.get(txn.account_id)!,
+        transactionId: txn.transaction_id,
+        amount: txn.amount,
+        isoCurrencyCode: txn.iso_currency_code || 'USD',
+        date: new Date(txn.date),
+        name: txn.name,
+        merchantName: txn.merchant_name || null,
+        category: txn.category || [],
+        primaryCategory: txn.category?.[0] || null,
+        pending: txn.pending,
+        paymentChannel: txn.payment_channel || null,
+        location: txn.location ? {
+          address: txn.location.address,
+          city: txn.location.city,
+          region: txn.location.region,
+          postalCode: txn.location.postal_code,
+          country: txn.location.country,
+          lat: txn.location.lat,
+          lon: txn.location.lon,
+        } : null,
+      }));
+    
+    if (toInsert.length > 0) {
+      await db.insert(financialTransactions).values(toInsert).onConflictDoNothing();
+      added += toInsert.length;
     }
     
-    for (const txn of data.modified) {
-      const dbAccountId = accountIdMap.get(txn.account_id);
-      if (!dbAccountId) continue;
-      
-      await db.update(financialTransactions)
-        .set({
-          amount: txn.amount,
-          name: txn.name,
-          merchantName: txn.merchant_name || null,
-          category: txn.category || [],
-          primaryCategory: txn.category?.[0] || null,
-          pending: txn.pending,
-        })
-        .where(eq(financialTransactions.transactionId, txn.transaction_id));
-      modified++;
+    // Batch update modified transactions (still individual due to different values per row)
+    if (data.modified.length > 0) {
+      await Promise.all(data.modified
+        .filter(txn => accountIdMap.has(txn.account_id))
+        .map(txn => 
+          db.update(financialTransactions)
+            .set({
+              amount: txn.amount,
+              name: txn.name,
+              merchantName: txn.merchant_name || null,
+              category: txn.category || [],
+              primaryCategory: txn.category?.[0] || null,
+              pending: txn.pending,
+            })
+            .where(eq(financialTransactions.transactionId, txn.transaction_id))
+        ));
+      modified += data.modified.length;
     }
     
-    for (const txn of data.removed) {
+    // Batch delete removed transactions using inArray
+    if (data.removed.length > 0) {
+      const removedIds = data.removed.map(txn => txn.transaction_id);
       await db.delete(financialTransactions)
-        .where(eq(financialTransactions.transactionId, txn.transaction_id));
-      removed++;
+        .where(inArray(financialTransactions.transactionId, removedIds));
+      removed += data.removed.length;
     }
     
     cursor = data.next_cursor;
