@@ -2618,27 +2618,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // Plaid / Financial Integration Routes (Feature Disabled)
+  // Plaid / Financial Integration Routes
   // ============================================================================
 
   /**
    * GET /api/plaid/status - Check if Plaid is configured
-   * Note: Feature is currently disabled
    */
   app.get("/api/plaid/status", requireAuth, async (req, res) => {
-    // Feature is disabled - return safe defaults
-    res.json({
-      configured: false,
-      enabled: false,
-      featureDisabled: true,
-      includeInBriefings: false,
-      transactionDays: 7,
-    });
+    // Check if feature is enabled
+    if (!PLAID_FEATURE_ENABLED) {
+      return res.json({
+        configured: false,
+        enabled: false,
+        featureDisabled: true,
+        includeInBriefings: false,
+        transactionDays: 7,
+      });
+    }
+    
+    try {
+      const user = req.user as User;
+      const settings = await storage.getSettings(user.id);
+      
+      res.json({
+        configured: plaidService.isPlaidConfigured(),
+        enabled: settings?.plaidEnabled || false,
+        featureDisabled: false,
+        includeInBriefings: settings?.plaidIncludeInBriefings ?? true,
+        transactionDays: settings?.plaidTransactionDaysToShow ?? 7,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get Plaid status", error);
+    }
   });
 
   /**
    * POST /api/plaid/link-token - Create a Plaid Link token to start the connection flow
-   * Note: Feature is currently disabled
    */
   app.post("/api/plaid/link-token", requireAuth, async (req, res) => {
     if (!PLAID_FEATURE_ENABLED) {
@@ -2653,7 +2668,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const linkToken = await plaidService.createLinkToken(user.id);
       
       res.json({ linkToken });
-    } catch (error) {
+    } catch (error: any) {
+      // Handle specific Plaid API errors
+      const plaidError = error?.response?.data;
+      if (plaidError?.error_code === 'INVALID_PRODUCT') {
+        console.error("Plaid product access error:", plaidError.error_message);
+        return sendErrorResponse(res, 503, "The transactions product is not yet enabled for this Plaid account. Please check your Plaid Dashboard to request production access for the transactions product.");
+      }
+      if (plaidError?.error_code) {
+        console.error("Plaid API error:", plaidError.error_code, plaidError.error_message);
+        return sendErrorResponse(res, 503, `Plaid configuration error: ${plaidError.error_message || plaidError.error_code}`);
+      }
       sendErrorResponse(res, 500, "Failed to create link token", error);
     }
   });
