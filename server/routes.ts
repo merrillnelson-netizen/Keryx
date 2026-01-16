@@ -2718,21 +2718,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateSettings(user.id, { plaidEnabled: true });
       }
       
-      // Auto-sync transactions after connecting to get initial data
-      let syncResult = { added: 0, modified: 0, removed: 0 };
-      try {
-        syncResult = await plaidService.syncTransactions(user.id, result.itemId);
-        console.log(`Auto-synced ${syncResult.added} transactions for new connection`);
-      } catch (syncError) {
-        console.error("Auto-sync failed (transactions may not be ready yet):", syncError instanceof Error ? syncError.message : syncError);
-        // Don't fail the whole request - transactions can be synced later
-      }
+      // Fire-and-forget auto-sync transactions after connecting
+      // This runs in the background so we can respond immediately
+      (async () => {
+        try {
+          const syncResult = await plaidService.syncTransactions(user.id, result.itemId);
+          console.log(`Auto-synced ${syncResult.added} transactions for new connection ${result.itemId}`);
+        } catch (syncError) {
+          console.error("Auto-sync failed (transactions may not be ready yet):", syncError instanceof Error ? syncError.message : syncError);
+        }
+      })();
       
       res.json({
         status: 'success',
         itemId: result.itemId,
         accountsConnected: result.accounts.length,
-        transactionsSynced: syncResult.added,
+        message: 'Bank connected successfully. Transactions are syncing in the background.',
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to connect account", error);
