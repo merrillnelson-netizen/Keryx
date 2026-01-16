@@ -7,10 +7,24 @@
 
 import { google, gmail_v1 } from 'googleapis';
 
-let gmailConnectionSettings: any;
+interface ReplitConnectorSettings {
+  settings?: {
+    access_token?: string;
+    expires_at?: string;
+    oauth?: {
+      credentials?: {
+        access_token?: string;
+      };
+    };
+  };
+}
+
+let gmailConnectionSettings: ReplitConnectorSettings | null = null;
 
 async function getAccessToken(): Promise<string> {
-  if (gmailConnectionSettings && gmailConnectionSettings.settings?.expires_at && 
+  if (gmailConnectionSettings && 
+      gmailConnectionSettings.settings?.expires_at && 
+      gmailConnectionSettings.settings?.access_token &&
       new Date(gmailConnectionSettings.settings.expires_at).getTime() > Date.now()) {
     return gmailConnectionSettings.settings.access_token;
   }

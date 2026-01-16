@@ -16,7 +16,19 @@ import {
   type OutlookCalendarEvent 
 } from './outlook-calendar-service';
 
-let googleConnectionSettings: any;
+interface ReplitConnectorSettings {
+  settings?: {
+    access_token?: string;
+    expires_at?: string;
+    oauth?: {
+      credentials?: {
+        access_token?: string;
+      };
+    };
+  };
+}
+
+let googleConnectionSettings: ReplitConnectorSettings | null = null;
 let lastTokenFetch: number = 0;
 const TOKEN_CACHE_TTL_MS = 30 * 1000; // Cache tokens for 30 seconds max to ensure freshness
 

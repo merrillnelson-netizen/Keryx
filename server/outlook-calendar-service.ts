@@ -7,10 +7,24 @@
 
 import { Client } from '@microsoft/microsoft-graph-client';
 
-let outlookConnectionSettings: any;
+interface ReplitConnectorSettings {
+  settings?: {
+    access_token?: string;
+    expires_at?: string;
+    oauth?: {
+      credentials?: {
+        access_token?: string;
+      };
+    };
+  };
+}
+
+let outlookConnectionSettings: ReplitConnectorSettings | null = null;
 
 async function getAccessToken(): Promise<string> {
-  if (outlookConnectionSettings && outlookConnectionSettings.settings?.expires_at && 
+  if (outlookConnectionSettings && 
+      outlookConnectionSettings.settings?.expires_at && 
+      outlookConnectionSettings.settings?.access_token &&
       new Date(outlookConnectionSettings.settings.expires_at).getTime() > Date.now()) {
     return outlookConnectionSettings.settings.access_token;
   }
