@@ -16,7 +16,7 @@ import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag,
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { usePlaidLink } from "react-plaid-link";
+import { usePlaidLink, PlaidLinkOnSuccessMetadata } from "react-plaid-link";
 
 interface BackfillStatus {
   status: 'idle' | 'running' | 'completed' | 'failed' | 'started' | 'already_running';
@@ -338,7 +338,7 @@ export default function SettingsPage() {
     },
   });
 
-  const onPlaidSuccess = useCallback((publicToken: string, metadata: any) => {
+  const onPlaidSuccess = useCallback((publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => {
     exchangeTokenMutation.mutate({
       publicToken,
       institutionId: metadata?.institution?.institution_id,

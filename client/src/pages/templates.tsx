@@ -51,7 +51,7 @@ export default function Templates() {
   });
 
   const createTemplateMutation = useMutation({
-    mutationFn: (template: any) => 
+    mutationFn: (template: Omit<Template, 'id' | 'isActive'>) => 
       apiRequest("POST", "/api/templates", template),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });
@@ -71,7 +71,7 @@ export default function Templates() {
   });
 
   const editTemplateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) => 
+    mutationFn: ({ id, data }: { id: string; data: Partial<Omit<Template, 'id'>> }) => 
       apiRequest("PUT", `/api/templates/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/templates"] });

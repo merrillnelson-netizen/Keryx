@@ -36,10 +36,10 @@ export default function SignupPage() {
       await signup(username, password);
       toast({ title: "Account created successfully!" });
       navigate("/");
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Signup failed",
-        description: error.message || "Could not create account",
+        description: error instanceof Error ? error.message : "Could not create account",
         variant: "destructive"
       });
     } finally {

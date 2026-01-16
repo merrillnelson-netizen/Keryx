@@ -25,10 +25,10 @@ export default function LoginPage() {
       await login(username, password);
       toast({ title: "Login successful!" });
       navigate("/");
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: "Login failed",
-        description: error.message || "Invalid username or password",
+        description: error instanceof Error ? error.message : "Invalid username or password",
         variant: "destructive"
       });
     } finally {

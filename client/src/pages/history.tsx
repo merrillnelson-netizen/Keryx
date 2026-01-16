@@ -426,10 +426,10 @@ export default function History() {
             metadataJson: metadata,
           },
         });
-      } catch (error: any) {
+      } catch (error) {
         toast({
           title: "Invalid JSON",
-          description: `Please check your metadata format: ${error.message}`,
+          description: `Please check your metadata format: ${error instanceof Error ? error.message : "Unknown error"}`,
           variant: "destructive",
         });
       }

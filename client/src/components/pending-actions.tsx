@@ -47,7 +47,7 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
         description: data.message || "The action was completed successfully.",
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Execution Failed",
         description: error.message || "Failed to execute the action.",
