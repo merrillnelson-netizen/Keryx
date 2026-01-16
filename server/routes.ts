@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, type User, type MCPPayload } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -2718,10 +2718,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateSettings(user.id, { plaidEnabled: true });
       }
       
+      // Auto-sync transactions after connecting to get initial data
+      let syncResult = { added: 0, modified: 0, removed: 0 };
+      try {
+        syncResult = await plaidService.syncTransactions(user.id, result.itemId);
+        console.log(`Auto-synced ${syncResult.added} transactions for new connection`);
+      } catch (syncError) {
+        console.error("Auto-sync failed (transactions may not be ready yet):", syncError instanceof Error ? syncError.message : syncError);
+        // Don't fail the whole request - transactions can be synced later
+      }
+      
       res.json({
         status: 'success',
         itemId: result.itemId,
         accountsConnected: result.accounts.length,
+        transactionsSynced: syncResult.added,
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to connect account", error);
@@ -2869,6 +2880,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(summary);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to get spending summary", error);
+    }
+  });
+
+  /**
+   * POST /api/plaid/query - Ask AI questions about financial data
+   * Provides natural language answers about spending patterns and balances
+   */
+  app.post("/api/plaid/query", requireAuth, aiLimiter, async (req, res) => {
+    if (!isPlaidFeatureEnabled()) {
+      return res.json({ 
+        answer: "Financial integration is not enabled. Please connect a bank account in Settings.",
+        status: 'disabled'
+      });
+    }
+    try {
+      const user = req.user as User;
+      const { query } = req.body;
+      
+      if (!query || typeof query !== 'string') {
+        return sendErrorResponse(res, 400, "query is required");
+      }
+      
+      // Get recent transactions (30 days) and accounts
+      const [transactions, accounts] = await Promise.all([
+        plaidService.getRecentTransactions(user.id, 30, 100),
+        plaidService.getAccounts(user.id)
+      ]);
+      
+      const result = await answerFinancialQuery(
+        query,
+        transactions.map(t => ({
+          date: t.date,
+          amount: t.amount,
+          merchantName: t.merchantName,
+          name: t.name,
+          primaryCategory: t.primaryCategory
+        })),
+        accounts.map(a => ({
+          name: a.name,
+          type: a.type,
+          currentBalance: a.currentBalance ?? null,
+          availableBalance: a.availableBalance ?? null
+        }))
+      );
+      
+      res.json({
+        status: 'success',
+        answer: result.answer,
+        summary: result.summary,
+        dataRange: {
+          transactionCount: transactions.length,
+          accountCount: accounts.length
+        }
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to answer financial query", error);
     }
   });
 

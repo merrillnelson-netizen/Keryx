@@ -696,3 +696,102 @@ If no future event is detected, respond with just: { "detected": false }`
     return { detected: false };
   }
 }
+
+/**
+ * Transaction data for financial query context
+ */
+export interface TransactionContext {
+  date: Date;
+  amount: number;
+  merchantName: string | null;
+  name: string;
+  primaryCategory: string | null;
+}
+
+/**
+ * Answer a user's question about their financial data
+ * Uses AI to provide natural language responses about spending patterns
+ * 
+ * @param query - User's question about finances
+ * @param transactions - Recent transaction data
+ * @param accounts - Account balance information
+ * @returns Promise<string> - Natural language answer
+ */
+export async function answerFinancialQuery(
+  query: string,
+  transactions: TransactionContext[],
+  accounts: Array<{ name: string; type: string; currentBalance: number | null; availableBalance: number | null }>
+): Promise<{ answer: string; summary?: { totalSpent: number; transactionCount: number; topCategories: string[] } }> {
+  try {
+    if (transactions.length === 0 && accounts.length === 0) {
+      return {
+        answer: "I don't have any financial data to analyze yet. Please connect a bank account and sync your transactions in Settings."
+      };
+    }
+
+    // Calculate summary stats
+    const totalSpent = transactions
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const categoryTotals: Record<string, number> = {};
+    for (const t of transactions) {
+      if (t.amount > 0 && t.primaryCategory) {
+        categoryTotals[t.primaryCategory] = (categoryTotals[t.primaryCategory] || 0) + t.amount;
+      }
+    }
+    const topCategories = Object.entries(categoryTotals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([cat]) => cat);
+
+    // Format transaction context
+    const transactionSummary = transactions.length > 0 
+      ? transactions.slice(0, 50).map(t => 
+          `${t.date.toISOString().split('T')[0]} | $${t.amount.toFixed(2)} | ${t.merchantName || t.name} | ${t.primaryCategory || 'uncategorized'}`
+        ).join('\n')
+      : 'No transactions';
+
+    const accountSummary = accounts.length > 0
+      ? accounts.map(a => 
+          `${a.name} (${a.type}): Balance $${(a.currentBalance || 0).toFixed(2)}${a.availableBalance !== a.currentBalance ? ` (Available: $${(a.availableBalance || 0).toFixed(2)})` : ''}`
+        ).join('\n')
+      : 'No accounts';
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are a helpful financial assistant answering questions about a user's spending and accounts.
+Be conversational, supportive, and non-judgmental. Focus on facts and patterns.
+Keep answers concise (2-4 sentences) unless more detail is needed.
+
+Available data:
+- Transactions from the last 30 days
+- Connected account balances
+
+If asked about something not in the data, acknowledge that and explain what you can see.`
+        },
+        {
+          role: "user",
+          content: `ACCOUNTS:\n${accountSummary}\n\nRECENT TRANSACTIONS (last 30 days, ${transactions.length} total, $${totalSpent.toFixed(2)} spent):\n${transactionSummary}\n\nUSER QUESTION: ${query}`
+        },
+      ],
+    });
+
+    return {
+      answer: response.choices[0].message.content || "I couldn't analyze that question. Please try rephrasing.",
+      summary: {
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        transactionCount: transactions.length,
+        topCategories
+      }
+    };
+  } catch (error) {
+    console.error("Error answering financial query:", error);
+    return {
+      answer: "I encountered an error analyzing your financial data. Please try again."
+    };
+  }
+}
