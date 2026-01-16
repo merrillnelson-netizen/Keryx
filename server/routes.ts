@@ -572,17 +572,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * Detect if a query is about financial/spending data
+   */
+  function isFinancialQuery(query: string): boolean {
+    const financialPatterns = [
+      /\b(spend|spent|spending|purchase|bought|cost|expense|expenses)\b/i,
+      /\b(balance|account|bank|money|dollar|dollars|\$)\b/i,
+      /\b(transaction|transactions|payment|payments)\b/i,
+      /\b(restaurant|groceries|shopping|bills|subscription)\b/i,
+      /\b(how much|total|category|categories|merchant|merchants)\b/i,
+      /\b(financial|finances|budget|budgeting)\b/i,
+    ];
+    return financialPatterns.some(pattern => pattern.test(query));
+  }
+
+  /**
    * POST /api/memories/search - Hybrid search for memories
    * Combines semantic search with structured filters
+   * Detects financial queries and routes them to financial analysis
    * Requires authentication
    */
   app.post("/api/memories/search", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { queryText } = req.body;
-      const user = req.user as any;
+      const user = req.user as User;
       
       if (!queryText || typeof queryText !== 'string') {
         return sendErrorResponse(res, 400, "queryText is required");
+      }
+
+      // Check if this is a financial query and Plaid is enabled
+      const userSettings = await storage.getSettings(user.id);
+      if (isFinancialQuery(queryText) && isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
+        try {
+          // Get recent transactions (30 days) and accounts for financial query
+          const [transactions, accounts] = await Promise.all([
+            plaidService.getRecentTransactions(user.id, 30, 100),
+            plaidService.getAccounts(user.id)
+          ]);
+
+          if (transactions.length > 0 || accounts.length > 0) {
+            // Format transaction data for AI (matching TransactionContext interface)
+            const txContext = transactions.map(t => ({
+              date: t.date,
+              amount: t.amount,
+              name: t.name,
+              merchantName: t.merchantName,
+              primaryCategory: t.primaryCategory
+            }));
+
+            const accountContext = accounts
+              .filter(a => !a.isHidden)
+              .map(a => ({
+                name: a.name,
+                type: a.type,
+                currentBalance: a.currentBalance,
+                availableBalance: a.availableBalance
+              }));
+
+            const financialAnswer = await answerFinancialQuery(queryText, txContext, accountContext);
+
+            return res.json({
+              status: 'success',
+              isFinancial: true,
+              financialAnswer: financialAnswer.answer,
+              financialSummary: financialAnswer.summary,
+              data: [], // No memory results for financial queries
+              query: {
+                original: queryText,
+                type: 'financial'
+              },
+              count: 0,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (finError) {
+          console.error("Financial query failed, falling back to memory search:", finError);
+          // Fall through to regular memory search
+        }
       }
 
       // Run query decomposition and embedding generation in parallel for speed

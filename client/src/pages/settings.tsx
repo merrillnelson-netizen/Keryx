@@ -1377,22 +1377,42 @@ export default function SettingsPage() {
                   </Button>
 
                   {plaidInstitutions.length > 0 && (
-                    <div className="flex items-center justify-between pt-2 border-t border-white/10">
-                      <div className="space-y-0.5">
-                        <Label>Include in Briefings</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Show spending insights in morning briefings
-                        </p>
+                    <div className="space-y-3 pt-2 border-t border-white/10">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Enable Financial Features</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Use connected bank data for insights and queries
+                          </p>
+                        </div>
+                        <Switch
+                          checked={settings.plaidEnabled ?? false}
+                          onCheckedChange={(checked) => {
+                            const newSettings = { ...settings, plaidEnabled: checked };
+                            setSettings(newSettings);
+                            updateSettingsMutation.mutate(newSettings);
+                          }}
+                          data-testid="switch-plaid-enabled"
+                        />
                       </div>
-                      <Switch
-                        checked={settings.plaidIncludeInBriefings ?? true}
-                        onCheckedChange={(checked) => {
-                          const newSettings = { ...settings, plaidIncludeInBriefings: checked };
-                          setSettings(newSettings);
-                          updateSettingsMutation.mutate(newSettings);
-                        }}
-                        data-testid="switch-plaid-briefings"
-                      />
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Include in Briefings</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Show spending insights in morning briefings
+                          </p>
+                        </div>
+                        <Switch
+                          checked={settings.plaidIncludeInBriefings ?? true}
+                          onCheckedChange={(checked) => {
+                            const newSettings = { ...settings, plaidIncludeInBriefings: checked };
+                            setSettings(newSettings);
+                            updateSettingsMutation.mutate(newSettings);
+                          }}
+                          disabled={!settings.plaidEnabled}
+                          data-testid="switch-plaid-briefings"
+                        />
+                      </div>
                     </div>
                   )}
 

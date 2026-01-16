@@ -207,16 +207,22 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     onSuccess: (data) => {
       isProcessingRef.current = false;
 
-      const results = data.data || [];
       let responseMessage = "";
 
-      if (results.length === 0) {
-        responseMessage = "No matching memories found.";
-      } else if (results.length === 1) {
-        const memory = results[0];
-        responseMessage = `Found: ${memory.memoryText}`;
+      // Check if this was a financial query response
+      if (data.isFinancial && data.financialAnswer) {
+        responseMessage = data.financialAnswer;
       } else {
-        responseMessage = `Found ${results.length} matching memories. The most relevant is: ${results[0].memoryText}`;
+        const results = data.data || [];
+
+        if (results.length === 0) {
+          responseMessage = "No matching memories found.";
+        } else if (results.length === 1) {
+          const memory = results[0];
+          responseMessage = `Found: ${memory.memoryText}`;
+        } else {
+          responseMessage = `Found ${results.length} matching memories. The most relevant is: ${results[0].memoryText}`;
+        }
       }
 
       setLastResponse(responseMessage);
