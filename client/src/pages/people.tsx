@@ -7,7 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -65,6 +66,9 @@ export default function People() {
   const [editRelationship, setEditRelationship] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
+  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -139,6 +143,72 @@ export default function People() {
     },
   });
 
+  const mergeMutation = useMutation({
+    mutationFn: async ({ targetId, sourceIds }: { targetId: string; sourceIds: string[] }) => {
+      const response = await apiRequest("POST", "/api/people/merge", { targetId, sourceIds });
+      if (!response.ok) throw new Error("Failed to merge people");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({
+        title: "People merged",
+        description: data.message || "Successfully consolidated records",
+      });
+      setMergeMode(false);
+      setSelectedForMerge(new Set());
+      setMergeTarget(null);
+      setSelectedPerson(null);
+    },
+    onError: () => {
+      toast({
+        title: "Merge failed",
+        description: "Failed to merge people. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleToggleMergeSelection = (personId: string) => {
+    setSelectedForMerge(prev => {
+      const next = new Set(prev);
+      if (next.has(personId)) {
+        next.delete(personId);
+        if (mergeTarget === personId) {
+          setMergeTarget(null);
+        }
+      } else {
+        next.add(personId);
+      }
+      return next;
+    });
+  };
+
+  const handleSetMergeTarget = (personId: string) => {
+    if (selectedForMerge.has(personId)) {
+      setMergeTarget(personId);
+    }
+  };
+
+  const handleExecuteMerge = () => {
+    if (!mergeTarget || selectedForMerge.size < 2) {
+      toast({
+        title: "Cannot merge",
+        description: "Select at least 2 people and choose one as the target",
+        variant: "destructive",
+      });
+      return;
+    }
+    const sourceIds = Array.from(selectedForMerge).filter(id => id !== mergeTarget);
+    mergeMutation.mutate({ targetId: mergeTarget, sourceIds });
+  };
+
+  const handleCancelMerge = () => {
+    setMergeMode(false);
+    setSelectedForMerge(new Set());
+    setMergeTarget(null);
+  };
+
   const handleEdit = (person: Person) => {
     setEditingPerson(person);
     setEditName(person.name);
@@ -190,36 +260,109 @@ export default function People() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewMode("cards")}
-                className={cn(
-                  "h-9 w-9 p-0 transition-all",
-                  viewMode === "cards" 
-                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                )}
-                data-testid="button-view-cards"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "h-9 w-9 p-0 transition-all",
-                  viewMode === "table" 
-                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                )}
-                data-testid="button-view-table"
-              >
-                <TableIcon className="w-4 h-4" />
-              </Button>
+              {!mergeMode ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setViewMode("cards")}
+                    className={cn(
+                      "h-9 w-9 p-0 transition-all",
+                      viewMode === "cards" 
+                        ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                    data-testid="button-view-cards"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setViewMode("table")}
+                    className={cn(
+                      "h-9 w-9 p-0 transition-all",
+                      viewMode === "table" 
+                        ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    )}
+                    data-testid="button-view-table"
+                  >
+                    <TableIcon className="w-4 h-4" />
+                  </Button>
+                  {people.length > 1 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMergeMode(true)}
+                      className="border-white/20 hover:bg-white/10 gap-2"
+                      data-testid="button-merge-mode"
+                    >
+                      <Merge className="w-4 h-4" />
+                      Consolidate
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelMerge}
+                    className="border-white/20 hover:bg-white/10 gap-2"
+                    data-testid="button-cancel-merge"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleExecuteMerge}
+                    disabled={selectedForMerge.size < 2 || !mergeTarget || mergeMutation.isPending}
+                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 gap-2"
+                    data-testid="button-execute-merge"
+                  >
+                    <Check className="w-4 h-4" />
+                    {mergeMutation.isPending ? "Merging..." : `Merge ${selectedForMerge.size} People`}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
+          
+          {mergeMode && (
+            <div className="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <p className="text-sm text-amber-300 font-medium mb-2">Consolidation Mode</p>
+              <p className="text-xs text-muted-foreground">
+                1. Select the people you want to merge (nicknames, variations, duplicates)<br/>
+                2. Click on one to set it as the target name (shown with a star)<br/>
+                3. All memories will be updated to use the target name
+              </p>
+              {selectedForMerge.size > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {Array.from(selectedForMerge).map(id => {
+                    const person = people.find(p => p.id === id);
+                    return person ? (
+                      <Badge 
+                        key={id} 
+                        variant="outline"
+                        className={cn(
+                          "cursor-pointer",
+                          mergeTarget === id 
+                            ? "bg-primary/20 border-primary text-primary" 
+                            : "bg-white/10 border-white/20"
+                        )}
+                        onClick={() => handleSetMergeTarget(id)}
+                      >
+                        {mergeTarget === id && "★ "}
+                        {person.name}
+                      </Badge>
+                    ) : null;
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {people.length === 0 ? (
@@ -236,6 +379,7 @@ export default function People() {
               <Table>
                 <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
                   <TableRow className="border-white/10 hover:bg-transparent">
+                    {mergeMode && <TableHead className="w-[50px] text-foreground font-semibold">Select</TableHead>}
                     <TableHead className="w-[200px] text-foreground font-semibold">Name</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Relationship</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Mentions</TableHead>
@@ -251,16 +395,44 @@ export default function People() {
                       data-testid={`person-row-${person.id}`}
                       className={cn(
                         "border-white/10 hover:bg-white/5 transition-colors cursor-pointer",
-                        selectedPerson?.id === person.id && "bg-primary/10"
+                        !mergeMode && selectedPerson?.id === person.id && "bg-primary/10",
+                        mergeMode && selectedForMerge.has(person.id) && "bg-primary/10",
+                        mergeMode && mergeTarget === person.id && "bg-amber-500/10"
                       )}
-                      onClick={() => setSelectedPerson(person)}
+                      onClick={() => {
+                        if (mergeMode) {
+                          handleToggleMergeSelection(person.id);
+                        } else {
+                          setSelectedPerson(person);
+                        }
+                      }}
                     >
+                      {mergeMode && (
+                        <TableCell className="w-[50px]">
+                          <div className="flex items-center gap-2">
+                            <Checkbox 
+                              checked={selectedForMerge.has(person.id)}
+                              onCheckedChange={() => handleToggleMergeSelection(person.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-5 h-5"
+                            />
+                            {mergeTarget === person.id && (
+                              <span className="text-amber-500 text-sm">★</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium" data-testid={`name-cell-${person.id}`}>
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                             <User className="w-4 h-4 text-white" />
                           </div>
                           {person.name}
+                          {mergeMode && mergeTarget === person.id && (
+                            <Badge className="ml-2 bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                              Target
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell data-testid={`relationship-cell-${person.id}`}>
@@ -284,32 +456,48 @@ export default function People() {
                         {person.notes || "-"}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(person);
-                            }}
-                            className="h-8 w-8 p-0 hover:bg-white/10"
-                            data-testid={`edit-button-${person.id}`}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeletingPerson(person);
-                            }}
-                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                            data-testid={`delete-button-${person.id}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                        {mergeMode ? (
+                          selectedForMerge.has(person.id) && mergeTarget !== person.id ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetMergeTarget(person.id);
+                              }}
+                              className="text-xs h-7 px-2 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                            >
+                              Set as Target
+                            </Button>
+                          ) : null
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(person);
+                              }}
+                              className="h-8 w-8 p-0 hover:bg-white/10"
+                              data-testid={`edit-button-${person.id}`}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingPerson(person);
+                              }}
+                              className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                              data-testid={`delete-button-${person.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -323,17 +511,48 @@ export default function People() {
               <Card 
                 key={person.id} 
                 data-testid={`person-card-${person.id}`}
-                className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
-                onClick={() => setSelectedPerson(person)}
+                className={cn(
+                  "glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]",
+                  mergeMode && selectedForMerge.has(person.id) && "ring-2 ring-primary",
+                  mergeMode && mergeTarget === person.id && "ring-2 ring-amber-500"
+                )}
+                onClick={() => {
+                  if (mergeMode) {
+                    handleToggleMergeSelection(person.id);
+                  } else {
+                    setSelectedPerson(person);
+                  }
+                }}
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                        <User className="w-5 h-5 text-white" />
-                      </div>
+                      {mergeMode ? (
+                        <div className="relative">
+                          <Checkbox 
+                            checked={selectedForMerge.has(person.id)}
+                            onCheckedChange={() => handleToggleMergeSelection(person.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-5 h-5"
+                          />
+                          {mergeTarget === person.id && (
+                            <span className="absolute -top-1 -right-1 text-amber-500 text-xs">★</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                          <User className="w-5 h-5 text-white" />
+                        </div>
+                      )}
                       <div>
-                        <CardTitle className="text-lg">{person.name}</CardTitle>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          {person.name}
+                          {mergeMode && mergeTarget === person.id && (
+                            <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                              Target
+                            </Badge>
+                          )}
+                        </CardTitle>
                         {person.relationship && (
                           <Badge variant="outline" className="mt-1 text-xs border-primary/30 text-primary">
                             {person.relationship}
@@ -341,32 +560,47 @@ export default function People() {
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    {!mergeMode && (
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(person);
+                          }}
+                          className="h-8 w-8 p-0 hover:bg-white/10"
+                          data-testid={`edit-person-${person.id}`}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingPerson(person);
+                          }}
+                          className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
+                          data-testid={`delete-person-${person.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {mergeMode && selectedForMerge.has(person.id) && mergeTarget !== person.id && (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleEdit(person);
+                          handleSetMergeTarget(person.id);
                         }}
-                        className="h-8 w-8 p-0 hover:bg-white/10"
-                        data-testid={`edit-person-${person.id}`}
+                        className="text-xs h-7 px-2 border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        Set as Target
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeletingPerson(person);
-                        }}
-                        className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
-                        data-testid={`delete-person-${person.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>

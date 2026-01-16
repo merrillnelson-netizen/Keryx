@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
-import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2 } from "lucide-react";
+import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -46,6 +46,24 @@ interface ThematicInsight {
   timespan: string;
 }
 
+interface SpendingCategory {
+  category: string;
+  amount: number;
+}
+
+interface SpendingSummary {
+  totalSpending: number;
+  transactionCount: number;
+  categoryBreakdown: SpendingCategory[];
+  topMerchants: Array<{ merchant: string; amount: number }>;
+}
+
+interface PlaidStatus {
+  configured: boolean;
+  enabled: boolean;
+  featureDisabled: boolean;
+}
+
 const MOOD_COLORS: Record<string, string> = {
   happy: "#22c55e",
   sad: "#3b82f6",
@@ -82,6 +100,17 @@ const MOOD_EMOJIS: Record<string, string> = {
   motivated: "💪",
 };
 
+const SPENDING_COLORS = [
+  "#10b981", // emerald
+  "#06b6d4", // cyan
+  "#3b82f6", // blue
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#84cc16", // lime
+];
+
 export default function Insights() {
   const [days, setDays] = useState("30");
   const [question, setQuestion] = useState("");
@@ -114,6 +143,25 @@ export default function Insights() {
       if (!response.ok) throw new Error("Failed to fetch topic frequency");
       return response.json();
     },
+  });
+
+  const { data: plaidStatus } = useQuery<PlaidStatus>({
+    queryKey: ["/api/plaid/status"],
+    queryFn: async () => {
+      const response = await fetch("/api/plaid/status", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch Plaid status");
+      return response.json();
+    },
+  });
+
+  const { data: spendingSummary, isLoading: spendingLoading } = useQuery<SpendingSummary>({
+    queryKey: ["/api/plaid/spending-summary", days],
+    queryFn: async () => {
+      const response = await fetch(`/api/plaid/spending-summary?days=${days}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch spending summary");
+      return response.json();
+    },
+    enabled: plaidStatus?.enabled && plaidStatus?.configured,
   });
 
   const insightsMutation = useMutation({
@@ -171,6 +219,18 @@ export default function Insights() {
     topicFrequency?.data || [],
     [topicFrequency?.data]
   );
+
+  // Memoize spending chart data
+  const spendingChartData = useMemo(() => {
+    if (!spendingSummary?.categoryBreakdown) return [];
+    return spendingSummary.categoryBreakdown.slice(0, 8).map((cat, i) => ({
+      name: cat.category,
+      value: cat.amount,
+      fill: SPENDING_COLORS[i % SPENDING_COLORS.length],
+    }));
+  }, [spendingSummary?.categoryBreakdown]);
+
+  const isFinancialEnabled = plaidStatus?.enabled && plaidStatus?.configured;
 
   return (
     <AppLayout>
@@ -412,6 +472,111 @@ export default function Insights() {
             )}
           </CardContent>
         </Card>
+
+        {/* Financial Insights - Only shown if Plaid is enabled */}
+        {isFinancialEnabled && (
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-emerald-500" />
+                Spending Breakdown
+              </CardTitle>
+              <CardDescription>Where your money is going</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {spendingLoading ? (
+                <div className="h-64 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+                </div>
+              ) : !spendingSummary || spendingSummary.transactionCount === 0 ? (
+                <div className="h-64 flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                    <p>No transaction data available for this period.</p>
+                    <p className="text-sm mt-1">Sync your bank account in Settings to see spending insights.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="glass-card p-4 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-emerald-500">
+                        ${spendingSummary.totalSpending.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Total Spent</p>
+                    </div>
+                    <div className="glass-card p-4 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-primary">
+                        {spendingSummary.transactionCount}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Transactions</p>
+                    </div>
+                    <div className="glass-card p-4 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-cyan-500">
+                        ${(spendingSummary.totalSpending / spendingSummary.transactionCount).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Avg per Transaction</p>
+                    </div>
+                    <div className="glass-card p-4 rounded-xl text-center">
+                      <p className="text-2xl font-bold text-violet-500">
+                        {spendingSummary.categoryBreakdown.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Categories</p>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {spendingChartData.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-4">By Category</h4>
+                        <ResponsiveContainer width="100%" height={240}>
+                          <PieChart>
+                            <Pie
+                              data={spendingChartData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={80}
+                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                              labelLine={{ stroke: 'rgba(255,255,255,0.3)' }}
+                            >
+                              {spendingChartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(0,0,0,0.8)', 
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                borderRadius: '8px'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {spendingSummary.topMerchants.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-4">Top Merchants</h4>
+                        <div className="space-y-2">
+                          {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
+                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg">
+                              <span className="text-sm text-foreground truncate">{merchant.merchant}</span>
+                              <span className="text-sm font-medium text-emerald-500">${merchant.amount.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* AI Thematic Synthesis */}
         <Card className="glass-card border-white/20">

@@ -17,7 +17,8 @@ import {
   Info,
   RefreshCw,
   Loader2,
-  Mail
+  Mail,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
@@ -31,6 +32,7 @@ interface MorningBriefing {
   moodTrend: string;
   affirmation: string;
   emailHighlights?: string[];
+  financialInsights?: string[];
 }
 
 interface PatternAlert {
@@ -84,6 +86,7 @@ interface BriefingResponse {
   data: MorningBriefing;
   memoriesAnalyzed: number;
   emailsAnalyzed?: number;
+  hasFinancialData?: boolean;
   generatedAt: string;
 }
 
@@ -244,6 +247,33 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Financial Insights */}
+              {briefing.financialInsights && briefing.financialInsights.length > 0 ? (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-foreground flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-emerald-500" />
+                    Spending Insights
+                  </h4>
+                  <div className="grid gap-2">
+                    {briefing.financialInsights.map((insight, i) => (
+                      <div key={i} className="glass-card p-3 rounded-lg flex items-start gap-3 border-l-2 border-l-emerald-500">
+                        <p className="text-muted-foreground text-sm">{insight}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : briefingData?.hasFinancialData ? (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-foreground flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-emerald-500" />
+                    Spending Insights
+                  </h4>
+                  <div className="glass-card p-3 rounded-lg border-l-2 border-l-emerald-500/50">
+                    <p className="text-muted-foreground text-sm">No recent transactions to analyze. Sync your accounts in Settings to get spending insights.</p>
+                  </div>
+                </div>
+              ) : null}
 
               {/* Mood Trend */}
               <div className="glass-card p-4 rounded-xl border-l-4 border-l-pink-500">

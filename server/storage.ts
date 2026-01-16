@@ -56,6 +56,7 @@ export interface IStorage {
   upsertPerson(userId: string, name: string): Promise<Person>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
   deletePerson(userId: string, id: string): Promise<boolean>;
+  mergePeople(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; updatedMemories: number }>;
   getPersonMentions(userId: string, personName: string): Promise<LogEntry[]>;
   
   // Mood analytics (user-scoped)
@@ -665,6 +666,76 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to delete person:', error);
       throw new Error('Database error while deleting person');
+    }
+  }
+
+  async mergePeople(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; updatedMemories: number }> {
+    try {
+      const targetPerson = await db
+        .select()
+        .from(people)
+        .where(and(eq(people.userId, userId), eq(people.id, targetId)))
+        .limit(1);
+      
+      if (!targetPerson[0]) {
+        throw new Error('Target person not found');
+      }
+      
+      const sourcePeople = await db
+        .select()
+        .from(people)
+        .where(and(
+          eq(people.userId, userId),
+          inArray(people.id, sourceIds)
+        ));
+      
+      if (sourcePeople.length === 0) {
+        throw new Error('No source people found');
+      }
+      
+      const targetName = targetPerson[0].name;
+      const sourceNames = sourcePeople.map(p => p.name);
+      
+      let updatedMemories = 0;
+      
+      for (const sourceName of sourceNames) {
+        const memoriesWithSource = await db
+          .select()
+          .from(logEntries)
+          .where(and(
+            eq(logEntries.userId, userId),
+            sql`${sourceName} = ANY(${logEntries.detectedPeople})`
+          ));
+        
+        for (const memory of memoriesWithSource) {
+          const currentPeople = memory.detectedPeople || [];
+          const updatedPeople = currentPeople
+            .filter(name => name !== sourceName)
+            .filter(name => name !== targetName);
+          updatedPeople.push(targetName);
+          const uniquePeople = Array.from(new Set(updatedPeople));
+          
+          await db
+            .update(logEntries)
+            .set({ detectedPeople: uniquePeople })
+            .where(eq(logEntries.id, memory.id));
+          updatedMemories++;
+        }
+      }
+      
+      await db
+        .delete(people)
+        .where(and(
+          eq(people.userId, userId),
+          inArray(people.id, sourceIds)
+        ));
+      
+      await this.syncPeopleMentionCounts(userId);
+      
+      return { merged: sourcePeople.length, updatedMemories };
+    } catch (error) {
+      console.error('Failed to merge people:', error);
+      throw new Error('Database error while merging people');
     }
   }
 

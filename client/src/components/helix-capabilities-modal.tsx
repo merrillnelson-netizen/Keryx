@@ -10,7 +10,8 @@ import {
   MessageSquare, 
   Brain, 
   Zap,
-  Sparkles
+  Sparkles,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +87,21 @@ const capabilities: CapabilityCategory[] = [
     ]
   },
   {
+    id: "finance",
+    name: "Finance",
+    icon: Wallet,
+    color: "text-emerald-500",
+    description: "Track spending, analyze transactions, and get financial insights",
+    examples: [
+      { phrase: "How much did I spend this week?", description: "Shows total spending with category breakdown" },
+      { phrase: "What are my biggest expenses this month?", description: "Identifies top spending categories and merchants" },
+      { phrase: "How much did I spend on food last week?", description: "Filters spending by specific category" },
+      { phrase: "Show me my recent transactions", description: "Lists your latest financial transactions" },
+      { phrase: "What's my balance?", description: "Shows current account balances across linked accounts" },
+      { phrase: "Where is my money going?", description: "Provides spending pattern analysis and insights" },
+    ]
+  },
+  {
     id: "power",
     name: "Power Tasks",
     icon: Zap,
@@ -97,7 +113,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Track my energy levels after each meeting today", description: "Automatic memory prompts tied to calendar events" },
       { phrase: "Send me a Telegram summary of tomorrow's schedule", description: "Proactive calendar digest via messaging" },
       { phrase: "Find all memories about the client and draft a prep email", description: "Research and compose in one command" },
-      { phrase: "Block focus time whenever I have 3+ meetings in a day", description: "Smart calendar protection rules" },
+      { phrase: "How much did I spend after each meeting this week?", description: "Cross-reference spending with calendar events" },
     ]
   }
 ];
@@ -108,11 +124,13 @@ const hintExamples = [
   "Remind me to call the dentist Monday at 9am",
   "Summarize my unread emails",
   "Remember I met Jake at the coffee shop",
-  "Send an email to John about the project",
+  "How much did I spend this week?",
   "How was I feeling yesterday?",
   "Block Friday afternoon for focused work",
-  "What did Mom say about the vacation?",
+  "What are my biggest expenses?",
   "Any important emails I should check?",
+  "Where is my money going?",
+  "Send an email to John about the project",
 ];
 
 export function useRotatingHints() {
@@ -200,7 +218,7 @@ export function HelixCapabilitiesModal() {
 
         <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 sm:px-6 pt-4 shrink-0">
-            <TabsList className="w-full grid grid-cols-5 bg-white/5 p-1 rounded-xl">
+            <TabsList className="w-full grid grid-cols-6 bg-white/5 p-1 rounded-xl">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
                 return (

@@ -1589,6 +1589,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * POST /api/people/merge - Merge multiple people into one
+   * Consolidates nicknames, variations, and duplicates into a single person
+   * Updates all memories to reference the target person
+   */
+  const mergeSchema = z.object({
+    targetId: z.string().min(1, "Target person ID required"),
+    sourceIds: z.array(z.string()).min(1, "At least one source person ID required"),
+  });
+  
+  app.post("/api/people/merge", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const validation = mergeSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
+      }
+      
+      const { targetId, sourceIds } = validation.data;
+      
+      if (sourceIds.includes(targetId)) {
+        return sendErrorResponse(res, 400, "Target person cannot be in source list");
+      }
+      
+      const result = await storage.mergePeople(user.id, targetId, sourceIds);
+      
+      res.json({
+        status: 'success',
+        message: `Merged ${result.merged} people, updated ${result.updatedMemories} memories`,
+        data: result,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to merge people", error);
+    }
+  });
+
+  /**
    * MOOD ANALYTICS ROUTES
    * Analyze emotional patterns in memories
    */

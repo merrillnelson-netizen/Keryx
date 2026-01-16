@@ -15,6 +15,7 @@ const sizeMap = {
 };
 
 function DNAHelixSVG({ size = 40 }: { size?: number }) {
+  const uniqueId = `helix-${Math.random().toString(36).substr(2, 9)}`;
   return (
     <svg 
       width={size} 
@@ -25,42 +26,62 @@ function DNAHelixSVG({ size = 40 }: { size?: number }) {
       aria-label="Helix DNA Logo"
     >
       <defs>
-        <linearGradient id="helixGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={`${uniqueId}-grad1`} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#6366f1" />
           <stop offset="50%" stopColor="#8b5cf6" />
           <stop offset="100%" stopColor="#a855f7" />
         </linearGradient>
-        <linearGradient id="helixGradient2" x1="100%" y1="0%" x2="0%" y2="100%">
+        <linearGradient id={`${uniqueId}-grad2`} x1="100%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#a855f7" />
           <stop offset="50%" stopColor="#8b5cf6" />
           <stop offset="100%" stopColor="#6366f1" />
         </linearGradient>
+        <filter id={`${uniqueId}-glow`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
       </defs>
       
-      {/* Left helix strand */}
-      <path
-        d="M20 8 C8 16, 8 24, 20 32 C32 40, 32 48, 20 56"
-        stroke="url(#helixGradient)"
-        strokeWidth="4"
-        strokeLinecap="round"
-        fill="none"
-      />
-      
-      {/* Right helix strand */}
-      <path
-        d="M44 8 C56 16, 56 24, 44 32 C32 40, 32 48, 44 56"
-        stroke="url(#helixGradient2)"
-        strokeWidth="4"
-        strokeLinecap="round"
-        fill="none"
-      />
-      
-      {/* Connecting rungs */}
-      <line x1="20" y1="14" x2="44" y2="14" stroke="url(#helixGradient)" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
-      <line x1="14" y1="24" x2="50" y2="24" stroke="url(#helixGradient)" strokeWidth="2.5" strokeLinecap="round" opacity="0.8" />
-      <line x1="20" y1="32" x2="44" y2="32" stroke="url(#helixGradient2)" strokeWidth="2.5" strokeLinecap="round" opacity="0.9" />
-      <line x1="14" y1="40" x2="50" y2="40" stroke="url(#helixGradient2)" strokeWidth="2.5" strokeLinecap="round" opacity="0.8" />
-      <line x1="20" y1="50" x2="44" y2="50" stroke="url(#helixGradient)" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+      <g filter={`url(#${uniqueId}-glow)`}>
+        {/* Left helix strand - curves to form left side of H */}
+        <path
+          d="M16 6 C6 14, 6 22, 16 30 C26 38, 26 48, 16 58"
+          stroke={`url(#${uniqueId}-grad1)`}
+          strokeWidth="4.5"
+          strokeLinecap="round"
+          fill="none"
+        />
+        
+        {/* Right helix strand - curves to form right side of H */}
+        <path
+          d="M48 6 C58 14, 58 22, 48 30 C38 38, 38 48, 48 58"
+          stroke={`url(#${uniqueId}-grad2)`}
+          strokeWidth="4.5"
+          strokeLinecap="round"
+          fill="none"
+        />
+        
+        {/* Center horizontal bar - the crossbar of the H */}
+        <line 
+          x1="16" y1="32" x2="48" y2="32" 
+          stroke={`url(#${uniqueId}-grad1)`} 
+          strokeWidth="4" 
+          strokeLinecap="round" 
+        />
+        
+        {/* DNA connecting rungs above center */}
+        <line x1="14" y1="18" x2="50" y2="18" stroke={`url(#${uniqueId}-grad1)`} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+        
+        {/* DNA connecting rungs below center */}
+        <line x1="14" y1="46" x2="50" y2="46" stroke={`url(#${uniqueId}-grad2)`} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+        
+        {/* Accent dots at the helix crossings */}
+        <circle cx="16" cy="30" r="3" fill={`url(#${uniqueId}-grad1)`} opacity="0.8" />
+        <circle cx="48" cy="30" r="3" fill={`url(#${uniqueId}-grad2)`} opacity="0.8" />
+      </g>
     </svg>
   );
 }
