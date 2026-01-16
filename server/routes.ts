@@ -2840,7 +2840,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         modified: result.modified,
         removed: result.removed,
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Log detailed Plaid error info
+      const plaidError = error?.response?.data;
+      console.error("Transaction sync error:", JSON.stringify(plaidError || error.message || error));
+      
+      // Provide user-friendly error messages for common Plaid errors
+      if (plaidError?.error_code === 'PRODUCT_NOT_READY') {
+        return sendErrorResponse(res, 503, "Transactions are still being prepared by your bank. Please try again in a few minutes.");
+      }
+      if (plaidError?.error_code === 'ITEM_LOGIN_REQUIRED') {
+        return sendErrorResponse(res, 401, "Your bank connection needs to be re-authenticated. Please reconnect your bank.");
+      }
+      if (plaidError?.error_code) {
+        return sendErrorResponse(res, 503, `Bank sync error: ${plaidError.error_message || plaidError.error_code}`);
+      }
+      
       sendErrorResponse(res, 500, "Failed to sync transactions", error);
     }
   });

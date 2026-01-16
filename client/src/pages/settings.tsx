@@ -1285,20 +1285,20 @@ export default function SettingsPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => syncTransactionsMutation.mutate(institution.itemId)}
+                                onClick={() => syncTransactionsMutation.mutate(String(institution.id))}
                                 disabled={syncTransactionsMutation.isPending}
                                 title="Sync transactions"
-                                data-testid={`button-sync-${institution.itemId}`}
+                                data-testid={`button-sync-${institution.id}`}
                               >
                                 <RefreshCcw className={`w-4 h-4 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => disconnectInstitutionMutation.mutate(institution.itemId)}
+                                onClick={() => disconnectInstitutionMutation.mutate(String(institution.id))}
                                 disabled={disconnectInstitutionMutation.isPending}
                                 title="Disconnect bank"
-                                data-testid={`button-disconnect-${institution.itemId}`}
+                                data-testid={`button-disconnect-${institution.id}`}
                               >
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </Button>

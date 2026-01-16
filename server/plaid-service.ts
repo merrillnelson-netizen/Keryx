@@ -243,9 +243,10 @@ export async function getConnectedInstitutions(userId: string) {
 }
 
 export async function getAccounts(userId: string) {
+  // Return all accounts (including hidden) so UI can show visibility toggles
   return db.select()
     .from(financialAccounts)
-    .where(and(eq(financialAccounts.userId, userId), eq(financialAccounts.isHidden, false)))
+    .where(eq(financialAccounts.userId, userId))
     .orderBy(financialAccounts.name);
 }
 
@@ -322,11 +323,12 @@ export async function disconnectItem(userId: string, plaidItemId: string): Promi
     .where(eq(plaidItems.id, plaidItemId));
 }
 
-export async function hideAccount(userId: string, accountId: string, hidden: boolean): Promise<void> {
+export async function hideAccount(userId: string, plaidAccountId: string, hidden: boolean): Promise<void> {
+  // Match by Plaid's account_id field (not internal id)
   await db.update(financialAccounts)
     .set({ isHidden: hidden })
     .where(and(
-      eq(financialAccounts.id, accountId),
+      eq(financialAccounts.accountId, plaidAccountId),
       eq(financialAccounts.userId, userId)
     ));
 }
