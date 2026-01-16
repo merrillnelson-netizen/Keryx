@@ -8,7 +8,9 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcrypt';
+import { Request, Response, NextFunction } from 'express';
 import { storage } from './storage';
+import { User } from '@shared/schema';
 
 /**
  * Configure Passport local strategy for username/password authentication
@@ -38,8 +40,8 @@ passport.use(
 /**
  * Serialize user to session (store user ID)
  */
-passport.serializeUser((user: any, done) => {
-  done(null, user.id);
+passport.serializeUser((user: Express.User, done) => {
+  done(null, (user as User).id);
 });
 
 /**
@@ -60,7 +62,7 @@ export default passport;
  * Middleware to ensure user is authenticated
  * Returns 401 if not authenticated
  */
-export function requireAuth(req: any, res: any, next: any) {
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }

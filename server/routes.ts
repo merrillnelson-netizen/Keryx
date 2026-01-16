@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, type User, type MCPPayload } from "@shared/schema";
@@ -134,7 +134,7 @@ const backfillSchema = z.object({
  * @param message - Error message for client
  * @param error - Optional detailed error for logging
  */
-function sendErrorResponse(res: any, statusCode: number, message: string, error?: any) {
+function sendErrorResponse(res: Response, statusCode: number, message: string, error?: unknown) {
   if (error) {
     console.error(`API Error (${statusCode}):`, error);
   }
@@ -282,7 +282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/auth/login - Log in an existing user
    */
   app.post("/api/auth/login", authLimiter, (req, res, next) => {
-    passport.authenticate('local', (err: any, user: any, info: any) => {
+    passport.authenticate('local', (err: Error | null, user: User | false, info: { message: string } | undefined) => {
       if (err) {
         return sendErrorResponse(res, 500, "Login error", err);
       }
