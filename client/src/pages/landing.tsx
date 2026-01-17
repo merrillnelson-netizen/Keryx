@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { 
   Mic, Brain, Search, Sparkles, Zap, Shield, Clock, Users, 
   Calendar, TrendingUp, ChevronRight, Star, ArrowRight,
-  MessageSquare, Lightbulb, Heart
+  MessageSquare, Lightbulb, Heart, Mail, Wallet, Bot, Sun
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { HelixLogo } from "@/components/helix-logo";
@@ -44,10 +44,40 @@ export default function LandingPage() {
       gradient: "from-emerald-500 to-teal-500"
     },
     {
-      icon: TrendingUp,
-      title: "Pattern Insights",
-      description: "Discover trends in your thoughts, moods, and activities with AI-powered analysis.",
+      icon: Sun,
+      title: "Morning Briefings",
+      description: "Start each day with AI-generated insights about your priorities, patterns, and upcoming events.",
       gradient: "from-orange-500 to-amber-500"
+    },
+    {
+      icon: Calendar,
+      title: "Calendar Integration",
+      description: "Connect Google Calendar or Outlook to auto-link memories to events and create new ones.",
+      gradient: "from-indigo-500 to-violet-500"
+    },
+    {
+      icon: Mail,
+      title: "Email Awareness",
+      description: "Gmail and Outlook integration for contextual morning briefings with email insights.",
+      gradient: "from-red-500 to-pink-500"
+    },
+    {
+      icon: Wallet,
+      title: "Financial Insights",
+      description: "Connect bank accounts via Plaid for spending breakdowns and financial queries.",
+      gradient: "from-emerald-500 to-green-600"
+    },
+    {
+      icon: MessageSquare,
+      title: "Telegram Integration",
+      description: "Record memories via text or voice messages. Get notifications on the go.",
+      gradient: "from-sky-500 to-blue-600"
+    },
+    {
+      icon: Bot,
+      title: "AI Task Execution",
+      description: "Create calendar events, send emails, and set reminders—all from voice commands.",
+      gradient: "from-purple-500 to-fuchsia-500"
     },
     {
       icon: Users,
@@ -56,10 +86,16 @@ export default function LandingPage() {
       gradient: "from-pink-500 to-rose-500"
     },
     {
-      icon: Calendar,
-      title: "Life Timeline",
-      description: "Visualize your journey with a beautiful chronological view of your memories.",
-      gradient: "from-indigo-500 to-violet-500"
+      icon: TrendingUp,
+      title: "Pattern Insights",
+      description: "Discover trends in your thoughts, moods, and activities with AI-powered analysis.",
+      gradient: "from-amber-500 to-orange-500"
+    },
+    {
+      icon: Shield,
+      title: "Privacy Controls",
+      description: "User-defined approval workflows for AI actions. You're always in control.",
+      gradient: "from-slate-500 to-zinc-600"
     }
   ];
 
@@ -247,7 +283,7 @@ export default function LandingPage() {
               <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"> Remember</span>
             </motion.h2>
             <motion.p variants={fadeIn} className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Powerful AI features that turn your spoken thoughts into organized, searchable memories.
+              Powerful AI features and seamless integrations with your calendar, email, bank, and messaging apps.
             </motion.p>
           </motion.div>
 
@@ -256,19 +292,19 @@ export default function LandingPage() {
             whileInView="visible"
             viewport={{ once: true }}
             variants={staggerContainer}
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8"
+            className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6"
           >
             {features.map((feature, index) => (
               <motion.div
                 key={index}
                 variants={fadeIn}
-                className="glass-card p-6 lg:p-8 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group hover:shadow-xl"
+                className="glass-card p-5 lg:p-6 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-300 group hover:shadow-xl"
               >
-                <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
-                  <feature.icon className="w-7 h-7 text-white" />
+                <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                  <feature.icon className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-3">{feature.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-foreground mb-2">{feature.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
               </motion.div>
             ))}
           </motion.div>
