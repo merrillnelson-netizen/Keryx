@@ -475,7 +475,7 @@ export default function Insights() {
 
         {/* Financial Insights - Only shown if Plaid is enabled */}
         {isFinancialEnabled && (
-          <Card className="glass-card border-white/20">
+          <Card className="glass-card border-white/20 overflow-hidden">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-500" />
@@ -559,12 +559,12 @@ export default function Insights() {
                     )}
 
                     {spendingSummary.topMerchants.length > 0 && (
-                      <div>
+                      <div className="overflow-hidden">
                         <h4 className="text-sm font-medium text-muted-foreground mb-4">Top Merchants</h4>
                         <div className="space-y-2">
                           {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
-                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg gap-3">
-                              <span className="text-sm text-foreground truncate flex-1 min-w-0">{merchant.merchant}</span>
+                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg gap-3 overflow-hidden">
+                              <span className="text-sm text-foreground truncate flex-1 min-w-0 max-w-[calc(100%-80px)]">{merchant.merchant}</span>
                               <span className="text-sm font-medium text-emerald-500 flex-shrink-0">${merchant.amount.toFixed(2)}</span>
                             </div>
                           ))}
