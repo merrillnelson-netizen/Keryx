@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [hasShownCompletion, setHasShownCompletion] = useState(false);
   const [newProject, setNewProject] = useState("");
   const [includeEmbeddings, setIncludeEmbeddings] = useState(false);
+  const [showBalances, setShowBalances] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { sessionCategory, setSessionCategory } = useSessionCategory();
@@ -1253,7 +1254,18 @@ export default function SettingsPage() {
 
                   {plaidInstitutions.length > 0 && (
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">Connected Banks</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Connected Banks</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowBalances(!showBalances)}
+                          className="text-xs gap-1"
+                        >
+                          {showBalances ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {showBalances ? 'Hide Balances' : 'Show Balances'}
+                        </Button>
+                      </div>
                       {plaidInstitutions.map((institution) => (
                         <div 
                           key={institution.itemId}
@@ -1332,7 +1344,10 @@ export default function SettingsPage() {
                                     <div className="flex items-center gap-3">
                                       {account.currentBalance !== null && (
                                         <span className="text-sm font-medium">
-                                          ${account.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                          {showBalances 
+                                            ? `$${account.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                            : '•••••'
+                                          }
                                         </span>
                                       )}
                                       <Button

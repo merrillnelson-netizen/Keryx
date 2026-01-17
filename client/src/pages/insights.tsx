@@ -563,9 +563,9 @@ export default function Insights() {
                         <h4 className="text-sm font-medium text-muted-foreground mb-4">Top Merchants</h4>
                         <div className="space-y-2">
                           {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
-                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg">
-                              <span className="text-sm text-foreground truncate">{merchant.merchant}</span>
-                              <span className="text-sm font-medium text-emerald-500">${merchant.amount.toFixed(2)}</span>
+                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg gap-3">
+                              <span className="text-sm text-foreground truncate flex-1 min-w-0">{merchant.merchant}</span>
+                              <span className="text-sm font-medium text-emerald-500 flex-shrink-0">${merchant.amount.toFixed(2)}</span>
                             </div>
                           ))}
                         </div>

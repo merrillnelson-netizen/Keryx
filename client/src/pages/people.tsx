@@ -292,14 +292,17 @@ export default function People() {
                   </Button>
                   {people.length > 1 && (
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => setMergeMode(true)}
-                      className="border-white/20 hover:bg-white/10 gap-2"
+                      className={cn(
+                        "h-9 w-9 p-0 transition-all",
+                        "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                      )}
+                      title="Consolidate people"
                       data-testid="button-merge-mode"
                     >
                       <Merge className="w-4 h-4" />
-                      Consolidate
                     </Button>
                   )}
                 </>
