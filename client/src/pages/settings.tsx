@@ -237,6 +237,7 @@ export default function SettingsPage() {
   interface PlaidAccount {
     id: number;
     accountId: string;
+    plaidItemId: number;
     name: string;
     officialName: string | null;
     type: string;
@@ -1318,13 +1319,13 @@ export default function SettingsPage() {
                           </div>
 
                           {plaidAccounts.filter(a => {
-                            const inst = plaidInstitutions.find(i => i.id === (a as any).plaidItemId);
+                            const inst = plaidInstitutions.find(i => i.id === a.plaidItemId);
                             return inst?.itemId === institution.itemId;
                           }).length > 0 && (
                             <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
                               {plaidAccounts
                                 .filter(a => {
-                                  const inst = plaidInstitutions.find(i => i.id === (a as any).plaidItemId);
+                                  const inst = plaidInstitutions.find(i => i.id === a.plaidItemId);
                                   return inst?.itemId === institution.itemId;
                                 })
                                 .map((account) => (
