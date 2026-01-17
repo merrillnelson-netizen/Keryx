@@ -559,13 +559,15 @@ export default function Insights() {
                     )}
 
                     {spendingSummary.topMerchants.length > 0 && (
-                      <div className="overflow-hidden">
+                      <div>
                         <h4 className="text-sm font-medium text-muted-foreground mb-4">Top Merchants</h4>
                         <div className="space-y-2">
                           {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
-                            <div key={i} className="flex items-center justify-between glass-card p-3 rounded-lg gap-3 overflow-hidden">
-                              <span className="text-sm text-foreground truncate flex-1 min-w-0 max-w-[calc(100%-80px)]">{merchant.merchant}</span>
-                              <span className="text-sm font-medium text-emerald-500 flex-shrink-0">${merchant.amount.toFixed(2)}</span>
+                            <div key={i} className="glass-card p-3 rounded-lg">
+                              <p className="text-sm text-foreground break-words">{merchant.merchant}</p>
+                              <div className="flex justify-end mt-1">
+                                <span className="text-sm font-medium text-emerald-500">${merchant.amount.toFixed(2)}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
