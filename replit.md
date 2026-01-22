@@ -45,7 +45,8 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Application Structure**: Monorepo with shared schema (`/shared`), full TypeScript coverage with Zod validation.
 - **Key Capabilities**: AI-powered voice input, manual categorization, hybrid search, real-time feedback, mobile-first design, robust error recovery.
 - **Cognitive Search**: Mood tracking, people detection, mood distribution charts, AI thematic synthesis.
-- **Proactive Features**: AI-generated morning briefings, pattern alerts, active projects.
+- **Proactive Features**: AI-generated morning briefings, pattern alerts, active projects, personalized news feed.
+- **Personal News Feed**: Aggregates data from memories, calendars, emails, and financial accounts to generate news-style stories about the user's ecosystem. Categories: people, projects, calendar, financial, wellbeing, highlights. Cached with 30-minute TTL.
 - **Calendar & Email Integration**: Multi-provider support (Google, Microsoft Outlook) for auto-linking memories to events, smart event detection, and event creation.
 - **AI Task Execution**: Detection of actionable requests (calendar, email, reminders) with policy-based approval and rollback capability.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
