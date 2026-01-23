@@ -12,7 +12,6 @@ import {
   Heart, 
   Star,
   RefreshCw,
-  Loader2,
   ChevronDown,
   ChevronUp
 } from "lucide-react";

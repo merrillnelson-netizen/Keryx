@@ -21,7 +21,6 @@ import {
   Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { queryClient } from "@/lib/queryClient";
 import PendingActions from "@/components/pending-actions";
 import RealNewsFeed from "@/components/real-news-feed";
 

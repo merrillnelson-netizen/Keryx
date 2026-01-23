@@ -1874,12 +1874,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get memories from last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
-      const memories = await storage.getLogEntries(user.id, 100);
-      const recentMemories = memories.filter((m: any) => m.timestamp >= sevenDaysAgo);
+      // Get memories from last 7 days using optimized DB query
+      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 100);
       
       // Fetch recent emails from user's preferred provider (or any connected provider)
       let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
@@ -1950,7 +1946,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const briefing = await generateMorningBriefing(
-        recentMemories.map((m: any) => ({
+        recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,
@@ -2030,10 +2026,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const memories = await storage.getLogEntries(user.id, 100);
-      const recentMemories = memories.filter((m: LogEntry) => m.timestamp >= weekAgo);
+      // Get memories from last 7 days using optimized DB query
+      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 100);
       
       let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
       const userSettings = await storage.getSettings(user.id);
@@ -2107,7 +2101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const newsFeed = await generatePersonalNewsFeed(
-        recentMemories.map((m: any) => ({
+        recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,
@@ -2163,10 +2157,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const memories = await storage.getLogEntries(user.id, 50);
-      const recentMemories = memories.filter((m: LogEntry) => m.timestamp >= weekAgo);
+      // Get memories from last 7 days using optimized DB query
+      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 50);
       
       let calendarEvents: Array<{ summary?: string; location?: string }> = [];
       try {
@@ -2199,7 +2191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const realNews = await getPersonalizedNews(
-        recentMemories.map((m: any) => ({
+        recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
           topicTag: m.topicTag,
           detectedPeople: m.detectedPeople || []
@@ -2264,11 +2256,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      const memories = await storage.getLogEntries(user.id, 100);
-      const recentMemories = memories.filter((m: any) => m.timestamp >= startDate);
+      const recentMemories = await storage.getRecentLogEntries(user.id, days, 100);
       
       const alerts = await detectPatternAlerts(
-        recentMemories.map((m: any) => ({
+        recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,

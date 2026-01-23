@@ -1,8 +1,15 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
-import { Template } from "@shared/schema";
 import { Link } from "wouter";
+
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  logFormat: string;
+  queryFormat: string;
+}
 
 export default function ActiveTemplate() {
   const { data: activeTemplate, isLoading } = useQuery<Template>({
