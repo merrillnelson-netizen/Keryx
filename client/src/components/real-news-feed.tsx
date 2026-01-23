@@ -126,16 +126,8 @@ function NewsArticleCard({ article }: { article: NewsArticle }) {
 }
 
 export default function RealNewsFeed() {
-  const { data, isLoading, isFetching, refetch } = useQuery<RealNewsResponse>({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery<RealNewsResponse>({
     queryKey: ["/api/real-news"],
-    queryFn: async () => {
-      const response = await fetch("/api/real-news", { credentials: "include" });
-      if (!response.ok) {
-        const text = (await response.text()) || response.statusText;
-        throw new Error(`${response.status}: ${text}`);
-      }
-      return response.json();
-    },
     staleTime: 1000 * 60 * 15,
     refetchOnWindowFocus: false,
   });
@@ -179,7 +171,24 @@ export default function RealNewsFeed() {
       </CardHeader>
       
       <CardContent className="relative space-y-4">
-        {!configured ? (
+        {isError ? (
+          <div className="text-center py-8">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-foreground mb-2">Failed to Load News</h3>
+            <p className="text-muted-foreground text-sm mb-4 max-w-sm mx-auto">
+              {error instanceof Error ? error.message : 'Unable to fetch news articles. Please try again.'}
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()}
+              className="border-white/20"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Try Again
+            </Button>
+          </div>
+        ) : !configured ? (
           <div className="text-center py-8">
             <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
             <h3 className="text-lg font-medium text-foreground mb-2">News API Not Configured</h3>
