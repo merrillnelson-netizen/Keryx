@@ -852,9 +852,29 @@ export async function generatePersonalNewsFeed(
   upcomingEvents?: CalendarContext[],
   recentEmails?: EmailContext[],
   financialSummary?: FinancialSummary,
-  userName?: string
+  userName?: string,
+  userTimezone: string = 'UTC'
 ): Promise<PersonalNewsFeed> {
   try {
+    const formatDateInTimezone = (date: Date, tz: string) => {
+      return new Date(date).toLocaleDateString('en-US', { 
+        timeZone: tz, 
+        weekday: 'long',
+        month: 'long', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    };
+    
+    const formatTimeInTimezone = (date: Date, tz: string) => {
+      return new Date(date).toLocaleTimeString('en-US', { 
+        timeZone: tz, 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true
+      });
+    };
+
     const memorySummary = recentMemories.map((m, i) => 
       `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
     ).join('\n\n');
@@ -862,7 +882,7 @@ export async function generatePersonalNewsFeed(
     let calendarContext = '';
     if (upcomingEvents && upcomingEvents.length > 0) {
       calendarContext = `\n\nUPCOMING CALENDAR EVENTS:\n${upcomingEvents.map(e => 
-        `- ${e.title} on ${new Date(e.startTime).toLocaleDateString()} at ${new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${e.attendees?.length ? ` with ${e.attendees.join(', ')}` : ''}${e.location ? ` at ${e.location}` : ''}`
+        `- ${e.title} on ${formatDateInTimezone(new Date(e.startTime), userTimezone)} at ${formatTimeInTimezone(new Date(e.startTime), userTimezone)}${e.attendees?.length ? ` with ${e.attendees.join(', ')}` : ''}${e.location ? ` at ${e.location}` : ''}`
       ).join('\n')}`;
     }
 
@@ -889,6 +909,8 @@ export async function generatePersonalNewsFeed(
           role: "system",
           content: `You are a personal news editor creating a "Local News" feed about a user's life${userName ? ` (${userName})` : ''}. 
           
+The user's timezone is ${userTimezone}. All times shown in the data are already converted to their local timezone.
+
 Think of this as a personalized newspaper about their ecosystem - their memories, calendars, emails, and finances are your "news sources."
 
 Generate 4-8 news-style stories from the data provided. Each story should read like a brief news article about their life:

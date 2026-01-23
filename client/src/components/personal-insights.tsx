@@ -181,10 +181,12 @@ function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
 }
 
 export default function PersonalInsights() {
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   const { data, isLoading, isFetching, refetch } = useQuery<NewsFeedResponse>({
-    queryKey: ["/api/news-feed"],
+    queryKey: ["/api/news-feed", userTimezone],
     queryFn: async () => {
-      const response = await fetch("/api/news-feed", { credentials: "include" });
+      const response = await fetch(`/api/news-feed?timezone=${encodeURIComponent(userTimezone)}`, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
         throw new Error(`${response.status}: ${text}`);

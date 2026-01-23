@@ -2006,9 +2006,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as User;
       const forceRefresh = req.query.refresh === 'true';
+      const userTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : 'UTC';
       
       const today = new Date().toISOString().split('T')[0];
-      const cacheKey = `${today}`;
+      const cacheKey = `${today}-${userTimezone}`;
       
       if (!forceRefresh) {
         const cached = await storage.getAiCache(user.id, 'newsfeed', cacheKey);
@@ -2117,7 +2118,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         calendarEvents.length > 0 ? calendarEvents : undefined,
         emailContext.length > 0 ? emailContext : undefined,
         financialSummary,
-        user.username
+        user.username,
+        userTimezone
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
