@@ -28,6 +28,27 @@ interface ReplitConnectorSettings {
   };
 }
 
+/**
+ * Parse a date string correctly, handling all-day events vs timed events.
+ * All-day events only have a date (YYYY-MM-DD) and should be treated as local dates.
+ * Timed events have full ISO datetime strings with timezone info.
+ */
+function parseCalendarDate(dateTime: string | null | undefined, date: string | null | undefined, fallback: Date): Date {
+  // Timed event - use the datetime directly (includes timezone info)
+  if (dateTime) {
+    return new Date(dateTime);
+  }
+  
+  // All-day event - parse as local date to avoid timezone shift issues
+  // YYYY-MM-DD format, parsed as local midnight instead of UTC
+  if (date) {
+    const [year, month, day] = date.split('-').map(Number);
+    return new Date(year, month - 1, day, 12, 0, 0); // Noon local time to avoid day boundary issues
+  }
+  
+  return fallback;
+}
+
 let googleConnectionSettings: ReplitConnectorSettings | null = null;
 let lastTokenFetch: number = 0;
 const TOKEN_CACHE_TTL_MS = 30 * 1000; // Cache tokens for 30 seconds max to ensure freshness
@@ -182,8 +203,8 @@ async function getGoogleEventsAroundTime(
       id: event.id || '',
       title: event.summary || 'Untitled Event',
       description: event.description || undefined,
-      startTime: new Date(event.start?.dateTime || event.start?.date || timestamp),
-      endTime: new Date(event.end?.dateTime || event.end?.date || timestamp),
+      startTime: parseCalendarDate(event.start?.dateTime, event.start?.date, timestamp),
+      endTime: parseCalendarDate(event.end?.dateTime, event.end?.date, timestamp),
       attendees: event.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
       location: event.location || undefined,
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
@@ -443,8 +464,8 @@ export async function findDuplicateEvent(
           id: event.id || '',
           title: event.summary || 'Untitled Event',
           description: event.description || undefined,
-          startTime: new Date(event.start?.dateTime || event.start?.date || startTime),
-          endTime: new Date(event.end?.dateTime || event.end?.date || startTime),
+          startTime: parseCalendarDate(event.start?.dateTime, event.start?.date, startTime),
+          endTime: parseCalendarDate(event.end?.dateTime, event.end?.date, startTime),
           attendees: event.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
           location: event.location || undefined,
           meetingLink: event.hangoutLink || undefined,
@@ -505,8 +526,8 @@ async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEv
       id: event.id || '',
       title: event.summary || 'Untitled Event',
       description: event.description || undefined,
-      startTime: new Date(event.start?.dateTime || event.start?.date || now),
-      endTime: new Date(event.end?.dateTime || event.end?.date || now),
+      startTime: parseCalendarDate(event.start?.dateTime, event.start?.date, now),
+      endTime: parseCalendarDate(event.end?.dateTime, event.end?.date, now),
       attendees: event.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
       location: event.location || undefined,
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
