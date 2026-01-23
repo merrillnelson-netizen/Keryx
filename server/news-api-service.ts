@@ -152,12 +152,14 @@ export async function fetchRealNews(
     });
     
     const response = await fetch(`https://newsdata.io/api/1/latest?${params}`);
-    const data: NewsDataResponse = await response.json();
+    const data = await response.json();
+    
+    // Log the raw response for debugging
+    console.log('NewsData.io response status:', data.status, 'totalResults:', data.totalResults);
     
     if (data.status !== 'success') {
-      const errorData = data as unknown as { message?: string; code?: string };
-      const errorMsg = errorData.message || errorData.code || 'Unknown error';
-      console.warn(`NewsData.io error:`, errorMsg);
+      const errorMsg = data.message || data.code || data.results?.message || 'Unknown error';
+      console.warn(`NewsData.io error:`, JSON.stringify(data));
       
       if (errorMsg.includes('rate limit') || errorMsg.includes('API limit')) {
         lastError = 'Daily API limit reached. Please try again tomorrow.';
@@ -169,7 +171,10 @@ export async function fetchRealNews(
       return { articles: [], error: lastError };
     }
     
-    for (const article of data.results || []) {
+    const results = (data as NewsDataResponse).results || [];
+    console.log(`NewsData.io returned ${results.length} articles for query: "${combinedQuery}"`);
+    
+    for (const article of results) {
       if (seenUrls.has(article.link) || !article.title) {
         continue;
       }
