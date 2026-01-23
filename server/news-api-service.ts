@@ -148,6 +148,7 @@ export async function fetchRealNews(
       apikey: apiKey,
       q: combinedQuery,
       language: 'en',
+      country: 'us', // Filter for US news to get local/relevant content
       size: '10', // Number of articles to return (max 10 on free tier)
     });
     
