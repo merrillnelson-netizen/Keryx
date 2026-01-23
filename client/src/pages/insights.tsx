@@ -21,6 +21,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend, Tooltip } from "recharts";
+import PersonalInsights from "@/components/personal-insights";
 
 interface MoodStat {
   mood: string;
@@ -247,6 +248,9 @@ export default function Insights() {
             </div>
           </div>
         </div>
+
+        {/* Personal Insights from AI */}
+        <PersonalInsights />
 
         {/* Time Period Selector */}
         <div className="glass-card p-4 rounded-2xl">
