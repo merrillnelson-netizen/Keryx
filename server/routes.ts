@@ -2203,9 +2203,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({
         status: 'success',
-        data: realNews,
+        data: {
+          articles: realNews.articles,
+          interests: realNews.interests,
+          generatedAt: realNews.generatedAt
+        },
         configured: true,
-        generatedAt: realNews.generatedAt
+        generatedAt: realNews.generatedAt,
+        error: realNews.error
       });
     } catch (error) {
       console.error("Failed to fetch real news:", error);

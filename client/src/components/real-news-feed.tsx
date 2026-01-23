@@ -44,6 +44,7 @@ interface RealNewsResponse {
   };
   configured: boolean;
   message?: string;
+  error?: string;
 }
 
 const getCategoryColor = (category: NewsArticle['category']) => {
@@ -135,6 +136,7 @@ export default function RealNewsFeed() {
   const articles = data?.data?.articles || [];
   const interests = data?.data?.interests;
   const configured = data?.configured ?? true;
+  const apiError = data?.error;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/real-news"] });
@@ -222,8 +224,21 @@ export default function RealNewsFeed() {
             <Newspaper className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
             <h3 className="text-lg font-medium text-foreground mb-2">No news found</h3>
             <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-              Log more memories to help us understand your interests and find relevant news.
+              {apiError 
+                ? apiError 
+                : "Log more memories to help us understand your interests and find relevant news."}
             </p>
+            {apiError && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetch()}
+                className="mt-4 border-white/20"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

@@ -103,16 +103,22 @@ Focus on topics that would appear in news articles. Be specific but searchable.`
   }
 }
 
+export interface FetchNewsResult {
+  articles: NewsArticle[];
+  error?: string;
+}
+
 export async function fetchRealNews(
   interests: UserInterests,
   apiKey?: string
-): Promise<NewsArticle[]> {
+): Promise<FetchNewsResult> {
   if (!apiKey) {
-    return [];
+    return { articles: [], error: 'No API key configured' };
   }
 
   const articles: NewsArticle[] = [];
   const seenUrls = new Set<string>();
+  let lastError: string | undefined;
   
   const searchQueries = [
     ...interests.topics.slice(0, 3),
@@ -130,14 +136,25 @@ export async function fetchRealNews(
       });
       
       const response = await fetch(`https://newsapi.org/v2/everything?${params}`);
+      const data = await response.json();
       
-      if (!response.ok) {
+      if (!response.ok || data.status === 'error') {
+        // NewsAPI returns specific error codes
+        const errorMsg = data.message || data.code || 'Unknown error';
+        console.warn(`NewsAPI error for query "${query}":`, errorMsg);
+        
+        // Check for common NewsAPI limitations
+        if (data.code === 'corsNotAllowed' || errorMsg.includes('localhost')) {
+          lastError = 'NewsAPI free tier only works in development. Upgrade to a paid plan for production use.';
+        } else if (data.code === 'rateLimited') {
+          lastError = 'Rate limit exceeded. Please try again later.';
+        } else {
+          lastError = errorMsg;
+        }
         continue;
       }
       
-      const data: NewsAPIResponse = await response.json();
-      
-      for (const article of data.articles || []) {
+      for (const article of (data as NewsAPIResponse).articles || []) {
         if (seenUrls.has(article.url) || !article.title || article.title === '[Removed]') {
           continue;
         }
@@ -158,11 +175,16 @@ export async function fetchRealNews(
         });
       }
     } catch (error) {
+      console.error(`Failed to fetch news for query "${query}":`, error);
+      lastError = error instanceof Error ? error.message : 'Network error';
       continue;
     }
   }
   
-  return articles.slice(0, 10);
+  return { 
+    articles: articles.slice(0, 10),
+    error: articles.length === 0 ? lastError : undefined
+  };
 }
 
 function categorizeArticle(
@@ -190,18 +212,23 @@ function categorizeArticle(
   return 'general';
 }
 
+export interface PersonalizedNewsResponse extends RealNewsResponse {
+  error?: string;
+}
+
 export async function getPersonalizedNews(
   memories: Array<{ memoryText: string; topicTag?: string; detectedPeople?: string[] }>,
   calendarEvents: Array<{ summary?: string; location?: string }>,
   financialData?: { merchants?: string[]; categories?: string[] },
   newsApiKey?: string
-): Promise<RealNewsResponse> {
+): Promise<PersonalizedNewsResponse> {
   const interests = await extractUserInterests(memories, calendarEvents, financialData);
-  const articles = await fetchRealNews(interests, newsApiKey);
+  const result = await fetchRealNews(interests, newsApiKey);
   
   return {
-    articles,
+    articles: result.articles,
     interests,
     generatedAt: new Date().toISOString(),
+    error: result.error,
   };
 }

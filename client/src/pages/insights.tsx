@@ -236,39 +236,39 @@ export default function Insights() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        {/* Header Section */}
+        {/* Header Section with Time Period Selector */}
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center">
-              <Brain className="w-6 h-6 text-white" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center">
+                <Brain className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Cognitive Insights</h2>
+                <p className="text-sm text-muted-foreground">Discover patterns in your memories and emotions</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Cognitive Insights</h2>
-              <p className="text-sm text-muted-foreground">Discover patterns in your memories and emotions</p>
+            
+            {/* Time Period Selector - moved to header */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">Analyzing:</span>
+              <Select value={days} onValueChange={setDays}>
+                <SelectTrigger className="w-[160px] glass-card border-white/20" data-testid="select-days">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 3 months</SelectItem>
+                  <SelectItem value="365">Last year</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
 
         {/* Personal Insights from AI */}
         <PersonalInsights />
-
-        {/* Time Period Selector */}
-        <div className="glass-card p-4 rounded-2xl">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">Analyzing:</span>
-            <Select value={days} onValueChange={setDays}>
-              <SelectTrigger className="w-[180px] glass-card border-white/20" data-testid="select-days">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent className="glass-card border-primary/20">
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 3 months</SelectItem>
-                <SelectItem value="365">Last year</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
 
         {/* Mood Analytics */}
         <div className="grid md:grid-cols-2 gap-6 w-full overflow-hidden">
