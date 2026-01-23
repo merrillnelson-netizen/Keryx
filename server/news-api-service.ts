@@ -32,21 +32,27 @@ export interface RealNewsResponse {
   generatedAt: string;
 }
 
-interface NewsAPIArticle {
-  source: { id: string | null; name: string };
-  author: string | null;
+// NewsData.io API response types
+interface NewsDataArticle {
+  article_id: string;
   title: string;
+  link: string;
   description: string | null;
-  url: string;
-  urlToImage: string | null;
-  publishedAt: string;
-  content: string | null;
+  source_name: string;
+  source_icon?: string;
+  image_url: string | null;
+  pubDate: string;
+  category: string[];
+  country: string[];
+  language: string;
+  keywords?: string[];
 }
 
-interface NewsAPIResponse {
+interface NewsDataResponse {
   status: string;
   totalResults: number;
-  articles: NewsAPIArticle[];
+  results: NewsDataArticle[];
+  nextPage?: string;
 }
 
 export async function extractUserInterests(
@@ -108,77 +114,85 @@ export interface FetchNewsResult {
   error?: string;
 }
 
+/**
+ * Fetch news articles from NewsData.io API
+ * Free tier: 200 requests/day, works in production
+ */
 export async function fetchRealNews(
   interests: UserInterests,
   apiKey?: string
 ): Promise<FetchNewsResult> {
   if (!apiKey) {
-    return { articles: [], error: 'No API key configured' };
+    return { articles: [], error: 'No API key configured. Add NEWSDATA_API_KEY in settings.' };
   }
 
   const articles: NewsArticle[] = [];
   const seenUrls = new Set<string>();
   let lastError: string | undefined;
   
+  // Build search queries from user interests
   const searchQueries = [
     ...interests.topics.slice(0, 3),
     ...interests.industries.slice(0, 2),
   ].filter(Boolean);
   
-  for (const query of searchQueries.slice(0, 3)) {
-    try {
-      const params = new URLSearchParams({
-        q: query,
-        language: 'en',
-        sortBy: 'publishedAt',
-        pageSize: '5',
-        apiKey: apiKey,
-      });
+  // NewsData.io allows combining queries with OR, so we can make fewer API calls
+  const combinedQuery = searchQueries.slice(0, 3).join(' OR ');
+  
+  if (!combinedQuery) {
+    return { articles: [], error: 'No interests found to search for news.' };
+  }
+  
+  try {
+    const params = new URLSearchParams({
+      apikey: apiKey,
+      q: combinedQuery,
+      language: 'en',
+      size: '10', // Number of articles to return (max 10 on free tier)
+    });
+    
+    const response = await fetch(`https://newsdata.io/api/1/latest?${params}`);
+    const data: NewsDataResponse = await response.json();
+    
+    if (data.status !== 'success') {
+      const errorData = data as unknown as { message?: string; code?: string };
+      const errorMsg = errorData.message || errorData.code || 'Unknown error';
+      console.warn(`NewsData.io error:`, errorMsg);
       
-      const response = await fetch(`https://newsapi.org/v2/everything?${params}`);
-      const data = await response.json();
-      
-      if (!response.ok || data.status === 'error') {
-        // NewsAPI returns specific error codes
-        const errorMsg = data.message || data.code || 'Unknown error';
-        console.warn(`NewsAPI error for query "${query}":`, errorMsg);
-        
-        // Check for common NewsAPI limitations
-        if (data.code === 'corsNotAllowed' || errorMsg.includes('localhost')) {
-          lastError = 'NewsAPI free tier only works in development. Upgrade to a paid plan for production use.';
-        } else if (data.code === 'rateLimited') {
-          lastError = 'Rate limit exceeded. Please try again later.';
-        } else {
-          lastError = errorMsg;
-        }
+      if (errorMsg.includes('rate limit') || errorMsg.includes('API limit')) {
+        lastError = 'Daily API limit reached. Please try again tomorrow.';
+      } else if (errorMsg.includes('Invalid API key')) {
+        lastError = 'Invalid API key. Please check your NEWSDATA_API_KEY setting.';
+      } else {
+        lastError = errorMsg;
+      }
+      return { articles: [], error: lastError };
+    }
+    
+    for (const article of data.results || []) {
+      if (seenUrls.has(article.link) || !article.title) {
         continue;
       }
+      seenUrls.add(article.link);
       
-      for (const article of (data as NewsAPIResponse).articles || []) {
-        if (seenUrls.has(article.url) || !article.title || article.title === '[Removed]') {
-          continue;
-        }
-        seenUrls.add(article.url);
-        
-        const category = categorizeArticle(article, interests);
-        
-        articles.push({
-          id: Buffer.from(article.url).toString('base64').slice(0, 20),
-          title: article.title,
-          description: article.description || '',
-          url: article.url,
-          source: article.source?.name || 'Unknown',
-          publishedAt: article.publishedAt,
-          imageUrl: article.urlToImage || undefined,
-          relevanceReason: `Related to your interest in ${query}`,
-          category,
-        });
-      }
-    } catch (error) {
-      console.error(`Failed to fetch news for query "${query}":`, error);
-      lastError = error instanceof Error ? error.message : 'Network error';
-      continue;
+      const category = categorizeNewsDataArticle(article, interests);
+      const relevanceReason = findRelevanceReason(article, interests, searchQueries);
+      
+      articles.push({
+        id: article.article_id,
+        title: article.title,
+        description: article.description || '',
+        url: article.link,
+        source: article.source_name || 'Unknown',
+        publishedAt: article.pubDate,
+        imageUrl: article.image_url || undefined,
+        relevanceReason,
+        category,
+      });
     }
+  } catch (error) {
+    console.error('Failed to fetch news from NewsData.io:', error);
+    lastError = error instanceof Error ? error.message : 'Network error';
   }
   
   return { 
@@ -187,22 +201,50 @@ export async function fetchRealNews(
   };
 }
 
-function categorizeArticle(
-  article: NewsAPIArticle,
+function findRelevanceReason(
+  article: NewsDataArticle,
+  interests: UserInterests,
+  searchQueries: string[]
+): string {
+  const text = `${article.title} ${article.description || ''} ${(article.keywords || []).join(' ')}`.toLowerCase();
+  
+  // Check which search query matched
+  for (const query of searchQueries) {
+    if (text.includes(query.toLowerCase())) {
+      return `Related to your interest in ${query}`;
+    }
+  }
+  
+  // Check article categories
+  if (article.category && article.category.length > 0) {
+    return `From ${article.category[0]} news`;
+  }
+  
+  return 'Personalized for you';
+}
+
+function categorizeNewsDataArticle(
+  article: NewsDataArticle,
   interests: UserInterests
 ): NewsArticle['category'] {
   const text = `${article.title} ${article.description || ''}`.toLowerCase();
+  const categories = article.category || [];
   
+  // Check if it matches people the user knows
   if (interests.people.some(p => text.includes(p.toLowerCase()))) {
     return 'people';
   }
+  
+  // Check if it matches user's projects
   if (interests.projects.some(p => text.includes(p.toLowerCase()))) {
     return 'projects';
   }
-  if (/finance|money|market|stock|invest|economy|bank/i.test(text)) {
+  
+  // Check article categories and content for classification
+  if (categories.includes('business') || /finance|money|market|stock|invest|economy|bank/i.test(text)) {
     return 'financial';
   }
-  if (/health|wellness|fitness|mental|medical|exercise/i.test(text)) {
+  if (categories.includes('health') || /health|wellness|fitness|mental|medical|exercise/i.test(text)) {
     return 'wellbeing';
   }
   if (/meeting|event|conference|schedule/i.test(text)) {

@@ -2142,7 +2142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/real-news", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
-      const newsApiKey = process.env.NEWS_API_KEY;
+      const newsApiKey = process.env.NEWSDATA_API_KEY;
       
       if (!newsApiKey) {
         return res.json({
@@ -2153,7 +2153,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             generatedAt: new Date().toISOString()
           },
           configured: false,
-          message: 'News API not configured. Add NEWS_API_KEY to enable real news.'
+          message: 'News API not configured. Add NEWSDATA_API_KEY to enable real news.'
         });
       }
       
