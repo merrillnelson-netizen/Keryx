@@ -268,10 +268,10 @@ export async function getPersonalizedNews(
   memories: Array<{ memoryText: string; topicTag?: string; detectedPeople?: string[] }>,
   calendarEvents: Array<{ summary?: string; location?: string }>,
   financialData?: { merchants?: string[]; categories?: string[] },
-  newsApiKey?: string
+  newsDataApiKey?: string
 ): Promise<PersonalizedNewsResponse> {
   const interests = await extractUserInterests(memories, calendarEvents, financialData);
-  const result = await fetchRealNews(interests, newsApiKey);
+  const result = await fetchRealNews(interests, newsDataApiKey);
   
   return {
     articles: result.articles,

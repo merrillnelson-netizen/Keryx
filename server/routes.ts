@@ -2136,15 +2136,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/real-news - Fetch real news articles based on user's interests
    * 
    * Extracts topics from user's memories, calendar, and financial data
-   * then fetches relevant news articles from NewsAPI.
-   * Requires NEWS_API_KEY to be configured.
+   * then fetches relevant news articles from NewsData.io.
+   * Requires NEWSDATA_API_KEY to be configured.
    */
   app.get("/api/real-news", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
-      const newsApiKey = process.env.NEWSDATA_API_KEY;
+      const newsDataApiKey = process.env.NEWSDATA_API_KEY;
       
-      if (!newsApiKey) {
+      if (!newsDataApiKey) {
         return res.json({
           status: 'success',
           data: {
@@ -2198,7 +2198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })),
         calendarEvents,
         financialData,
-        newsApiKey
+        newsDataApiKey
       );
       
       res.json({
