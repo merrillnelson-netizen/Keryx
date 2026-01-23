@@ -15,6 +15,7 @@ import { isOutlookMailConnected } from "./outlook-mail-service";
 import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
+import { getPersonalizedNews, type RealNewsResponse } from "./news-api-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -2132,6 +2133,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to generate news feed:", error);
       sendErrorResponse(res, 500, "Failed to generate news feed", error);
+    }
+  });
+
+  /**
+   * GET /api/real-news - Fetch real news articles based on user's interests
+   * 
+   * Extracts topics from user's memories, calendar, and financial data
+   * then fetches relevant news articles from NewsAPI.
+   * Requires NEWS_API_KEY to be configured.
+   */
+  app.get("/api/real-news", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const newsApiKey = process.env.NEWS_API_KEY;
+      
+      if (!newsApiKey) {
+        return res.json({
+          status: 'success',
+          data: {
+            articles: [],
+            interests: { topics: [], people: [], projects: [], locations: [], industries: [] },
+            generatedAt: new Date().toISOString()
+          },
+          configured: false,
+          message: 'News API not configured. Add NEWS_API_KEY to enable real news.'
+        });
+      }
+      
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const memories = await storage.getLogEntries(user.id, 50);
+      const recentMemories = memories.filter((m: LogEntry) => m.timestamp >= weekAgo);
+      
+      let calendarEvents: Array<{ summary?: string; location?: string }> = [];
+      try {
+        const calendarConnected = await isCalendarConnected();
+        if (calendarConnected) {
+          const events = await getTodaysEvents();
+          calendarEvents = events.map(e => ({
+            summary: e.title,
+            location: e.location
+          }));
+        }
+      } catch (calendarError) {
+        // Calendar fetch failed, continue without calendar context
+      }
+      
+      const userSettings = await storage.getSettings(user.id);
+      let financialData: { merchants?: string[]; categories?: string[] } | undefined;
+      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
+        try {
+          const rawSummary = await plaidService.getSpendingSummary(user.id, 30);
+          if (rawSummary && rawSummary.transactionCount > 0) {
+            financialData = {
+              merchants: rawSummary.topMerchants.map(m => m.merchant),
+              categories: rawSummary.categoryBreakdown.map(c => c.category)
+            };
+          }
+        } catch (finError) {
+          // Financial fetch failed, continue without financial context
+        }
+      }
+      
+      const realNews = await getPersonalizedNews(
+        recentMemories.map((m: any) => ({
+          memoryText: m.memoryText,
+          topicTag: m.topicTag,
+          detectedPeople: m.detectedPeople || []
+        })),
+        calendarEvents,
+        financialData,
+        newsApiKey
+      );
+      
+      res.json({
+        status: 'success',
+        data: realNews,
+        configured: true,
+        generatedAt: realNews.generatedAt
+      });
+    } catch (error) {
+      console.error("Failed to fetch real news:", error);
+      sendErrorResponse(res, 500, "Failed to fetch real news", error);
     }
   });
 

@@ -180,7 +180,7 @@ function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
   );
 }
 
-export default function NewsFeed() {
+export default function PersonalInsights() {
   const { data, isLoading, isFetching, refetch } = useQuery<NewsFeedResponse>({
     queryKey: ["/api/news-feed"],
     queryFn: async () => {
@@ -216,9 +216,9 @@ export default function NewsFeed() {
               <Newspaper className="w-5 h-5 text-white" />
             </div>
             <div>
-              <CardTitle className="text-xl">Your Personal News</CardTitle>
+              <CardTitle className="text-xl">Personal Insights</CardTitle>
               <CardDescription>
-                Stories from your Helix ecosystem
+                AI-generated insights from your ecosystem
               </CardDescription>
             </div>
           </div>

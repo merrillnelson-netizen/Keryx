@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import PendingActions from "@/components/pending-actions";
-import NewsFeed from "@/components/news-feed";
+import RealNewsFeed from "@/components/real-news-feed";
 
 interface MorningBriefing {
   greeting: string;
@@ -307,7 +307,7 @@ export default function Dashboard() {
         <PendingActions />
 
         {/* Personal News Feed */}
-        <NewsFeed />
+        <RealNewsFeed />
 
         {/* Pattern Alerts */}
         <Card className="glass-card border-white/20">
