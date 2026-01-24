@@ -73,12 +73,12 @@ export async function extractUserInterests(
         {
           role: "system",
           content: `Extract news-relevant interests from personal data. Return JSON with:
-- topics: Array of 3-5 broad news topics/industries to search (e.g., "technology", "finance", "healthcare", "AI", "real estate")
+- topics: Array of 3-5 news-searchable topics that balance specificity with discoverability. Use terms that frequently appear in news headlines (e.g., "artificial intelligence", "stock market", "climate change", "sports", "entertainment", "health"). Avoid overly specific phrases that rarely appear in news.
 - projects: Array of 2-3 specific project/work areas mentioned
-- industries: Array of 2-3 relevant industries
+- industries: Array of 2-3 industries relevant to user (e.g., "finance", "technology", "healthcare", "education")
 - locations: Array of relevant cities/regions for local news
 
-Focus on topics that would appear in news articles. Be specific but searchable.`
+IMPORTANT: Topics must be terms that news outlets actually use in headlines. Each topic should be DIFFERENT from others to get diverse results. Balance personalization with discoverability.`
         },
         {
           role: "user",
@@ -118,6 +118,108 @@ export interface FetchNewsResult {
  * Fetch news articles from NewsData.io API
  * Free tier: 200 requests/day, works in production
  */
+/**
+ * Calculate similarity between two titles using word overlap (Jaccard similarity)
+ * Returns a value between 0 (completely different) and 1 (identical)
+ */
+function calculateTitleSimilarity(title1: string, title2: string): number {
+  const normalize = (text: string) => 
+    text.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(word => word.length > 2); // Ignore short words like "a", "the"
+  
+  const words1 = normalize(title1);
+  const words2 = normalize(title2);
+  const words1Set = new Set(words1);
+  const words2Set = new Set(words2);
+  
+  if (words1.length === 0 || words2.length === 0) return 0;
+  
+  const intersectionCount = words1.filter(w => words2Set.has(w)).length;
+  const unionSize = new Set(words1.concat(words2)).size;
+  
+  return intersectionCount / unionSize;
+}
+
+/**
+ * Extract key story identifiers (names, numbers, locations) to detect same story
+ */
+function extractStoryFingerprint(title: string): string {
+  const normalized = title.toLowerCase();
+  // Extract proper nouns, numbers, and key identifiers
+  const numbers = normalized.match(/\d+/g) || [];
+  const words = normalized.split(/\s+/).filter(w => w.length > 3);
+  // Get the most distinctive words (longer, less common)
+  const distinctiveWords = words
+    .filter(w => !['the', 'and', 'for', 'that', 'this', 'with', 'from', 'have', 'will', 'been', 'says', 'said', 'after', 'about', 'what', 'which', 'their', 'more', 'could', 'would', 'into'].includes(w))
+    .slice(0, 5);
+  return [...distinctiveWords, ...numbers].join(' ');
+}
+
+/**
+ * Group articles by similarity and limit duplicates
+ * Returns deduplicated articles with max 2 versions of same story
+ */
+function deduplicateArticles(articles: NewsArticle[], maxVersionsPerStory: number = 2): NewsArticle[] {
+  const storyGroups: Map<string, NewsArticle[]> = new Map();
+  const SIMILARITY_THRESHOLD = 0.5; // 50% word overlap = same story
+  
+  for (const article of articles) {
+    const fingerprint = extractStoryFingerprint(article.title);
+    let foundGroup = false;
+    
+    // Check against existing story groups
+    const groupEntries = Array.from(storyGroups.entries());
+    for (const [groupKey, groupArticles] of groupEntries) {
+      const representativeTitle = groupArticles[0].title;
+      const similarity = calculateTitleSimilarity(article.title, representativeTitle);
+      const fingerprintSimilarity = calculateTitleSimilarity(fingerprint, extractStoryFingerprint(representativeTitle));
+      
+      if (similarity >= SIMILARITY_THRESHOLD || fingerprintSimilarity >= 0.6) {
+        groupArticles.push(article);
+        foundGroup = true;
+        break;
+      }
+    }
+    
+    if (!foundGroup) {
+      storyGroups.set(fingerprint, [article]);
+    }
+  }
+  
+  // Take only maxVersionsPerStory from each group, prioritizing diverse sources
+  const result: NewsArticle[] = [];
+  const groupValues = Array.from(storyGroups.values());
+  for (const groupArticles of groupValues) {
+    // Select articles with diverse sources using greedy selection
+    const selected: NewsArticle[] = [];
+    const usedSources = new Set<string>();
+    
+    // First pass: pick articles from unique sources
+    for (const article of groupArticles) {
+      if (selected.length >= maxVersionsPerStory) break;
+      if (!usedSources.has(article.source)) {
+        selected.push(article);
+        usedSources.add(article.source);
+      }
+    }
+    
+    // Second pass: fill remaining slots if needed
+    for (const article of groupArticles) {
+      if (selected.length >= maxVersionsPerStory) break;
+      if (!selected.includes(article)) {
+        selected.push(article);
+      }
+    }
+    
+    result.push(...selected);
+  }
+  
+  console.log(`Deduplication: ${articles.length} articles -> ${result.length} unique stories (${storyGroups.size} story groups)`);
+  return result;
+}
+
 export async function fetchRealNews(
   interests: UserInterests,
   apiKey?: string
@@ -130,7 +232,7 @@ export async function fetchRealNews(
   const seenUrls = new Set<string>();
   let lastError: string | undefined;
   
-  // Build search queries from user interests
+  // Build search queries from user interests - be more specific
   const searchQueries = [
     ...interests.topics.slice(0, 3),
     ...interests.industries.slice(0, 2),
@@ -201,9 +303,12 @@ export async function fetchRealNews(
     lastError = error instanceof Error ? error.message : 'Network error';
   }
   
+  // Apply deduplication to limit same story to max 2 versions
+  const deduplicatedArticles = deduplicateArticles(articles, 2);
+  
   return { 
-    articles: articles.slice(0, 10),
-    error: articles.length === 0 ? lastError : undefined
+    articles: deduplicatedArticles.slice(0, 10),
+    error: deduplicatedArticles.length === 0 ? lastError : undefined
   };
 }
 
