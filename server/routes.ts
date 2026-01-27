@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
-import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, getUpcomingEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
@@ -16,6 +16,7 @@ import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 import { getPersonalizedNews, type RealNewsResponse } from "./news-api-service";
+import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -2215,6 +2216,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to fetch real news:", error);
       sendErrorResponse(res, 500, "Failed to fetch real news", error);
+    }
+  });
+
+  /**
+   * GET /api/discoveries - Get contextual discoveries based on user's insights
+   * 
+   * Analyzes user's ecosystem (memories, calendar, emails, finances) to extract
+   * actionable insights, then uses Tavily AI Search to find relevant, ad-free content.
+   * Examples: travel tips for upcoming trips, local news for destinations, product reviews.
+   * Requires TAVILY_API_KEY to be configured.
+   */
+  app.get("/api/discoveries", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const tavilyApiKey = process.env.TAVILY_API_KEY;
+      
+      if (!tavilyApiKey) {
+        return res.json({
+          status: 'success',
+          data: {
+            discoveries: [],
+            insights: [],
+            generatedAt: new Date().toISOString()
+          },
+          configured: false,
+          message: 'Tavily API not configured. Add TAVILY_API_KEY to enable contextual discoveries.'
+        });
+      }
+      
+      // Check cache first
+      const forceRefresh = req.query.refresh === 'true';
+      const cacheKey = 'discoveries';
+      
+      if (!forceRefresh) {
+        const cached = await storage.getAiCache(user.id, 'discoveries', cacheKey);
+        if (cached) {
+          return res.json({
+            status: 'success',
+            data: cached.data,
+            configured: true,
+            cached: true
+          });
+        }
+      }
+      
+      // Get recent memories
+      const recentMemories = await storage.getRecentLogEntries(user.id, 14, 30);
+      
+      // Get calendar events (next 14 days for travel/event insights)
+      let calendarEvents: Array<{ summary?: string; location?: string; start?: { dateTime?: string; date?: string } }> = [];
+      try {
+        const calendarConnected = await isCalendarConnected();
+        if (calendarConnected) {
+          const events = await getUpcomingEvents(14);
+          calendarEvents = events.map(e => ({
+            summary: e.title,
+            location: e.location,
+            start: { dateTime: e.startTime?.toISOString() }
+          }));
+        }
+      } catch (calendarError) {
+        // Calendar fetch failed, continue without calendar context
+      }
+      
+      // Get emails
+      let emails: Array<{ subject?: string; snippet?: string; from?: string }> = [];
+      try {
+        const gmailConnected = await isGmailConnected();
+        if (gmailConnected) {
+          const capabilities = await getGmailCapabilities();
+          if (capabilities.canRead) {
+            // Import and use gmail service to get recent emails
+            const { getRecentEmails } = await import('./gmail-service');
+            const recentEmails = await getRecentEmails(10);
+            emails = recentEmails.map(e => ({
+              subject: e.subject,
+              snippet: e.snippet,
+              from: e.from
+            }));
+          }
+        }
+      } catch (emailError) {
+        // Email fetch failed, continue without email context
+      }
+      
+      // Get financial data
+      const userSettings = await storage.getSettings(user.id);
+      let financialData: { merchants?: string[]; categories?: string[]; recentTransactions?: Array<{ name: string; amount: number }> } | undefined;
+      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
+        try {
+          const rawSummary = await plaidService.getSpendingSummary(user.id, 30);
+          if (rawSummary && rawSummary.transactionCount > 0) {
+            financialData = {
+              merchants: rawSummary.topMerchants.map(m => m.merchant),
+              categories: rawSummary.categoryBreakdown.map(c => c.category),
+              recentTransactions: rawSummary.topMerchants.slice(0, 5).map(m => ({
+                name: m.merchant,
+                amount: m.amount
+              }))
+            };
+          }
+        } catch (finError) {
+          // Financial fetch failed, continue without financial context
+        }
+      }
+      
+      const discoveries = await getContextualDiscoveries(
+        recentMemories.map((m: LogEntry) => ({
+          memoryText: m.memoryText,
+          topicTag: m.topicTag,
+          detectedPeople: m.detectedPeople || [],
+          locationName: m.geoPlaceName || undefined
+        })),
+        calendarEvents,
+        emails,
+        financialData,
+        tavilyApiKey
+      );
+      
+      // Cache the result for 30 minutes
+      await storage.setAiCache(user.id, 'discoveries', cacheKey, {
+        discoveries: discoveries.discoveries,
+        insights: discoveries.insights,
+        generatedAt: discoveries.generatedAt
+      }, '', recentMemories.length, 30);
+      
+      res.json({
+        status: 'success',
+        data: {
+          discoveries: discoveries.discoveries,
+          insights: discoveries.insights,
+          generatedAt: discoveries.generatedAt
+        },
+        configured: true,
+        error: discoveries.error
+      });
+    } catch (error) {
+      console.error("Failed to fetch contextual discoveries:", error);
+      sendErrorResponse(res, 500, "Failed to fetch contextual discoveries", error);
     }
   });
 

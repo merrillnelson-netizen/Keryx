@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
-import RealNewsFeed from "@/components/real-news-feed";
+import ContextualDiscoveries from "@/components/contextual-discoveries";
 
 interface MorningBriefing {
   greeting: string;
@@ -306,7 +306,7 @@ export default function Dashboard() {
         <PendingActions />
 
         {/* Personal News Feed */}
-        <RealNewsFeed />
+        <ContextualDiscoveries />
 
         {/* Pattern Alerts */}
         <Card className="glass-card border-white/20">

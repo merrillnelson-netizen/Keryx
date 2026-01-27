@@ -47,7 +47,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Cognitive Search**: Mood tracking, people detection, mood distribution charts, AI thematic synthesis.
 - **Proactive Features**: AI-generated morning briefings, pattern alerts, active projects, personalized news feed, real news articles.
 - **Personal Insights**: AI-generated insights from user's ecosystem (memories, calendars, emails, finances) displayed on Insights page. Categories: people, projects, calendar, financial, wellbeing, highlights. Cached with 30-minute TTL.
-- **Real News Feed**: Fetches actual news articles from NewsAPI filtered by user's interests extracted from memories/calendar/financial data. Displayed on dashboard. Requires NEWS_API_KEY configuration.
+- **Contextual Discoveries**: Uses Tavily AI Search to provide personalized, ad-free content based on user's life insights (upcoming trips, projects, financial patterns). Extracts searchable insights from calendars (next 14 days), emails, memories, and Plaid financial data, then performs contextual searches. Cached with 30-minute TTL. Requires TAVILY_API_KEY configuration. Falls back gracefully if OpenAI API key unavailable for insight extraction.
 - **Calendar & Email Integration**: Multi-provider support (Google, Microsoft Outlook) for auto-linking memories to events, smart event detection, and event creation.
 - **AI Task Execution**: Detection of actionable requests (calendar, email, reminders) with policy-based approval and rollback capability.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
@@ -78,6 +78,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Wake Word Detection**: Picovoice Porcupine SDK.
 - **Google Places API**: For reverse geocoding (optional).
 - **Plaid**: Financial integration for bank accounts and spending insights. Uses Balance as primary product (less approval requirements), Transactions as optional. Batch-optimized database operations for sync.
+- **Tavily AI Search**: For contextual discoveries with ad-free, personalized web search results.
 
 ### Analytics
 - **Google Analytics 4**: For user behavior tracking.

@@ -543,3 +543,71 @@ async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEv
     return [];
   }
 }
+
+/**
+ * Get upcoming calendar events for the next N days
+ * Used for extracting travel/event insights for contextual discoveries
+ */
+export async function getUpcomingEvents(days: number = 14): Promise<CalendarEvent[]> {
+  const provider = await getConnectedCalendarProvider();
+  
+  if (provider === 'outlook') {
+    return getOutlookUpcomingEvents(days);
+  }
+  
+  // Default to Google Calendar
+  return getGoogleUpcomingEvents(days);
+}
+
+async function getGoogleUpcomingEvents(days: number = 14, retryCount: number = 0): Promise<CalendarEvent[]> {
+  try {
+    const calendar = await getCalendarClient(retryCount > 0);
+    
+    const now = new Date();
+    const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: now.toISOString(),
+      timeMax: endDate.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 50,
+    });
+
+    const events = response.data.items || [];
+    
+    return events.map(event => ({
+      id: event.id || '',
+      title: event.summary || 'Untitled Event',
+      description: event.description || undefined,
+      startTime: parseCalendarDate(event.start?.dateTime, event.start?.date, now),
+      endTime: parseCalendarDate(event.end?.dateTime, event.end?.date, now),
+      attendees: event.attendees?.map(a => a.displayName || a.email || '').filter(Boolean),
+      location: event.location || undefined,
+      meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
+    }));
+  } catch (error: any) {
+    if (error?.code === 401 && retryCount === 0) {
+      console.log('[Calendar] Token expired fetching upcoming events, refreshing and retrying...');
+      clearGoogleCalendarTokenCache();
+      return getGoogleUpcomingEvents(days, 1);
+    }
+    console.error('Failed to fetch upcoming Google events:', error);
+    return [];
+  }
+}
+
+async function getOutlookUpcomingEvents(days: number = 14): Promise<CalendarEvent[]> {
+  try {
+    const connected = await isOutlookConnected();
+    if (!connected) return [];
+    
+    const now = new Date();
+    const windowMinutes = days * 24 * 60;
+    return getOutlookEventsAroundTime(now, windowMinutes);
+  } catch (error) {
+    console.error('Failed to fetch upcoming Outlook events:', error);
+    return [];
+  }
+}
