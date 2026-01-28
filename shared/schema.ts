@@ -558,3 +558,89 @@ export const reminderCreatePayloadSchema = z.object({
 export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
 export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
 export type ReminderCreatePayload = z.infer<typeof reminderCreatePayloadSchema>;
+
+/**
+ * Ideas table - stores user ideas at various stages of development
+ * Ideas progress through stages: spark → exploring → planning → in_progress → completed/dropped
+ */
+export const IDEA_STAGES = {
+  SPARK: 'spark',
+  EXPLORING: 'exploring',
+  PLANNING: 'planning',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  DROPPED: 'dropped',
+} as const;
+
+export const ideas = pgTable("ideas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  description: text("description"),
+  stage: text("stage").notNull().default('spark'),
+  chatHistory: jsonb("chat_history").default([]), // Array of { role: 'user'|'assistant', content: string, timestamp: string }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("ideas_user_id_idx").on(table.userId),
+  stageIdx: index("ideas_stage_idx").on(table.stage),
+  userStageIdx: index("ideas_user_stage_idx").on(table.userId, table.stage),
+}));
+
+export const ideasRelations = relations(ideas, ({ one, many }) => ({
+  user: one(users, {
+    fields: [ideas.userId],
+    references: [users.id],
+  }),
+  tasks: many(ideaTasks),
+}));
+
+/**
+ * Idea Tasks table - stores tasks/steps to bring an idea to reality
+ */
+export const ideaTasks = pgTable("idea_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ideaId: varchar("idea_id").notNull().references(() => ideas.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  description: text("description"),
+  isCompleted: boolean("is_completed").default(false).notNull(),
+  order: integer("order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  ideaIdIdx: index("idea_tasks_idea_id_idx").on(table.ideaId),
+  orderIdx: index("idea_tasks_order_idx").on(table.ideaId, table.order),
+}));
+
+export const ideaTasksRelations = relations(ideaTasks, ({ one }) => ({
+  idea: one(ideas, {
+    fields: [ideaTasks.ideaId],
+    references: [ideas.id],
+  }),
+}));
+
+// Ideas schemas and types
+export const insertIdeaSchema = createInsertSchema(ideas).omit({
+  id: true,
+  userId: true,
+  chatHistory: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertIdeaTaskSchema = createInsertSchema(ideaTasks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Idea = typeof ideas.$inferSelect;
+export type InsertIdea = z.infer<typeof insertIdeaSchema>;
+export type IdeaTask = typeof ideaTasks.$inferSelect;
+export type InsertIdeaTask = z.infer<typeof insertIdeaTaskSchema>;
+
+export const ideaChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+  timestamp: z.string(),
+});
+
+export type IdeaChatMessage = z.infer<typeof ideaChatMessageSchema>;
