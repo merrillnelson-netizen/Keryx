@@ -387,15 +387,19 @@ export default function IdeaDetailPage() {
                 <div ref={chatEndRef} />
               </div>
               
-              <div className="flex-shrink-0 flex gap-2">
+              <div className="flex-shrink-0 flex gap-2 items-end">
                 <Textarea
                   ref={inputRef}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                  }}
                   onKeyDown={handleKeyDown}
                   placeholder="Type a message..."
-                  className="min-h-[40px] max-h-[100px] resize-none"
-                  rows={1}
+                  className="min-h-[100px] max-h-[200px] resize-none"
+                  rows={4}
                 />
                 <Button 
                   onClick={handleSendMessage} 

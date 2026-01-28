@@ -274,14 +274,18 @@ export default function SynthesisPage() {
           <div className="max-w-4xl mx-auto">
             <Card className="glass-card border-white/20">
               <CardContent className="p-3">
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-end">
                   <Textarea
                     placeholder="Ask a follow-up question about your patterns, habits, or any insights..."
                     value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
+                    onChange={(e) => {
+                      setQuestion(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                    }}
                     onKeyDown={handleKeyDown}
-                    className="flex-1 glass-card border-white/20 min-h-[50px] max-h-[120px] resize-none"
-                    rows={1}
+                    className="flex-1 glass-card border-white/20 min-h-[100px] max-h-[200px] resize-none"
+                    rows={4}
                   />
                   <Button
                     onClick={handleAskQuestion}
