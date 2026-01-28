@@ -11,7 +11,11 @@ import {
   Brain, 
   Zap,
   Sparkles,
-  Wallet
+  Wallet,
+  Lightbulb,
+  TrendingUp,
+  Newspaper,
+  Compass
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +106,62 @@ const capabilities: CapabilityCategory[] = [
     ]
   },
   {
+    id: "ideas",
+    name: "Ideas",
+    icon: Lightbulb,
+    color: "text-yellow-500",
+    description: "Brainstorm and develop ideas through AI-powered conversation",
+    examples: [
+      { phrase: "I have an idea for a mobile app", description: "Start developing a new idea with AI guidance" },
+      { phrase: "Help me think through this business concept", description: "Get AI assistance refining your idea" },
+      { phrase: "Break this project into actionable tasks", description: "AI generates a task list for your idea" },
+      { phrase: "What are the pros and cons of this approach?", description: "Get balanced analysis of your idea" },
+      { phrase: "How can I make this idea better?", description: "Receive suggestions to improve your concept" },
+    ]
+  },
+  {
+    id: "synthesis",
+    name: "Synthesis",
+    icon: TrendingUp,
+    color: "text-indigo-500",
+    description: "Deep pattern analysis and thematic insights from your memories",
+    examples: [
+      { phrase: "What patterns do you see in my life lately?", description: "AI analyzes themes across your memories" },
+      { phrase: "What should I focus on this month?", description: "Get personalized recommendations based on patterns" },
+      { phrase: "How have my priorities shifted over time?", description: "Understand your evolving focus areas" },
+      { phrase: "What habits are helping or hurting me?", description: "Identify behavioral patterns in your data" },
+      { phrase: "Give me a deep analysis of my work-life balance", description: "Comprehensive thematic synthesis" },
+    ]
+  },
+  {
+    id: "insights",
+    name: "Insights",
+    icon: Newspaper,
+    color: "text-cyan-500",
+    description: "AI-generated stories about your life from calendars, emails, and memories",
+    examples: [
+      { phrase: "What's happening in my life right now?", description: "News-style stories about your ecosystem" },
+      { phrase: "Tell me about my upcoming week", description: "Personalized preview of what's ahead" },
+      { phrase: "What connections am I nurturing?", description: "Insights about your relationships" },
+      { phrase: "How are my projects progressing?", description: "Status updates on your active work" },
+      { phrase: "What financial trends should I know about?", description: "Money patterns from your spending data" },
+    ]
+  },
+  {
+    id: "discoveries",
+    name: "Discoveries",
+    icon: Compass,
+    color: "text-teal-500",
+    description: "Personalized content recommendations based on your life context",
+    examples: [
+      { phrase: "Find articles relevant to my projects", description: "Web content matched to your current work" },
+      { phrase: "Discover content for my upcoming trip", description: "Travel tips based on your calendar events" },
+      { phrase: "What should I read about my interests?", description: "Curated content from your memory topics" },
+      { phrase: "Find resources for my current challenges", description: "Helpful content based on what's on your mind" },
+      { phrase: "Explore topics I've been thinking about", description: "Deep dives into your recurring themes" },
+    ]
+  },
+  {
     id: "power",
     name: "Power Tasks",
     icon: Zap,
@@ -131,6 +191,10 @@ const hintExamples = [
   "Any important emails I should check?",
   "Where is my money going?",
   "Send an email to John about the project",
+  "I have an idea for a new app",
+  "What patterns do you see in my life?",
+  "What's happening in my life right now?",
+  "Find content relevant to my projects",
 ];
 
 export function useRotatingHints() {
@@ -218,7 +282,7 @@ export function HelixCapabilitiesModal() {
 
         <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 sm:px-6 pt-4 shrink-0">
-            <TabsList className="w-full grid grid-cols-6 bg-white/5 p-1 rounded-xl">
+            <TabsList className="w-full grid grid-cols-5 sm:grid-cols-10 bg-white/5 p-1 rounded-xl gap-1">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
                 return (
@@ -247,6 +311,11 @@ export function HelixCapabilitiesModal() {
                       cat.id === "email" && "bg-green-500/20",
                       cat.id === "telegram" && "bg-purple-500/20",
                       cat.id === "memory" && "bg-amber-500/20",
+                      cat.id === "finance" && "bg-emerald-500/20",
+                      cat.id === "ideas" && "bg-yellow-500/20",
+                      cat.id === "synthesis" && "bg-indigo-500/20",
+                      cat.id === "insights" && "bg-cyan-500/20",
+                      cat.id === "discoveries" && "bg-teal-500/20",
                       cat.id === "power" && "bg-rose-500/20"
                     )}>
                       <Icon className={cn("w-6 h-6", cat.color)} />
