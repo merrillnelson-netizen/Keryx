@@ -282,17 +282,17 @@ export function HelixCapabilitiesModal() {
 
         <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 sm:px-6 pt-4 shrink-0">
-            <TabsList className="w-full grid grid-cols-5 sm:grid-cols-10 bg-white/5 p-1 rounded-xl gap-1">
+            <TabsList className="w-full h-auto flex flex-wrap bg-white/5 p-1 rounded-xl gap-1">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
                 return (
                   <TabsTrigger
                     key={cat.id}
                     value={cat.id}
-                    className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-white/10 px-1 sm:px-3"
+                    className="flex-1 min-w-[18%] sm:min-w-0 sm:flex-initial flex items-center justify-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-white/10 px-2 py-1.5 sm:px-3"
                     data-testid={`tab-capability-${cat.id}`}
                   >
-                    <Icon className={cn("w-4 h-4", cat.color)} />
+                    <Icon className={cn("w-4 h-4 shrink-0", cat.color)} />
                     <span className="hidden sm:inline">{cat.name}</span>
                   </TabsTrigger>
                 );
