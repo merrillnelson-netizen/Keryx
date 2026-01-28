@@ -1,0 +1,546 @@
+import AppLayout from "@/components/app-layout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { Link, useParams, useLocation } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { 
+  Lightbulb, 
+  Loader2, 
+  Sparkles,
+  Target,
+  CheckCircle2,
+  XCircle,
+  MessageCircle,
+  ListTodo,
+  Send,
+  ArrowLeft,
+  Trash2,
+  Plus,
+  Wand2,
+  GripVertical,
+  ChevronDown
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+
+interface IdeaChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+interface IdeaTask {
+  id: string;
+  ideaId: string;
+  title: string;
+  description: string | null;
+  isCompleted: boolean;
+  order: number;
+  createdAt: string;
+}
+
+interface Idea {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  stage: string;
+  chatHistory: IdeaChatMessage[];
+  createdAt: string;
+  updatedAt: string;
+  tasks?: IdeaTask[];
+}
+
+const STAGE_CONFIG = {
+  spark: { label: 'Spark', icon: Lightbulb, color: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' },
+  exploring: { label: 'Exploring', icon: MessageCircle, color: 'bg-blue-500/20 text-blue-600 dark:text-blue-400' },
+  planning: { label: 'Planning', icon: ListTodo, color: 'bg-purple-500/20 text-purple-600 dark:text-purple-400' },
+  in_progress: { label: 'In Progress', icon: Target, color: 'bg-orange-500/20 text-orange-600 dark:text-orange-400' },
+  completed: { label: 'Completed', icon: CheckCircle2, color: 'bg-green-500/20 text-green-600 dark:text-green-400' },
+  dropped: { label: 'Dropped', icon: XCircle, color: 'bg-gray-500/20 text-gray-600 dark:text-gray-400' },
+} as const;
+
+export default function IdeaDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [message, setMessage] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [isAddingTask, setIsAddingTask] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: idea, isLoading, refetch } = useQuery<Idea>({
+    queryKey: ['/api/ideas', id],
+  });
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [idea?.chatHistory]);
+
+  const updateStageMutation = useMutation({
+    mutationFn: async (stage: string) => {
+      const response = await apiRequest("PATCH", `/api/ideas/${id}`, { stage });
+      if (!response.ok) throw new Error("Failed to update stage");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+    },
+  });
+
+  const chatMutation = useMutation({
+    mutationFn: async (messageText: string) => {
+      const response = await apiRequest("POST", `/api/ideas/${id}/chat`, { message: messageText });
+      if (!response.ok) throw new Error("Failed to send message");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      setMessage("");
+    },
+    onError: () => {
+      toast({
+        title: "Failed to send message",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const generateTasksMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/ideas/${id}/generate-tasks`);
+      if (!response.ok) throw new Error("Failed to generate tasks");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+      toast({
+        title: "Tasks generated",
+        description: `Created ${data.tasks.length} tasks to help make this idea a reality`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to generate tasks",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const response = await apiRequest("POST", `/api/ideas/${id}/tasks`, { title });
+      if (!response.ok) throw new Error("Failed to create task");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      setNewTaskTitle("");
+      setIsAddingTask(false);
+    },
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: async ({ taskId, updates }: { taskId: string; updates: Partial<IdeaTask> }) => {
+      const response = await apiRequest("PATCH", `/api/ideas/${id}/tasks/${taskId}`, updates);
+      if (!response.ok) throw new Error("Failed to update task");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+    },
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      const response = await apiRequest("DELETE", `/api/ideas/${id}/tasks/${taskId}`);
+      if (!response.ok) throw new Error("Failed to delete task");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+    },
+  });
+
+  const deleteIdeaMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", `/api/ideas/${id}`);
+      if (!response.ok) throw new Error("Failed to delete idea");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+      navigate("/ideas");
+      toast({
+        title: "Idea deleted",
+        description: "The idea has been removed",
+      });
+    },
+  });
+
+  const handleSendMessage = () => {
+    if (!message.trim() || chatMutation.isPending) return;
+    chatMutation.mutate(message.trim());
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const handleAddTask = () => {
+    if (!newTaskTitle.trim()) return;
+    createTaskMutation.mutate(newTaskTitle.trim());
+  };
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!idea) {
+    return (
+      <AppLayout>
+        <Card className="glass-card border-white/20">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <XCircle className="w-12 h-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Idea not found</h3>
+            <p className="text-muted-foreground mb-4">
+              This idea may have been deleted
+            </p>
+            <Link href="/ideas">
+              <Button variant="outline" className="gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                Back to Ideas
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </AppLayout>
+    );
+  }
+
+  const stageConfig = STAGE_CONFIG[idea.stage as keyof typeof STAGE_CONFIG] || STAGE_CONFIG.spark;
+  const StageIcon = stageConfig.icon;
+  const tasks = idea.tasks || [];
+  const completedTasks = tasks.filter(t => t.isCompleted).length;
+
+  return (
+    <AppLayout>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <Link href="/ideas">
+              <Button variant="ghost" size="icon" className="flex-shrink-0">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold">{idea.title}</h1>
+              {idea.description && (
+                <p className="text-muted-foreground mt-1">{idea.description}</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 ml-12 sm:ml-0">
+            <Select 
+              value={idea.stage} 
+              onValueChange={(value) => updateStageMutation.mutate(value)}
+              disabled={updateStageMutation.isPending}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(STAGE_CONFIG).map(([key, config]) => {
+                  const Icon = config.icon;
+                  return (
+                    <SelectItem key={key} value={key}>
+                      <span className="flex items-center gap-2">
+                        <Icon className="w-4 h-4" />
+                        {config.label}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                  <Trash2 className="w-5 h-5" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this idea?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete "{idea.title}" and all its tasks. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={() => deleteIdeaMutation.mutate()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="glass-card border-white/20 flex flex-col h-[500px]">
+            <CardHeader className="flex-shrink-0">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MessageCircle className="w-5 h-5 text-blue-500" />
+                Brainstorm with AI
+              </CardTitle>
+              <CardDescription>
+                Explore and refine your idea through conversation
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+                {(!idea.chatHistory || idea.chatHistory.length === 0) ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>Start a conversation to explore your idea</p>
+                    <p className="text-sm mt-1">Ask questions, get feedback, or brainstorm together</p>
+                  </div>
+                ) : (
+                  idea.chatHistory.map((msg, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "flex",
+                        msg.role === 'user' ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-lg px-4 py-2",
+                          msg.role === 'user'
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        )}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className={cn(
+                          "text-xs mt-1",
+                          msg.role === 'user' ? "text-primary-foreground/70" : "text-muted-foreground"
+                        )}>
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {chatMutation.isPending && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted rounded-lg px-4 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+              
+              <div className="flex-shrink-0 flex gap-2">
+                <Textarea
+                  ref={inputRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type a message..."
+                  className="min-h-[40px] max-h-[100px] resize-none"
+                  rows={1}
+                />
+                <Button 
+                  onClick={handleSendMessage} 
+                  disabled={!message.trim() || chatMutation.isPending}
+                  size="icon"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20 flex flex-col h-[500px]">
+            <CardHeader className="flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ListTodo className="w-5 h-5 text-purple-500" />
+                    Tasks
+                    {tasks.length > 0 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {completedTasks}/{tasks.length}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription>
+                    Break down your idea into actionable steps
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateTasksMutation.mutate()}
+                  disabled={generateTasksMutation.isPending}
+                  className="gap-2"
+                >
+                  {generateTasksMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-4 h-4" />
+                  )}
+                  AI Generate
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2">
+                {tasks.length === 0 && !isAddingTask ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ListTodo className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>No tasks yet</p>
+                    <p className="text-sm mt-1">Add tasks manually or let AI generate them</p>
+                  </div>
+                ) : (
+                  tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "flex items-start gap-3 p-3 rounded-lg border transition-colors",
+                        task.isCompleted 
+                          ? "bg-muted/50 border-transparent" 
+                          : "bg-card border-border hover:border-primary/30"
+                      )}
+                    >
+                      <Checkbox
+                        checked={task.isCompleted}
+                        onCheckedChange={(checked) => 
+                          updateTaskMutation.mutate({ 
+                            taskId: task.id, 
+                            updates: { isCompleted: !!checked } 
+                          })
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "text-sm",
+                          task.isCompleted && "line-through text-muted-foreground"
+                        )}>
+                          {task.title}
+                        </p>
+                        {task.description && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {task.description}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteTaskMutation.mutate(task.id)}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+                
+                {isAddingTask && (
+                  <div className="flex items-center gap-2 p-2">
+                    <Input
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      placeholder="Task title..."
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddTask();
+                        if (e.key === 'Escape') {
+                          setIsAddingTask(false);
+                          setNewTaskTitle("");
+                        }
+                      }}
+                    />
+                    <Button size="sm" onClick={handleAddTask} disabled={!newTaskTitle.trim()}>
+                      Add
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => {
+                        setIsAddingTask(false);
+                        setNewTaskTitle("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+              
+              {!isAddingTask && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 flex-shrink-0"
+                  onClick={() => setIsAddingTask(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Task
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </AppLayout>
+  );
+}
