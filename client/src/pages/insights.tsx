@@ -1,10 +1,8 @@
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { apiRequest } from "@/lib/queryClient";
 import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -114,7 +112,6 @@ const SPENDING_COLORS = [
 
 export default function Insights() {
   const [days, setDays] = useState("30");
-  const [question, setQuestion] = useState("");
 
   const { data: moodStats, isLoading: moodLoading } = useQuery<{ data: MoodStat[]; period: string }>({
     queryKey: ["/api/mood/stats", days],
@@ -164,18 +161,6 @@ export default function Insights() {
     },
     enabled: plaidStatus?.enabled && plaidStatus?.configured,
   });
-
-  const insightsMutation = useMutation({
-    mutationFn: async ({ question, days }: { question?: string; days: number }) => {
-      const response = await apiRequest("POST", "/api/insights", { question, days });
-      if (!response.ok) throw new Error("Failed to generate insights");
-      return response.json();
-    },
-  });
-
-  const handleGenerateInsights = () => {
-    insightsMutation.mutate({ question: question || undefined, days: parseInt(days) });
-  };
 
   // Memoize chart data to prevent unnecessary recalculations on re-renders
   const chartData = useMemo(() => 
@@ -584,92 +569,25 @@ export default function Insights() {
           </Card>
         )}
 
-        {/* AI Thematic Synthesis */}
-        <Card className="glass-card border-white/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-yellow-500" />
-              AI Thematic Synthesis
-            </CardTitle>
-            <CardDescription>
-              Ask questions about patterns in your memories or get an automatic analysis
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4">
-              <Textarea
-                placeholder="Ask a question like: 'What patterns exist in my work stress?' or leave empty for general insights..."
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                className="flex-1 glass-card border-white/20 min-h-[80px]"
-                data-testid="input-question"
-              />
-            </div>
-            <Button
-              onClick={handleGenerateInsights}
-              disabled={insightsMutation.isPending}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90"
-              data-testid="button-generate-insights"
-            >
-              {insightsMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate Insights
-                </>
-              )}
-            </Button>
-
-            {insightsMutation.data && (
-              <div className="mt-6 space-y-4 animate-fade-in">
-                <div className="glass-card p-4 rounded-xl">
-                  <h4 className="font-medium text-foreground mb-2">Summary</h4>
-                  <p className="text-muted-foreground">{insightsMutation.data.data.summary}</p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Based on {insightsMutation.data.memoriesAnalyzed} memories • {insightsMutation.data.data.timespan}
-                  </p>
-                </div>
-
-                {insightsMutation.data.data.patterns.length > 0 && (
-                  <div className="glass-card p-4 rounded-xl">
-                    <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-primary" />
-                      Patterns Detected
-                    </h4>
-                    <ul className="space-y-2">
-                      {insightsMutation.data.data.patterns.map((pattern: string, i: number) => (
-                        <li key={i} className="text-muted-foreground flex items-start gap-2">
-                          <span className="text-primary">•</span>
-                          {pattern}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {insightsMutation.data.data.recommendations.length > 0 && (
-                  <div className="glass-card p-4 rounded-xl border-l-4 border-yellow-500">
-                    <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
-                      <Lightbulb className="w-4 h-4 text-yellow-500" />
-                      Recommendations
-                    </h4>
-                    <ul className="space-y-2">
-                      {insightsMutation.data.data.recommendations.map((rec: string, i: number) => (
-                        <li key={i} className="text-muted-foreground flex items-start gap-2">
-                          <span className="text-yellow-500">→</span>
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
+        {/* AI Thematic Synthesis Link */}
+        <Card className="glass-card border-white/20 hover:border-purple-500/30 transition-colors cursor-pointer group">
+          <a href="/synthesis" className="block">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-500" />
+                AI Thematic Synthesis
+                <span className="ml-auto text-muted-foreground group-hover:text-purple-500 transition-colors">→</span>
+              </CardTitle>
+              <CardDescription>
+                Deep analysis of patterns in your memories with interactive Q&A
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Get a comprehensive analysis of your memories, discover hidden patterns, and ask follow-up questions to explore your insights further.
+              </p>
+            </CardContent>
+          </a>
         </Card>
       </div>
     </AppLayout>
