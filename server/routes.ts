@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, type User, type MCPPayload, type LogEntry } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -1988,6 +1988,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to generate briefing:", error);
       sendErrorResponse(res, 500, "Failed to generate briefing", error);
+    }
+  });
+
+  /**
+   * GET /api/news-feed - Generate personalized news feed from user's Helix ecosystem
+   * 
+   * Aggregates data from memories, calendars, emails, and financial accounts
+   * to create news-style stories about the user's personal ecosystem.
+   * Uses caching to avoid regenerating on every request (30-minute TTL).
+   */
+  app.get("/api/news-feed", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const forceRefresh = req.query.refresh === 'true';
+      const userTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : 'UTC';
+      
+      const today = new Date().toISOString().split('T')[0];
+      const cacheKey = `${today}-${userTimezone}`;
+      
+      if (!forceRefresh) {
+        const cached = await storage.getAiCache(user.id, 'newsfeed', cacheKey);
+        if (cached) {
+          const latestTimestamp = await storage.getLatestMemoryTimestamp(user.id);
+          const cacheTime = new Date(cached.generatedAt).getTime();
+          const latestTime = latestTimestamp?.getTime() || 0;
+          
+          if (latestTime <= cacheTime) {
+            return res.json({
+              status: 'success',
+              data: cached.data,
+              dataSources: (cached.data as PersonalNewsFeed).dataSources,
+              cached: true,
+              generatedAt: cached.generatedAt.toISOString()
+            });
+          }
+        }
+      }
+      
+      // Get memories from last 7 days using optimized DB query
+      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 100);
+      
+      let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
+      const userSettings = await storage.getSettings(user.id);
+      
+      try {
+        const preferredEmailProvider = userSettings?.emailProvider;
+        
+        if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
+          const gmailConnected = await isGmailConnected();
+          if (gmailConnected) {
+            const { getRecentEmails } = await import('./gmail-service');
+            const emails = await getRecentEmails(10);
+            emailContext = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
+              subject: e.subject,
+              from: e.from,
+              snippet: e.snippet,
+              date: e.date
+            }));
+          }
+        }
+        
+        if (emailContext.length === 0 && (!preferredEmailProvider || preferredEmailProvider === 'outlook')) {
+          const outlookConnected = await isOutlookMailConnected();
+          if (outlookConnected) {
+            const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+            const emails = await getOutlookRecentEmails(10);
+            emailContext = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
+              subject: e.subject,
+              from: e.from,
+              snippet: e.snippet,
+              date: e.date
+            }));
+          }
+        }
+      } catch (emailError) {
+        // Email fetch failed, continue without email context
+      }
+      
+      let calendarEvents: Array<{ title: string; startTime: Date; endTime: Date; attendees?: string[]; location?: string }> = [];
+      try {
+        const calendarConnected = await isCalendarConnected();
+        if (calendarConnected) {
+          const events = await getTodaysEvents();
+          calendarEvents = events.map(e => ({
+            title: e.title,
+            startTime: e.startTime,
+            endTime: e.endTime,
+            attendees: e.attendees,
+            location: e.location
+          }));
+        }
+      } catch (calendarError) {
+        // Calendar fetch failed, continue without calendar context
+      }
+      
+      let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
+      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
+        try {
+          const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
+          if (rawSummary && rawSummary.transactionCount > 0) {
+            financialSummary = {
+              totalSpending: rawSummary.totalSpending,
+              transactionCount: rawSummary.transactionCount,
+              categoryBreakdown: rawSummary.categoryBreakdown,
+              topMerchants: rawSummary.topMerchants
+            };
+          }
+        } catch (finError) {
+          // Financial fetch failed, continue without financial context
+        }
+      }
+      
+      const newsFeed = await generatePersonalNewsFeed(
+        recentMemories.map((m: LogEntry) => ({
+          memoryText: m.memoryText,
+          mood: m.mood || undefined,
+          moodScore: m.moodScore || undefined,
+          timestamp: m.timestamp,
+          topicTag: m.topicTag,
+          detectedPeople: m.detectedPeople || undefined,
+        })),
+        calendarEvents.length > 0 ? calendarEvents : undefined,
+        emailContext.length > 0 ? emailContext : undefined,
+        financialSummary,
+        user.username,
+        userTimezone
+      );
+
+      const memoriesHash = recentMemories.map(m => m.id).join(',');
+      await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, 30);
+
+      res.json({
+        status: 'success',
+        data: newsFeed,
+        dataSources: newsFeed.dataSources,
+        cached: false,
+        generatedAt: newsFeed.generatedAt.toISOString()
+      });
+    } catch (error) {
+      console.error("Error generating news feed:", error);
+      sendErrorResponse(res, 500, "Failed to generate news feed", error);
     }
   });
 

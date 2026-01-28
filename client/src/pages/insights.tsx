@@ -21,6 +21,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, LineChart, Line, CartesianGrid, Legend, Tooltip } from "recharts";
+import PersonalInsights from "@/components/personal-insights";
 
 interface MoodStat {
   mood: string;
@@ -265,6 +266,9 @@ export default function Insights() {
             </div>
           </div>
         </div>
+
+        {/* Personal Insights from AI */}
+        <PersonalInsights />
 
         {/* Mood Analytics */}
         <div className="grid md:grid-cols-2 gap-6 w-full overflow-hidden">
