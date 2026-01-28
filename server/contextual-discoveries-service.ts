@@ -280,31 +280,62 @@ function categorizeDiscovery(insight: InsightContext, result: TavilyResult): Dis
   return 'general';
 }
 
+function normalizeText(text: string): string[] {
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'that', 'this', 'these', 'those', 'what', 'which', 'who', 'whom', 'whose', 'where', 'when', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once', 'your', 'you', 'best', 'top']);
+  return text.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+}
+
+function calculateSimilarity(words1: string[], words2: string[]): number {
+  if (words1.length === 0 || words2.length === 0) return 0;
+  const set1 = new Set(words1);
+  const set2 = new Set(words2);
+  const intersection = Array.from(set1).filter(w => set2.has(w)).length;
+  const union = new Set(words1.concat(words2)).size;
+  return union > 0 ? intersection / union : 0;
+}
+
 function deduplicateDiscoveries(discoveries: Discovery[]): Discovery[] {
-  const seen = new Map<string, Discovery>();
+  const unique: Discovery[] = [];
   
   for (const discovery of discoveries) {
-    // Create a simple fingerprint from title words
-    const titleWords = discovery.title.toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter(w => w.length > 3)
-      .slice(0, 4)
-      .sort()
-      .join(' ');
+    const titleWords = normalizeText(discovery.title);
+    const contentWords = normalizeText(discovery.content).slice(0, 30);
+    const combinedWords = [...titleWords, ...contentWords];
     
-    if (!seen.has(titleWords)) {
-      seen.set(titleWords, discovery);
-    } else {
-      // Keep the one with higher relevance score
-      const existing = seen.get(titleWords)!;
-      if (discovery.relevanceScore > existing.relevanceScore) {
-        seen.set(titleWords, discovery);
+    let isDuplicate = false;
+    
+    for (const existing of unique) {
+      const existingTitleWords = normalizeText(existing.title);
+      const existingContentWords = normalizeText(existing.content).slice(0, 30);
+      const existingCombined = [...existingTitleWords, ...existingContentWords];
+      
+      const titleSimilarity = calculateSimilarity(titleWords, existingTitleWords);
+      const contentSimilarity = calculateSimilarity(contentWords, existingContentWords);
+      const combinedSimilarity = calculateSimilarity(combinedWords, existingCombined);
+      
+      const sameDomain = existing.source === discovery.source;
+      const sameContext = existing.insightContext === discovery.insightContext;
+      
+      if (
+        titleSimilarity > 0.5 ||
+        contentSimilarity > 0.6 ||
+        combinedSimilarity > 0.45 ||
+        (sameDomain && sameContext && titleSimilarity > 0.3)
+      ) {
+        isDuplicate = true;
+        break;
       }
+    }
+    
+    if (!isDuplicate) {
+      unique.push(discovery);
     }
   }
   
-  return Array.from(seen.values()).sort((a, b) => b.relevanceScore - a.relevanceScore);
+  return unique.sort((a, b) => b.relevanceScore - a.relevanceScore);
 }
 
 export async function getContextualDiscoveries(
