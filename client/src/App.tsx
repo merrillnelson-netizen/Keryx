@@ -23,6 +23,8 @@ import Timeline from "@/pages/timeline";
 import Dashboard from "@/pages/dashboard";
 import LandingPage from "@/pages/landing";
 import Synthesis from "@/pages/synthesis";
+import Ideas from "@/pages/ideas";
+import IdeaDetail from "@/pages/idea-detail";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -80,6 +82,12 @@ function Router() {
       </Route>
       <Route path="/synthesis">
         {() => <ProtectedRoute component={Synthesis} />}
+      </Route>
+      <Route path="/ideas">
+        {() => <ProtectedRoute component={Ideas} />}
+      </Route>
+      <Route path="/ideas/:id">
+        {() => <ProtectedRoute component={IdeaDetail} />}
       </Route>
       <Route path="/people">
         {() => <ProtectedRoute component={People} />}
