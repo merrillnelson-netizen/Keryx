@@ -198,7 +198,9 @@ export async function searchForDiscoveries(
     const searchQuery = buildSearchQuery(insight);
     
     try {
-      console.log(`Tavily search: "${searchQuery}" for insight: ${insight.summary.slice(0, 50)}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Tavily search: "${searchQuery}" for insight: ${insight.summary.slice(0, 50)}`);
+      }
       
       const response = await tvly.search(searchQuery, {
         max_results: 3,
@@ -347,7 +349,9 @@ export async function getContextualDiscoveries(
 ): Promise<DiscoveriesResponse> {
   const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData);
   
-  console.log(`Extracted ${insights.length} searchable insights`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`Extracted ${insights.length} searchable insights`);
+  }
   
   const result = await searchForDiscoveries(insights, tavilyApiKey);
   
