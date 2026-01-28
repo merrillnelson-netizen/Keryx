@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, type User, type MCPPayload, type LogEntry } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -3333,6 +3333,386 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to answer financial query", error);
+    }
+  });
+
+  // ============================================
+  // IDEAS ROUTES - Idea incubator for brainstorming
+  // ============================================
+
+  // Get all ideas for user, optionally filtered by stage
+  app.get("/api/ideas", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const stage = req.query.stage as string | undefined;
+      
+      const ideas = await storage.getIdeas(user.id, stage);
+      res.json(ideas);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch ideas", error);
+    }
+  });
+
+  // Get single idea with tasks
+  app.get("/api/ideas/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const idea = await storage.getIdea(id, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      const tasks = await storage.getIdeaTasks(id);
+      res.json({ ...idea, tasks });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch idea", error);
+    }
+  });
+
+  // Create new idea
+  app.post("/api/ideas", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const parsed = insertIdeaSchema.safeParse(req.body);
+      
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid idea data", parsed.error);
+      }
+      
+      const idea = await storage.createIdea(user.id, parsed.data);
+      res.status(201).json(idea);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create idea", error);
+    }
+  });
+
+  // Update idea (title, description, stage)
+  app.patch("/api/ideas/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const updateSchema = z.object({
+        title: z.string().optional(),
+        description: z.string().optional(),
+        stage: z.enum([
+          IDEA_STAGES.SPARK,
+          IDEA_STAGES.EXPLORING,
+          IDEA_STAGES.PLANNING,
+          IDEA_STAGES.IN_PROGRESS,
+          IDEA_STAGES.COMPLETED,
+          IDEA_STAGES.DROPPED,
+        ]).optional(),
+      });
+      
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid update data", parsed.error);
+      }
+      
+      const updated = await storage.updateIdea(id, user.id, parsed.data);
+      if (!updated) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update idea", error);
+    }
+  });
+
+  // Delete idea
+  app.delete("/api/ideas/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteIdea(id, user.id);
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete idea", error);
+    }
+  });
+
+  // Chat with AI about idea
+  app.post("/api/ideas/:id/chat", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      const { message } = req.body;
+      
+      if (!message || typeof message !== 'string') {
+        return sendErrorResponse(res, 400, "Message is required");
+      }
+      
+      const idea = await storage.getIdea(id, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      // Add user message to chat history
+      const userMessage: IdeaChatMessage = {
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString(),
+      };
+      await storage.addIdeaChatMessage(id, user.id, userMessage);
+      
+      // Get updated idea with new message
+      const updatedIdea = await storage.getIdea(id, user.id);
+      const chatHistory = (updatedIdea?.chatHistory as IdeaChatMessage[]) || [];
+      
+      // Build context for AI
+      const systemPrompt = `You are a helpful brainstorming assistant helping the user develop their idea. 
+The idea is titled "${idea.title}"${idea.description ? ` and described as: ${idea.description}` : ''}.
+Current stage: ${idea.stage}
+
+Your role is to:
+- Help them explore and refine their idea
+- Ask clarifying questions when needed
+- Suggest ways to break down the idea into actionable steps
+- Provide constructive feedback
+- Help them decide if the idea is worth pursuing
+
+Be encouraging but honest. Keep responses concise and actionable.`;
+
+      // Format chat history for OpenAI
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...chatHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      ];
+      
+      // Call OpenAI
+      const openai = await import('openai');
+      const client = new openai.OpenAI();
+      
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages,
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+      
+      const assistantContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
+      
+      // Add assistant response to chat history
+      const assistantMessage: IdeaChatMessage = {
+        role: 'assistant',
+        content: assistantContent,
+        timestamp: new Date().toISOString(),
+      };
+      const finalIdea = await storage.addIdeaChatMessage(id, user.id, assistantMessage);
+      
+      res.json({
+        message: assistantMessage,
+        idea: finalIdea,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to chat about idea", error);
+    }
+  });
+
+  // Generate tasks from idea using AI
+  app.post("/api/ideas/:id/generate-tasks", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const idea = await storage.getIdea(id, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      const chatHistory = (idea.chatHistory as IdeaChatMessage[]) || [];
+      const conversationContext = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+      
+      const prompt = `Based on this idea and the conversation about it, generate a list of actionable tasks/steps to make this idea a reality.
+
+Idea Title: ${idea.title}
+${idea.description ? `Description: ${idea.description}` : ''}
+
+${conversationContext ? `Conversation so far:\n${conversationContext}` : ''}
+
+Generate 3-7 specific, actionable tasks. Return them as a JSON array of objects with "title" and "description" fields.
+Example format:
+[
+  {"title": "Research competitors", "description": "Look at existing solutions in the market"},
+  {"title": "Define MVP features", "description": "List the minimum features needed for a first version"}
+]
+
+Return ONLY the JSON array, no other text.`;
+
+      const openai = await import('openai');
+      const client = new openai.OpenAI();
+      
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+      
+      const content = response.choices[0]?.message?.content || '[]';
+      
+      // Parse the JSON response
+      let tasks: { title: string; description?: string }[];
+      try {
+        // Extract JSON from response (handle markdown code blocks)
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        tasks = JSON.parse(jsonMatch?.[0] || '[]');
+      } catch {
+        return sendErrorResponse(res, 500, "Failed to parse AI response");
+      }
+      
+      // Create the tasks in the database
+      const existingTasks = await storage.getIdeaTasks(id);
+      const startOrder = existingTasks.length;
+      
+      const createdTasks = await Promise.all(
+        tasks.map((task, index) =>
+          storage.createIdeaTask({
+            ideaId: id,
+            title: task.title,
+            description: task.description || null,
+            order: startOrder + index,
+          })
+        )
+      );
+      
+      // Update idea stage to planning if still in exploring
+      if (idea.stage === IDEA_STAGES.SPARK || idea.stage === IDEA_STAGES.EXPLORING) {
+        await storage.updateIdea(id, user.id, { stage: IDEA_STAGES.PLANNING });
+      }
+      
+      res.json({ tasks: createdTasks });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to generate tasks", error);
+    }
+  });
+
+  // ============================================
+  // IDEA TASKS ROUTES
+  // ============================================
+
+  // Create task for idea
+  app.post("/api/ideas/:ideaId/tasks", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { ideaId } = req.params;
+      
+      // Verify idea ownership
+      const idea = await storage.getIdea(ideaId, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      const parsed = insertIdeaTaskSchema.safeParse({ ...req.body, ideaId });
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid task data", parsed.error);
+      }
+      
+      // Get current max order
+      const existingTasks = await storage.getIdeaTasks(ideaId);
+      const maxOrder = existingTasks.length > 0 
+        ? Math.max(...existingTasks.map(t => t.order)) + 1 
+        : 0;
+      
+      const task = await storage.createIdeaTask({
+        ...parsed.data,
+        order: parsed.data.order ?? maxOrder,
+      });
+      
+      res.status(201).json(task);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create task", error);
+    }
+  });
+
+  // Update task
+  app.patch("/api/ideas/:ideaId/tasks/:taskId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { ideaId, taskId } = req.params;
+      
+      // Verify idea ownership
+      const idea = await storage.getIdea(ideaId, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      const updateSchema = z.object({
+        title: z.string().optional(),
+        description: z.string().nullable().optional(),
+        isCompleted: z.boolean().optional(),
+        order: z.number().optional(),
+      });
+      
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid update data", parsed.error);
+      }
+      
+      const updated = await storage.updateIdeaTask(taskId, parsed.data);
+      if (!updated) {
+        return sendErrorResponse(res, 404, "Task not found");
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update task", error);
+    }
+  });
+
+  // Delete task
+  app.delete("/api/ideas/:ideaId/tasks/:taskId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { ideaId, taskId } = req.params;
+      
+      // Verify idea ownership
+      const idea = await storage.getIdea(ideaId, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      const deleted = await storage.deleteIdeaTask(taskId);
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Task not found");
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete task", error);
+    }
+  });
+
+  // Reorder tasks
+  app.post("/api/ideas/:ideaId/tasks/reorder", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { ideaId } = req.params;
+      const { taskIds } = req.body;
+      
+      // Verify idea ownership
+      const idea = await storage.getIdea(ideaId, user.id);
+      if (!idea) {
+        return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      if (!Array.isArray(taskIds)) {
+        return sendErrorResponse(res, 400, "taskIds must be an array");
+      }
+      
+      await storage.reorderIdeaTasks(ideaId, taskIds);
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to reorder tasks", error);
     }
   });
 
