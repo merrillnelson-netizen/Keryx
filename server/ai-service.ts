@@ -434,13 +434,20 @@ export interface MorningBriefing {
  * @param financialSummary - Optional spending summary from connected financial accounts
  * @returns Promise<MorningBriefing>
  */
+export interface PersonContext {
+  name: string;
+  relationship?: string | null;
+  notes?: string | null;
+}
+
 export async function generateMorningBriefing(
   recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[] }>,
   userName?: string,
   localHour?: number,
   recentEmails?: EmailContext[],
   activeProjects?: string[],
-  financialSummary?: FinancialSummary
+  financialSummary?: FinancialSummary,
+  knownPeople?: PersonContext[]
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -457,6 +464,19 @@ export async function generateMorningBriefing(
       m.detectedPeople?.forEach(p => mentionedPeople.add(p.toLowerCase()));
       if (m.topicTag) topics.add(m.topicTag.toLowerCase());
     });
+
+    // Format people context if available (user's relationship details)
+    let peopleContext = '';
+    if (knownPeople && knownPeople.length > 0) {
+      const relevantPeople = knownPeople.filter(p => 
+        p.relationship || p.notes
+      );
+      if (relevantPeople.length > 0) {
+        peopleContext = `\n\nPEOPLE IN USER'S LIFE (use this to personalize mentions):\n${relevantPeople.map(p => 
+          `- ${p.name}${p.relationship ? ` (${p.relationship})` : ''}${p.notes ? `: ${p.notes}` : ''}`
+        ).join('\n')}`;
+      }
+    }
 
     // Format email context if available
     let emailContext = '';
@@ -489,7 +509,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}, create a personalized briefing that:
 1. GREETING: A warm, personalized greeting mentioning their name if provided
 2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
 3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
@@ -498,6 +518,8 @@ Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financi
 6. AFFIRMATION: An encouraging statement or positive affirmation
 ${recentEmails?.length ? `7. EMAIL_HIGHLIGHTS: 1-3 relevant emails that relate to people or topics from their memories (if any match). Only include emails that genuinely connect to something in their memories - don't force connections.` : ''}
 ${financialSummary ? `8. FINANCIAL_INSIGHTS: 1-2 brief, non-judgmental observations about spending patterns. Focus on facts and any connections to their memories/activities. Keep it supportive, not preachy.` : ''}
+
+IMPORTANT: When people are mentioned in memories, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship to the user. Use this relationship context to make the briefing feel more personal. For example, if "Kim" is listed as "daughter", refer to her as "your daughter Kim" rather than just "Kim" or "a friend named Kim".
 
 Be warm but not overly effusive. Be practical and helpful. Focus on actionable insights.
 
@@ -516,8 +538,8 @@ Respond with JSON:
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },
@@ -853,7 +875,8 @@ export async function generatePersonalNewsFeed(
   recentEmails?: EmailContext[],
   financialSummary?: FinancialSummary,
   userName?: string,
-  userTimezone: string = 'UTC'
+  userTimezone: string = 'UTC',
+  knownPeople?: PersonContext[]
 ): Promise<PersonalNewsFeed> {
   try {
     const formatDateInTimezone = (date: Date, tz: string) => {
@@ -879,11 +902,19 @@ export async function generatePersonalNewsFeed(
       `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
     ).join('\n\n');
 
+    // Get current date/time in user's timezone for accurate "today/tomorrow" references
+    const nowInUserTz = new Date().toLocaleString('en-US', { timeZone: userTimezone });
+    const userLocalDate = new Date(nowInUserTz);
+    const todayStr = formatDateInTimezone(new Date(), userTimezone);
+    
     let calendarContext = '';
     if (upcomingEvents && upcomingEvents.length > 0) {
-      calendarContext = `\n\nUPCOMING CALENDAR EVENTS:\n${upcomingEvents.map(e => 
-        `- ${e.title} on ${formatDateInTimezone(new Date(e.startTime), userTimezone)} at ${formatTimeInTimezone(new Date(e.startTime), userTimezone)}${e.attendees?.length ? ` with ${e.attendees.join(', ')}` : ''}${e.location ? ` at ${e.location}` : ''}`
-      ).join('\n')}`;
+      calendarContext = `\n\nTODAY'S DATE (user's local time): ${todayStr}\n\nUPCOMING CALENDAR EVENTS:\n${upcomingEvents.map(e => {
+        const eventDate = formatDateInTimezone(new Date(e.startTime), userTimezone);
+        const isToday = eventDate === todayStr;
+        const dayLabel = isToday ? '(TODAY)' : '';
+        return `- ${e.title} on ${eventDate} ${dayLabel} at ${formatTimeInTimezone(new Date(e.startTime), userTimezone)}${e.attendees?.length ? ` with ${e.attendees.join(', ')}` : ''}${e.location ? ` at ${e.location}` : ''}`;
+      }).join('\n')}`;
     }
 
     let emailContext = '';
@@ -900,6 +931,19 @@ export async function generatePersonalNewsFeed(
       const topMerchants = financialSummary.topMerchants.slice(0, 5)
         .map(m => `${m.merchant}: $${m.amount.toFixed(2)}`).join(', ');
       financialContext = `\n\nFINANCIAL ACTIVITY (last 7 days):\n- Total spending: $${financialSummary.totalSpending.toFixed(2)}\n- Transactions: ${financialSummary.transactionCount}\n- Categories: ${topCategories}\n- Merchants: ${topMerchants}`;
+    }
+
+    // Format people context if available (user's relationship details)
+    let peopleContext = '';
+    if (knownPeople && knownPeople.length > 0) {
+      const relevantPeople = knownPeople.filter(p => 
+        p.relationship || p.notes
+      );
+      if (relevantPeople.length > 0) {
+        peopleContext = `\n\nPEOPLE IN USER'S LIFE (use this to personalize mentions - refer to people by their relationship when known):\n${relevantPeople.map(p => 
+          `- ${p.name}${p.relationship ? ` (${p.relationship})` : ''}${p.notes ? `: ${p.notes}` : ''}`
+        ).join('\n')}`;
+      }
     }
 
     const response = await openai.chat.completions.create({
@@ -948,6 +992,8 @@ Example stories:
 - Headline: "Weekend Productivity Streak Continues"
   Summary: "Your mood scores have improved 20% since Monday, with most positive memories centered around project work."
 
+IMPORTANT: When people are mentioned, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship. Use this to make stories more personal. For example, if "Kim" is listed as "daughter", your headline should say "Daughter Kim" or refer to "your daughter Kim" rather than just "Kim" or "friend Kim".
+
 Respond with JSON:
 {
   "stories": [
@@ -967,7 +1013,7 @@ Respond with JSON:
         },
         {
           role: "user",
-          content: `Generate my personal news feed based on this data from my Helix ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${calendarContext}${emailContext}${financialContext}\n\nCreate news stories that synthesize insights across these data sources.`
+          content: `Generate my personal news feed based on this data from my Helix ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}\n\nCreate news stories that synthesize insights across these data sources.`
         },
       ],
       response_format: { type: "json_object" },

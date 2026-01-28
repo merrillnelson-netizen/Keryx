@@ -1926,6 +1926,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userSettings = await storage.getSettings(user.id);
       const activeProjects = userSettings?.activeProjects || undefined;
       
+      // Fetch user's people data for personalized relationship context
+      const userPeople = await storage.getPeople(user.id);
+      const knownPeople = userPeople.map(p => ({
+        name: p.name,
+        relationship: p.relationship,
+        notes: p.notes,
+      }));
+      
       // Fetch financial summary if Plaid is enabled and feature is available
       let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
       if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
@@ -1958,7 +1966,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         localHour,
         emailContext.length > 0 ? emailContext : undefined,
         activeProjects,
-        financialSummary
+        financialSummary,
+        knownPeople.length > 0 ? knownPeople : undefined
       );
 
       // Cache the result (30 minute TTL)
@@ -2100,6 +2109,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Fetch user's people data for personalized relationship context
+      const userPeople = await storage.getPeople(user.id);
+      const knownPeople = userPeople.map(p => ({
+        name: p.name,
+        relationship: p.relationship,
+        notes: p.notes,
+      }));
+      
       const newsFeed = await generatePersonalNewsFeed(
         recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
@@ -2113,7 +2130,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailContext.length > 0 ? emailContext : undefined,
         financialSummary,
         user.username,
-        userTimezone
+        userTimezone,
+        knownPeople.length > 0 ? knownPeople : undefined
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
