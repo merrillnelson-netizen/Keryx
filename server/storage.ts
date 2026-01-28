@@ -1,5 +1,5 @@
 import { 
-  users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache,
+  users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -7,7 +7,10 @@ import {
   type Person, type InsertPerson,
   type AiAction, type InsertAiAction,
   type AiActionPreference, type InsertAiActionPreference,
-  type AiCache
+  type AiCache,
+  type Idea, type InsertIdea,
+  type IdeaTask, type InsertIdeaTask,
+  type IdeaChatMessage
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -84,6 +87,21 @@ export interface IStorage {
   setAiCache(userId: string, cacheType: string, cacheKey: string, data: any, memoriesHash: string, memoriesCount: number, ttlMinutes?: number): Promise<AiCache>;
   invalidateAiCache(userId: string, cacheType?: string): Promise<void>;
   getLatestMemoryTimestamp(userId: string): Promise<Date | null>;
+
+  // Ideas (user-scoped)
+  getIdeas(userId: string, stage?: string): Promise<Idea[]>;
+  getIdea(id: string, userId: string): Promise<Idea | undefined>;
+  createIdea(userId: string, idea: InsertIdea): Promise<Idea>;
+  updateIdea(id: string, userId: string, updates: Partial<InsertIdea & { chatHistory: IdeaChatMessage[] }>): Promise<Idea | undefined>;
+  deleteIdea(id: string, userId: string): Promise<boolean>;
+  addIdeaChatMessage(id: string, userId: string, message: IdeaChatMessage): Promise<Idea | undefined>;
+  
+  // Idea Tasks (user-scoped via idea ownership)
+  getIdeaTasks(ideaId: string): Promise<IdeaTask[]>;
+  createIdeaTask(task: InsertIdeaTask): Promise<IdeaTask>;
+  updateIdeaTask(id: string, updates: Partial<InsertIdeaTask>): Promise<IdeaTask | undefined>;
+  deleteIdeaTask(id: string): Promise<boolean>;
+  reorderIdeaTasks(ideaId: string, taskIds: string[]): Promise<void>;
 }
 
 /**
@@ -1210,6 +1228,190 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to get latest memory timestamp:', error);
       return null;
+    }
+  }
+
+  /**
+   * IDEAS MANAGEMENT METHODS
+   * Handle user ideas through various stages of development
+   */
+
+  async getIdeas(userId: string, stage?: string): Promise<Idea[]> {
+    try {
+      if (stage) {
+        return await db
+          .select()
+          .from(ideas)
+          .where(and(eq(ideas.userId, userId), eq(ideas.stage, stage)))
+          .orderBy(desc(ideas.updatedAt));
+      }
+      return await db
+        .select()
+        .from(ideas)
+        .where(eq(ideas.userId, userId))
+        .orderBy(desc(ideas.updatedAt));
+    } catch (error) {
+      console.error('Failed to get ideas:', error);
+      throw new Error('Database error while fetching ideas');
+    }
+  }
+
+  async getIdea(id: string, userId: string): Promise<Idea | undefined> {
+    try {
+      const [idea] = await db
+        .select()
+        .from(ideas)
+        .where(and(eq(ideas.id, id), eq(ideas.userId, userId)));
+      return idea || undefined;
+    } catch (error) {
+      console.error('Failed to get idea:', error);
+      throw new Error('Database error while fetching idea');
+    }
+  }
+
+  async createIdea(userId: string, idea: InsertIdea): Promise<Idea> {
+    try {
+      const [newIdea] = await db
+        .insert(ideas)
+        .values({
+          ...idea,
+          userId,
+          chatHistory: [],
+        })
+        .returning();
+      return newIdea;
+    } catch (error) {
+      console.error('Failed to create idea:', error);
+      throw new Error('Database error while creating idea');
+    }
+  }
+
+  async updateIdea(id: string, userId: string, updates: Partial<InsertIdea & { chatHistory: IdeaChatMessage[] }>): Promise<Idea | undefined> {
+    try {
+      const [updated] = await db
+        .update(ideas)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(ideas.id, id), eq(ideas.userId, userId)))
+        .returning();
+      return updated || undefined;
+    } catch (error) {
+      console.error('Failed to update idea:', error);
+      throw new Error('Database error while updating idea');
+    }
+  }
+
+  async deleteIdea(id: string, userId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(ideas)
+        .where(and(eq(ideas.id, id), eq(ideas.userId, userId)))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete idea:', error);
+      throw new Error('Database error while deleting idea');
+    }
+  }
+
+  async addIdeaChatMessage(id: string, userId: string, message: IdeaChatMessage): Promise<Idea | undefined> {
+    try {
+      // First get the current idea to append to chat history
+      const idea = await this.getIdea(id, userId);
+      if (!idea) return undefined;
+
+      const currentHistory = (idea.chatHistory as IdeaChatMessage[]) || [];
+      const updatedHistory = [...currentHistory, message];
+
+      const [updated] = await db
+        .update(ideas)
+        .set({
+          chatHistory: updatedHistory,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(ideas.id, id), eq(ideas.userId, userId)))
+        .returning();
+      return updated || undefined;
+    } catch (error) {
+      console.error('Failed to add chat message to idea:', error);
+      throw new Error('Database error while adding chat message');
+    }
+  }
+
+  /**
+   * IDEA TASKS MANAGEMENT METHODS
+   * Handle tasks/steps to bring ideas to reality
+   */
+
+  async getIdeaTasks(ideaId: string): Promise<IdeaTask[]> {
+    try {
+      return await db
+        .select()
+        .from(ideaTasks)
+        .where(eq(ideaTasks.ideaId, ideaId))
+        .orderBy(ideaTasks.order);
+    } catch (error) {
+      console.error('Failed to get idea tasks:', error);
+      throw new Error('Database error while fetching idea tasks');
+    }
+  }
+
+  async createIdeaTask(task: InsertIdeaTask): Promise<IdeaTask> {
+    try {
+      const [newTask] = await db
+        .insert(ideaTasks)
+        .values(task)
+        .returning();
+      return newTask;
+    } catch (error) {
+      console.error('Failed to create idea task:', error);
+      throw new Error('Database error while creating idea task');
+    }
+  }
+
+  async updateIdeaTask(id: string, updates: Partial<InsertIdeaTask>): Promise<IdeaTask | undefined> {
+    try {
+      const [updated] = await db
+        .update(ideaTasks)
+        .set(updates)
+        .where(eq(ideaTasks.id, id))
+        .returning();
+      return updated || undefined;
+    } catch (error) {
+      console.error('Failed to update idea task:', error);
+      throw new Error('Database error while updating idea task');
+    }
+  }
+
+  async deleteIdeaTask(id: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(ideaTasks)
+        .where(eq(ideaTasks.id, id))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete idea task:', error);
+      throw new Error('Database error while deleting idea task');
+    }
+  }
+
+  async reorderIdeaTasks(ideaId: string, taskIds: string[]): Promise<void> {
+    try {
+      // Update order for each task based on its position in the array
+      await Promise.all(
+        taskIds.map((taskId, index) =>
+          db
+            .update(ideaTasks)
+            .set({ order: index })
+            .where(and(eq(ideaTasks.id, taskId), eq(ideaTasks.ideaId, ideaId)))
+        )
+      );
+    } catch (error) {
+      console.error('Failed to reorder idea tasks:', error);
+      throw new Error('Database error while reordering tasks');
     }
   }
 }
