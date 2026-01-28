@@ -44,7 +44,8 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Hybrid Search**: Combines semantic similarity with structured filters.
 - **Application Structure**: Monorepo with shared schema (`/shared`), full TypeScript coverage with Zod validation.
 - **Key Capabilities**: AI-powered voice input, manual categorization, hybrid search, real-time feedback, mobile-first design, robust error recovery.
-- **Cognitive Search**: Mood tracking, people detection, mood distribution charts, AI thematic synthesis.
+- **Cognitive Search**: Mood tracking, people detection, mood distribution charts.
+- **AI Thematic Synthesis**: Dedicated page (/synthesis) for deep pattern analysis with interactive Q&A chat interface. Auto-generates comprehensive analysis on page load, allows follow-up questions about patterns, habits, mood trends, and recommendations. Configurable time period (7 days to 1 year).
 - **Proactive Features**: AI-generated morning briefings, pattern alerts, active projects, contextual discoveries.
 - **Personal Insights**: AI-generated insights from user's ecosystem (memories, calendars, emails, finances) displayed on Insights page. Categories: people, projects, calendar, financial, wellbeing, highlights. Cached with 30-minute TTL.
 - **Contextual Discoveries**: Uses Tavily AI Search to provide personalized, ad-free content based on user's life insights (upcoming trips, projects, financial patterns). Extracts searchable insights from calendars (next 14 days), emails, memories, and Plaid financial data, then performs contextual searches. Cached with 30-minute TTL. Requires TAVILY_API_KEY configuration. Falls back gracefully if OpenAI API key unavailable for insight extraction.

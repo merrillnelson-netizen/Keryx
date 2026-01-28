@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -570,8 +571,8 @@ export default function Insights() {
         )}
 
         {/* AI Thematic Synthesis Link */}
-        <Card className="glass-card border-white/20 hover:border-purple-500/30 transition-colors cursor-pointer group">
-          <a href="/synthesis" className="block">
+        <Link href="/synthesis">
+          <Card className="glass-card border-white/20 hover:border-purple-500/30 transition-colors cursor-pointer group">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-500" />
@@ -587,8 +588,8 @@ export default function Insights() {
                 Get a comprehensive analysis of your memories, discover hidden patterns, and ask follow-up questions to explore your insights further.
               </p>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </Link>
       </div>
     </AppLayout>
   );
