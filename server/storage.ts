@@ -27,6 +27,7 @@ export interface IStorage {
   getLogEntriesCount(userId: string): Promise<number>;
   getLogEntry(id: string, userId: string): Promise<LogEntry | undefined>;
   getRecentLogEntries(userId: string, daysBack: number, limit?: number): Promise<LogEntry[]>;
+  getRecentLogEntriesLight(userId: string, daysBack: number, limit?: number): Promise<Partial<LogEntry>[]>;
   createLogEntry(logEntry: InsertLogEntry): Promise<LogEntry>;
   updateLogEntry(id: string, userId: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
   deleteLogEntry(id: string, userId: string): Promise<boolean>;
@@ -273,6 +274,38 @@ export class DatabaseStorage implements IStorage {
         .limit(limit);
     } catch (error) {
       console.error('Failed to fetch recent log entries:', error);
+      throw new Error('Database error while fetching recent log entries');
+    }
+  }
+
+  /**
+   * OPTIMIZED: Fetch recent log entries with only fields needed for AI prompts
+   * Excludes heavy fields: embeddingVector, metadataJson
+   */
+  async getRecentLogEntriesLight(userId: string, daysBack: number, limit = 100): Promise<Partial<LogEntry>[]> {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+      
+      return await db
+        .select({
+          id: logEntries.id,
+          memoryText: logEntries.memoryText,
+          topicTag: logEntries.topicTag,
+          mood: logEntries.mood,
+          moodScore: logEntries.moodScore,
+          detectedPeople: logEntries.detectedPeople,
+          timestamp: logEntries.timestamp,
+        })
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          gte(logEntries.timestamp, cutoffDate)
+        ))
+        .orderBy(desc(logEntries.timestamp))
+        .limit(limit);
+    } catch (error) {
+      console.error('Failed to fetch recent log entries (light):', error);
       throw new Error('Database error while fetching recent log entries');
     }
   }

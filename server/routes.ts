@@ -1874,92 +1874,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get memories from last 7 days using optimized DB query
-      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 100);
+      // OPTIMIZED: Fetch independent data sources in parallel (using lightweight query)
+      const [recentMemories, userSettings, userPeople] = await Promise.all([
+        storage.getRecentLogEntriesLight(user.id, 7, 100),
+        storage.getSettings(user.id),
+        storage.getPeople(user.id)
+      ]);
       
-      // Fetch recent emails from user's preferred provider (or any connected provider)
-      let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
-      let emailSource: string | null = null;
-      try {
-        const userSettings = await storage.getSettings(user.id);
-        const preferredEmailProvider = userSettings?.emailProvider;
-        
-        // Try Gmail first (if preferred or no preference)
-        if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
-          const gmailConnected = await isGmailConnected();
-          if (gmailConnected) {
-            const { getRecentEmails, getGmailCapabilities } = await import('./gmail-service');
-            const gmailCaps = await getGmailCapabilities();
-            if (gmailCaps.canRead) {
-              const emails = await getRecentEmails(10);
-              emailContext = emails.map(e => ({
-                subject: e.subject,
-                from: e.from,
-                snippet: e.snippet,
-                date: e.date
-              }));
-              if (emailContext.length > 0) emailSource = 'gmail';
-            }
-          }
-        }
-        
-        // Try Outlook if Gmail not available or not preferred
-        if (emailContext.length === 0 && (!preferredEmailProvider || preferredEmailProvider === 'outlook')) {
-          const outlookConnected = await isOutlookMailConnected();
-          if (outlookConnected) {
-            const { getOutlookRecentEmails } = await import('./outlook-mail-service');
-            const emails = await getOutlookRecentEmails(10);
-            emailContext = emails.map(e => ({
-              subject: e.subject,
-              from: e.from,
-              snippet: e.snippet,
-              date: e.date
-            }));
-            if (emailContext.length > 0) emailSource = 'outlook';
-          }
-        }
-      } catch (emailError) {
-        // Email fetch failed, continue without email context
-      }
-      
-      // Get user's active projects for priority weighting
-      const userSettings = await storage.getSettings(user.id);
       const activeProjects = userSettings?.activeProjects || undefined;
-      
-      // Fetch user's people data for personalized relationship context
-      const userPeople = await storage.getPeople(user.id);
       const knownPeople = userPeople.map(p => ({
         name: p.name,
         relationship: p.relationship,
         notes: p.notes,
       }));
       
-      // Fetch financial summary if Plaid is enabled and feature is available
-      let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
-      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
+      // OPTIMIZED: Fetch email and financial in parallel (both depend on settings)
+      const preferredEmailProvider = userSettings?.emailProvider;
+      const shouldFetchFinancial = isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings;
+      
+      // Helper to fetch emails
+      const fetchEmails = async (): Promise<{ emails: Array<{ subject: string; from: string; snippet: string; date: Date }>; source: string | null }> => {
+        try {
+          if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
+            const gmailConnected = await isGmailConnected();
+            if (gmailConnected) {
+              const { getRecentEmails, getGmailCapabilities } = await import('./gmail-service');
+              const gmailCaps = await getGmailCapabilities();
+              if (gmailCaps.canRead) {
+                const emails = await getRecentEmails(10);
+                const mapped = emails.map(e => ({ subject: e.subject, from: e.from, snippet: e.snippet, date: e.date }));
+                if (mapped.length > 0) return { emails: mapped, source: 'gmail' };
+              }
+            }
+          }
+          if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
+            const outlookConnected = await isOutlookMailConnected();
+            if (outlookConnected) {
+              const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+              const emails = await getOutlookRecentEmails(10);
+              const mapped = emails.map(e => ({ subject: e.subject, from: e.from, snippet: e.snippet, date: e.date }));
+              if (mapped.length > 0) return { emails: mapped, source: 'outlook' };
+            }
+          }
+        } catch { /* Email fetch failed */ }
+        return { emails: [], source: null };
+      };
+      
+      // Helper to fetch financial
+      const fetchFinancial = async (): Promise<{ totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
+        if (!shouldFetchFinancial) return undefined;
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
           if (rawSummary && rawSummary.transactionCount > 0) {
-            financialSummary = {
+            return {
               totalSpending: rawSummary.totalSpending,
               transactionCount: rawSummary.transactionCount,
               categoryBreakdown: rawSummary.categoryBreakdown,
               topMerchants: rawSummary.topMerchants
             };
           }
-        } catch (finError) {
-          // Financial fetch failed, continue without financial context
-          console.log("Financial data fetch skipped:", finError instanceof Error ? finError.message : finError);
-        }
-      }
+        } catch { /* Financial fetch failed */ }
+        return undefined;
+      };
+      
+      const [emailResult, financialSummary] = await Promise.all([fetchEmails(), fetchFinancial()]);
+      const emailContext = emailResult.emails;
+      const emailSource = emailResult.source;
       
       const briefing = await generateMorningBriefing(
-        recentMemories.map((m: LogEntry) => ({
-          memoryText: m.memoryText,
+        recentMemories.map(m => ({
+          memoryText: m.memoryText!,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,
-          timestamp: m.timestamp,
-          topicTag: m.topicTag,
+          timestamp: m.timestamp!,
+          topicTag: m.topicTag!,
           detectedPeople: m.detectedPeople || undefined,
         })),
         user.username,
@@ -2035,95 +2023,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get memories from last 7 days using optimized DB query
-      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 100);
+      // OPTIMIZED: Fetch independent data sources in parallel (using lightweight query)
+      const [recentMemories, userSettings, userPeople] = await Promise.all([
+        storage.getRecentLogEntriesLight(user.id, 7, 100),
+        storage.getSettings(user.id),
+        storage.getPeople(user.id)
+      ]);
       
-      let emailContext: Array<{ subject: string; from: string; snippet: string; date: Date }> = [];
-      const userSettings = await storage.getSettings(user.id);
-      
-      try {
-        const preferredEmailProvider = userSettings?.emailProvider;
-        
-        if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
-          const gmailConnected = await isGmailConnected();
-          if (gmailConnected) {
-            const { getRecentEmails } = await import('./gmail-service');
-            const emails = await getRecentEmails(10);
-            emailContext = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
-              subject: e.subject,
-              from: e.from,
-              snippet: e.snippet,
-              date: e.date
-            }));
-          }
-        }
-        
-        if (emailContext.length === 0 && (!preferredEmailProvider || preferredEmailProvider === 'outlook')) {
-          const outlookConnected = await isOutlookMailConnected();
-          if (outlookConnected) {
-            const { getOutlookRecentEmails } = await import('./outlook-mail-service');
-            const emails = await getOutlookRecentEmails(10);
-            emailContext = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
-              subject: e.subject,
-              from: e.from,
-              snippet: e.snippet,
-              date: e.date
-            }));
-          }
-        }
-      } catch (emailError) {
-        // Email fetch failed, continue without email context
-      }
-      
-      let calendarEvents: Array<{ title: string; startTime: Date; endTime: Date; attendees?: string[]; location?: string }> = [];
-      try {
-        const calendarConnected = await isCalendarConnected();
-        if (calendarConnected) {
-          const events = await getTodaysEvents();
-          calendarEvents = events.map(e => ({
-            title: e.title,
-            startTime: e.startTime,
-            endTime: e.endTime,
-            attendees: e.attendees,
-            location: e.location
-          }));
-        }
-      } catch (calendarError) {
-        // Calendar fetch failed, continue without calendar context
-      }
-      
-      let financialSummary: { totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined;
-      if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings) {
-        try {
-          const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
-          if (rawSummary && rawSummary.transactionCount > 0) {
-            financialSummary = {
-              totalSpending: rawSummary.totalSpending,
-              transactionCount: rawSummary.transactionCount,
-              categoryBreakdown: rawSummary.categoryBreakdown,
-              topMerchants: rawSummary.topMerchants
-            };
-          }
-        } catch (finError) {
-          // Financial fetch failed, continue without financial context
-        }
-      }
-      
-      // Fetch user's people data for personalized relationship context
-      const userPeople = await storage.getPeople(user.id);
       const knownPeople = userPeople.map(p => ({
         name: p.name,
         relationship: p.relationship,
         notes: p.notes,
       }));
       
+      // OPTIMIZED: Fetch email, calendar, and financial in parallel
+      const preferredEmailProvider = userSettings?.emailProvider;
+      const shouldFetchFinancial = isPlaidFeatureEnabled() && userSettings?.plaidEnabled && userSettings?.plaidIncludeInBriefings;
+      
+      const fetchEmails = async (): Promise<Array<{ subject: string; from: string; snippet: string; date: Date }>> => {
+        try {
+          if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
+            const gmailConnected = await isGmailConnected();
+            if (gmailConnected) {
+              const { getRecentEmails } = await import('./gmail-service');
+              const emails = await getRecentEmails(10);
+              const mapped = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
+                subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
+              }));
+              if (mapped.length > 0) return mapped;
+            }
+          }
+          if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
+            const outlookConnected = await isOutlookMailConnected();
+            if (outlookConnected) {
+              const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+              const emails = await getOutlookRecentEmails(10);
+              return emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
+                subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
+              }));
+            }
+          }
+        } catch { /* Email fetch failed */ }
+        return [];
+      };
+      
+      const fetchCalendar = async (): Promise<Array<{ title: string; startTime: Date; endTime: Date; attendees?: string[]; location?: string }>> => {
+        try {
+          const calendarConnected = await isCalendarConnected();
+          if (calendarConnected) {
+            const events = await getTodaysEvents();
+            return events.map(e => ({
+              title: e.title, startTime: e.startTime, endTime: e.endTime, attendees: e.attendees, location: e.location
+            }));
+          }
+        } catch { /* Calendar fetch failed */ }
+        return [];
+      };
+      
+      const fetchFinancial = async (): Promise<{ totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
+        if (!shouldFetchFinancial) return undefined;
+        try {
+          const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
+          if (rawSummary && rawSummary.transactionCount > 0) {
+            return {
+              totalSpending: rawSummary.totalSpending,
+              transactionCount: rawSummary.transactionCount,
+              categoryBreakdown: rawSummary.categoryBreakdown,
+              topMerchants: rawSummary.topMerchants
+            };
+          }
+        } catch { /* Financial fetch failed */ }
+        return undefined;
+      };
+      
+      const [emailContext, calendarEvents, financialSummary] = await Promise.all([
+        fetchEmails(), fetchCalendar(), fetchFinancial()
+      ]);
+      
       const newsFeed = await generatePersonalNewsFeed(
-        recentMemories.map((m: LogEntry) => ({
-          memoryText: m.memoryText,
+        recentMemories.map(m => ({
+          memoryText: m.memoryText!,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,
-          timestamp: m.timestamp,
-          topicTag: m.topicTag,
+          timestamp: m.timestamp!,
+          topicTag: m.topicTag!,
           detectedPeople: m.detectedPeople || undefined,
         })),
         calendarEvents.length > 0 ? calendarEvents : undefined,

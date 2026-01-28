@@ -124,6 +124,7 @@ export default function Insights() {
       }
       return response.json();
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes - analytics don't change frequently
   });
 
   const { data: moodTrend, isLoading: trendLoading } = useQuery<{ data: MoodTrendPoint[] }>({
@@ -133,6 +134,7 @@ export default function Insights() {
       if (!response.ok) throw new Error("Failed to fetch mood trend");
       return response.json();
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: topicFrequency, isLoading: topicLoading } = useQuery<{ data: TopicFrequency[] }>({
@@ -142,6 +144,7 @@ export default function Insights() {
       if (!response.ok) throw new Error("Failed to fetch topic frequency");
       return response.json();
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: plaidStatus } = useQuery<PlaidStatus>({
@@ -151,6 +154,7 @@ export default function Insights() {
       if (!response.ok) throw new Error("Failed to fetch Plaid status");
       return response.json();
     },
+    staleTime: 1000 * 60 * 10, // 10 minutes - status rarely changes
   });
 
   const { data: spendingSummary, isLoading: spendingLoading } = useQuery<SpendingSummary>({
@@ -161,6 +165,7 @@ export default function Insights() {
       return response.json();
     },
     enabled: plaidStatus?.enabled && plaidStatus?.configured,
+    staleTime: 1000 * 60 * 15, // 15 minutes - financial data syncs periodically
   });
 
   // Memoize chart data to prevent unnecessary recalculations on re-renders

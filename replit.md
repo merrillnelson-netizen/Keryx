@@ -37,6 +37,9 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Embedding Optimization**: Embeddings only regenerated when `memoryText` content actually changes.
 - **Lightweight Endpoints**: Consolidated `/api/dashboard/stats` endpoint with parallel COUNT queries.
 - **Database Indexes**: Comprehensive indexes on user_id, timestamp, topic, mood, calendar fields, and HNSW vector index.
+- **Parallel Data Fetching**: AI endpoints (briefing, news-feed) use Promise.all to fetch memories, settings, people, emails, calendar, and financial data in parallel instead of sequentially.
+- **Lightweight Memory Queries**: `getRecentLogEntriesLight` method excludes heavy fields (embedding vectors, metadata JSONB) for AI prompt assembly, reducing database payload significantly.
+- **Frontend Query Caching**: staleTime configured on all major queries (5-30 minutes based on data volatility) to prevent unnecessary refetches on window focus.
 
 ### Core Features & Design Principles
 - **AI Processing**: OpenAI GPT for metadata extraction, GPT-4o-mini for query decomposition and action detection, `text-embedding-3-small` for embeddings.
