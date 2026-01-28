@@ -50,6 +50,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+import { insertIdeaSchema } from "@shared/schema";
 
 interface Idea {
   id: string;
@@ -71,21 +73,22 @@ const STAGE_CONFIG = {
   dropped: { label: 'Dropped', icon: XCircle, color: 'bg-gray-500/20 text-gray-600 dark:text-gray-400', description: 'Not pursuing' },
 } as const;
 
-const createIdeaSchema = z.object({
+const createIdeaFormSchema = insertIdeaSchema.extend({
   title: z.string().min(1, "Title is required").max(200),
   description: z.string().max(1000).optional(),
 });
 
-type CreateIdeaForm = z.infer<typeof createIdeaSchema>;
+type CreateIdeaForm = z.infer<typeof createIdeaFormSchema>;
 
 export default function IdeasPage() {
   const [, navigate] = useLocation();
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const { toast } = useToast();
 
   const form = useForm<CreateIdeaForm>({
-    resolver: zodResolver(createIdeaSchema),
+    resolver: zodResolver(createIdeaFormSchema),
     defaultValues: {
       title: "",
       description: "",
@@ -107,6 +110,13 @@ export default function IdeasPage() {
       setIsCreateDialogOpen(false);
       form.reset();
       navigate(`/ideas/${newIdea.id}`);
+    },
+    onError: () => {
+      toast({
+        title: "Failed to create idea",
+        description: "Please try again",
+        variant: "destructive",
+      });
     },
   });
 

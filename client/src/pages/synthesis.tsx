@@ -46,6 +46,7 @@ export default function SynthesisPage() {
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: initialAnalysis, isLoading: isLoadingInitial, refetch: refetchAnalysis } = useQuery({
     queryKey: ['/api/insights', 'initial', days],
@@ -104,6 +105,9 @@ export default function SynthesisPage() {
     
     questionMutation.mutate({ question, days: parseInt(days) });
     setQuestion("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -276,6 +280,7 @@ export default function SynthesisPage() {
               <CardContent className="p-3">
                 <div className="flex gap-3 items-end">
                   <Textarea
+                    ref={textareaRef}
                     placeholder="Ask a follow-up question about your patterns, habits, or any insights..."
                     value={question}
                     onChange={(e) => {

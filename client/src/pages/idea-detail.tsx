@@ -167,6 +167,13 @@ export default function IdeaDetailPage() {
       setNewTaskTitle("");
       setIsAddingTask(false);
     },
+    onError: () => {
+      toast({
+        title: "Failed to add task",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateTaskMutation = useMutation({
@@ -178,6 +185,13 @@ export default function IdeaDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
     },
+    onError: () => {
+      toast({
+        title: "Failed to update task",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
   });
 
   const deleteTaskMutation = useMutation({
@@ -188,6 +202,13 @@ export default function IdeaDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to delete task",
+        description: "Please try again",
+        variant: "destructive",
+      });
     },
   });
 
@@ -205,11 +226,21 @@ export default function IdeaDetailPage() {
         description: "The idea has been removed",
       });
     },
+    onError: () => {
+      toast({
+        title: "Failed to delete idea",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleSendMessage = () => {
     if (!message.trim() || chatMutation.isPending) return;
     chatMutation.mutate(message.trim());
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
