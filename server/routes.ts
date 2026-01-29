@@ -506,15 +506,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Store location in location_history table (non-blocking)
       if (geoLat !== undefined && geoLng !== undefined) {
-        storage.createLocationHistory({
-          userId: user.id,
-          latitude: parseFloat(geoLat),
-          longitude: parseFloat(geoLng),
-          timestamp: new Date(),
-          placeName: geoPlaceName || undefined,
-          source: 'memory',
-          accuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
-        }).catch(err => console.error("Failed to save location history:", err));
+        const lat = parseFloat(geoLat);
+        const lng = parseFloat(geoLng);
+        // Only store if valid coordinates (not NaN and within valid ranges)
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          storage.createLocationHistory({
+            userId: user.id,
+            latitude: lat,
+            longitude: lng,
+            timestamp: new Date(),
+            placeName: geoPlaceName || undefined,
+            source: 'memory',
+            accuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
+          }).catch(err => console.error("Failed to save location history:", err));
+        }
       }
 
       // AI Action Detection: Fire-and-forget - runs in background without blocking response
@@ -757,16 +762,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Store location in location_history table (non-blocking)
         if (payload.geo?.lat !== undefined && payload.geo?.lng !== undefined) {
-          storage.createLocationHistory({
-            userId: user.id,
-            latitude: payload.geo.lat,
-            longitude: payload.geo.lng,
-            timestamp: new Date(),
-            placeName: payload.geo.placeName || undefined,
-            placeId: payload.geo.placeId || undefined,
-            source: 'memory',
-            accuracyMeters: payload.geo.accuracyMeters || undefined,
-          }).catch(err => console.error("Failed to save location history:", err));
+          const lat = payload.geo.lat;
+          const lng = payload.geo.lng;
+          // Only store if valid coordinates (not NaN and within valid ranges)
+          if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            storage.createLocationHistory({
+              userId: user.id,
+              latitude: lat,
+              longitude: lng,
+              timestamp: new Date(),
+              placeName: payload.geo.placeName || undefined,
+              placeId: payload.geo.placeId || undefined,
+              source: 'memory',
+              accuracyMeters: payload.geo.accuracyMeters || undefined,
+            }).catch(err => console.error("Failed to save location history:", err));
+          }
         }
 
         res.status(201).json({

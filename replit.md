@@ -28,7 +28,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places` tables.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Performance Optimizations
@@ -57,6 +57,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **AI Task Execution**: Detection of actionable requests (calendar, email, reminders) with policy-based approval and rollback capability.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
+- **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, location clustering, and location context integrated into AI briefings and insights.
 
 ## External Dependencies
 
