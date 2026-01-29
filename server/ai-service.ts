@@ -447,7 +447,8 @@ export async function generateMorningBriefing(
   recentEmails?: EmailContext[],
   activeProjects?: string[],
   financialSummary?: FinancialSummary,
-  knownPeople?: PersonContext[]
+  knownPeople?: PersonContext[],
+  locationContext?: string
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -502,6 +503,12 @@ export async function generateMorningBriefing(
       financialContext = `\n\nFINANCIAL SUMMARY (last 7 days):\n- Total spending: $${financialSummary.totalSpending.toFixed(2)}\n- Transactions: ${financialSummary.transactionCount}\n- Top categories: ${topCategories}\n- Top merchants: ${topSpending}`;
     }
 
+    // Format location context if available
+    let locationCtx = '';
+    if (locationContext && locationContext.trim()) {
+      locationCtx = `\n\nLOCATION CONTEXT (places you frequent):\n${locationContext}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -509,7 +516,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}, create a personalized briefing that:
 1. GREETING: A warm, personalized greeting mentioning their name if provided
 2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
 3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
@@ -538,8 +545,8 @@ Respond with JSON:
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },
@@ -844,6 +851,7 @@ export interface PersonalNewsFeed {
     calendars: number;
     emails: number;
     financial: boolean;
+    location: boolean;
   };
 }
 
@@ -876,7 +884,8 @@ export async function generatePersonalNewsFeed(
   financialSummary?: FinancialSummary,
   userName?: string,
   userTimezone: string = 'UTC',
-  knownPeople?: PersonContext[]
+  knownPeople?: PersonContext[],
+  locationContext?: string
 ): Promise<PersonalNewsFeed> {
   try {
     const formatDateInTimezone = (date: Date, tz: string) => {
@@ -946,6 +955,12 @@ export async function generatePersonalNewsFeed(
       }
     }
 
+    // Format location context if available
+    let locationCtx = '';
+    if (locationContext && locationContext.trim()) {
+      locationCtx = `\n\nLOCATION PATTERNS (places they frequent):\n${locationContext}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -966,6 +981,7 @@ STORY CATEGORIES:
 - financial: Spending patterns, notable purchases, budget observations
 - wellbeing: Mood trends, self-care patterns, health-related observations
 - highlights: Notable achievements, milestones, or positive moments
+- location: Location-based observations (places visited, routine patterns, travel activity)
 
 STORY PRIORITIES:
 - breaking: Time-sensitive or very important (upcoming event today, urgent email)
@@ -999,7 +1015,7 @@ Respond with JSON:
   "stories": [
     {
       "id": "unique-id",
-      "category": "people|projects|calendar|financial|wellbeing|highlights",
+      "category": "people|projects|calendar|financial|wellbeing|highlights|location",
       "headline": "Newspaper-style headline",
       "summary": "1-2 sentence summary",
       "details": "Optional additional context",
@@ -1013,7 +1029,7 @@ Respond with JSON:
         },
         {
           role: "user",
-          content: `Generate my personal news feed based on this data from my Helix ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}\n\nCreate news stories that synthesize insights across these data sources.`
+          content: `Generate my personal news feed based on this data from my Helix ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}\n\nCreate news stories that synthesize insights across these data sources.`
         },
       ],
       response_format: { type: "json_object" },
@@ -1039,6 +1055,7 @@ Respond with JSON:
         calendars: upcomingEvents?.length || 0,
         emails: recentEmails?.length || 0,
         financial: !!financialSummary,
+        location: !!locationContext,
       }
     };
   } catch (error) {
@@ -1051,6 +1068,7 @@ Respond with JSON:
         calendars: 0,
         emails: 0,
         financial: false,
+        location: false,
       }
     };
   }

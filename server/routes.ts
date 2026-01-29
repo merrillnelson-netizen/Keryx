@@ -1937,7 +1937,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return undefined;
       };
       
-      const [emailResult, financialSummary] = await Promise.all([fetchEmails(), fetchFinancial()]);
+      // Helper to fetch location context
+      const fetchLocationContext = async (): Promise<string | undefined> => {
+        try {
+          const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
+          const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
+            storage.getFrequentPlaces(user.id),
+            storage.getRecentLocationHistory(user.id, 7, 50),
+            storage.getLocationHistoryCount(user.id)
+          ]);
+          if (frequentPlaces.length > 0 || recentLocations.length > 0) {
+            const patterns = buildLocationContext(frequentPlaces, recentLocations, totalCount);
+            return formatLocationContextForAI(patterns);
+          }
+        } catch { /* Location fetch failed */ }
+        return undefined;
+      };
+      
+      const [emailResult, financialSummary, locationContext] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext()]);
       const emailContext = emailResult.emails;
       const emailSource = emailResult.source;
       
@@ -1955,7 +1972,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailContext.length > 0 ? emailContext : undefined,
         activeProjects,
         financialSummary,
-        knownPeople.length > 0 ? knownPeople : undefined
+        knownPeople.length > 0 ? knownPeople : undefined,
+        locationContext
       );
 
       // Cache the result (30 minute TTL)
@@ -2096,8 +2114,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return undefined;
       };
       
-      const [emailContext, calendarEvents, financialSummary] = await Promise.all([
-        fetchEmails(), fetchCalendar(), fetchFinancial()
+      const fetchLocationContext = async (): Promise<string | undefined> => {
+        try {
+          const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
+          const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
+            storage.getFrequentPlaces(user.id),
+            storage.getRecentLocationHistory(user.id, 7, 50),
+            storage.getLocationHistoryCount(user.id)
+          ]);
+          if (frequentPlaces.length > 0 || recentLocations.length > 0) {
+            const patterns = buildLocationContext(frequentPlaces, recentLocations, totalCount);
+            return formatLocationContextForAI(patterns);
+          }
+        } catch { /* Location fetch failed */ }
+        return undefined;
+      };
+      
+      const [emailContext, calendarEvents, financialSummary, locationContext] = await Promise.all([
+        fetchEmails(), fetchCalendar(), fetchFinancial(), fetchLocationContext()
       ]);
       
       const newsFeed = await generatePersonalNewsFeed(
@@ -2114,7 +2148,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         financialSummary,
         user.username,
         userTimezone,
-        knownPeople.length > 0 ? knownPeople : undefined
+        knownPeople.length > 0 ? knownPeople : undefined,
+        locationContext
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
