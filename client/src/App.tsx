@@ -25,6 +25,7 @@ import LandingPage from "@/pages/landing";
 import Synthesis from "@/pages/synthesis";
 import Ideas from "@/pages/ideas";
 import IdeaDetail from "@/pages/idea-detail";
+import Locations from "@/pages/locations";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -97,6 +98,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
+      </Route>
+      <Route path="/locations">
+        {() => <ProtectedRoute component={Locations} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

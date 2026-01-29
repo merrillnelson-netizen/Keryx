@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb } from "lucide-react";
+import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { HelixLogoIcon } from "@/components/helix-logo";
@@ -22,6 +22,7 @@ const navigation = [
   { name: "Ideas", href: "/ideas", icon: Lightbulb },
   { name: "People", href: "/people", icon: Users },
   { name: "Timeline", href: "/timeline", icon: Calendar },
+  { name: "Locations", href: "/locations", icon: MapPin },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
