@@ -129,7 +129,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       </aside>
 
       {/* Mobile Top Bar */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 m-2">
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-[100] m-2">
         <div className="glass-card-strong px-4 py-3 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
