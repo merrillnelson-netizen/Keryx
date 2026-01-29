@@ -47,6 +47,20 @@ export interface GoogleTimelinePlaceVisit {
   placeVisitImportance?: string;
 }
 
+export interface RawSignalPosition {
+  LatLng?: string;
+  latLng?: string;
+  accuracyMeters?: number;
+  altitudeMeters?: number;
+  source?: string;
+  timestamp?: string;
+  speedMetersPerSecond?: number;
+}
+
+export interface RawSignal {
+  position?: RawSignalPosition;
+}
+
 export interface GoogleTimelineObject {
   timelineObjects?: Array<{
     activitySegment?: GoogleTimelineActivitySegment;
@@ -78,6 +92,7 @@ export interface GoogleTimelineObject {
       };
     };
   }>;
+  rawSignals?: RawSignal[];
 }
 
 export interface ParsedLocation {
@@ -275,14 +290,64 @@ export function parseSemanticLocationFormat(data: GoogleTimelineObject): ParsedL
   return locations;
 }
 
+export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocation[] {
+  const locations: ParsedLocation[] = [];
+  
+  if (!data.rawSignals || !Array.isArray(data.rawSignals)) {
+    return locations;
+  }
+
+  for (const signal of data.rawSignals) {
+    if (!signal.position) continue;
+    
+    const pos = signal.position;
+    const latLngStr = pos.LatLng || pos.latLng;
+    
+    if (!latLngStr) continue;
+    
+    // Parse "33.3954644°, -111.8368823°" format
+    const cleanedStr = latLngStr.replace(/°/g, '');
+    const parts = cleanedStr.split(',').map(s => s.trim());
+    
+    if (parts.length !== 2) continue;
+    
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    
+    if (isNaN(lat) || isNaN(lng)) continue;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+    
+    // Parse timestamp (ISO format: "2025-12-30T14:38:10.000-07:00")
+    let timestamp: Date | null = null;
+    if (pos.timestamp) {
+      timestamp = new Date(pos.timestamp);
+      if (isNaN(timestamp.getTime())) timestamp = null;
+    }
+    
+    if (!timestamp) continue;
+    
+    locations.push({
+      latitude: lat,
+      longitude: lng,
+      timestamp,
+      activityType: pos.source || undefined,
+      confidence: pos.accuracyMeters ? Math.max(0, Math.min(100, 100 - pos.accuracyMeters)) : undefined,
+      source: 'google_takeout'
+    });
+  }
+
+  return locations;
+}
+
 export function parseGoogleTakeoutFile(jsonContent: string): ParsedLocation[] {
   try {
     const data = JSON.parse(jsonContent) as GoogleTimelineObject;
     
     const legacyLocations = parseLegacyTimelineFormat(data);
     const semanticLocations = parseSemanticLocationFormat(data);
+    const rawSignalLocations = parseRawSignalsFormat(data);
     
-    const allLocations = [...legacyLocations, ...semanticLocations];
+    const allLocations = [...legacyLocations, ...semanticLocations, ...rawSignalLocations];
     
     allLocations.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     
