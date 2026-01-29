@@ -3893,6 +3893,70 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // Import pre-parsed locations (client-side parsing for large files)
+  app.post("/api/locations/import-parsed", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { locations } = req.body;
+      
+      if (!locations || !Array.isArray(locations) || locations.length === 0) {
+        return sendErrorResponse(res, 400, "Locations array is required");
+      }
+      
+      console.log(`[Location Import] Received ${locations.length} pre-parsed locations from client`);
+      
+      // Dynamic import of location service
+      const { clusterLocations, detectFrequentPlaces } = await import('./location-service');
+      
+      // Generate batch ID
+      const importBatchId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Convert client-parsed format to insert format
+      const locationsToInsert = locations.map((loc: { lat: number; lng: number; ts: string; src?: string; acc?: number }) => ({
+        userId: user.id,
+        latitude: loc.lat,
+        longitude: loc.lng,
+        timestamp: new Date(loc.ts),
+        source: 'google_takeout' as const,
+        importBatchId,
+        accuracyMeters: loc.acc,
+      }));
+      
+      // Insert in batches
+      const insertedCount = await storage.createLocationHistoryBatch(locationsToInsert);
+      console.log(`[Location Import] Inserted ${insertedCount} locations`);
+      
+      // Fetch all locations to detect patterns
+      const allLocations = await storage.getLocationHistory(user.id, 5000);
+      
+      // Cluster locations and detect frequent places
+      const clusters = clusterLocations(allLocations);
+      const detectedPlaces = detectFrequentPlaces(clusters, user.id, 3);
+      
+      // Upsert frequent places
+      const placesUpserted = await storage.upsertFrequentPlaces(detectedPlaces);
+      
+      // Calculate date range
+      const timestamps = locations.map((l: { ts: string }) => new Date(l.ts).getTime()).filter((t: number) => !isNaN(t));
+      const minTs = timestamps.length > 0 ? new Date(Math.min(...timestamps)) : null;
+      const maxTs = timestamps.length > 0 ? new Date(Math.max(...timestamps)) : null;
+      
+      res.json({
+        success: true,
+        importBatchId,
+        locationsImported: insertedCount,
+        placesDetected: placesUpserted,
+        dateRange: minTs && maxTs ? {
+          start: minTs.toISOString(),
+          end: maxTs.toISOString()
+        } : undefined
+      });
+    } catch (error) {
+      console.error('Location import failed:', error);
+      sendErrorResponse(res, 500, "Failed to import location data", error);
+    }
+  });
+
   // Delete an import batch
   app.delete("/api/locations/batch/:batchId", requireAuth, async (req, res) => {
     try {

@@ -78,6 +78,92 @@ const labelColors: Record<string, string> = {
   cafe: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
 };
 
+interface ParsedLocation {
+  lat: number;
+  lng: number;
+  ts: string;
+  src?: string;
+  acc?: number;
+}
+
+function parseTimelineFile(jsonContent: string): ParsedLocation[] {
+  const locations: ParsedLocation[] = [];
+  
+  try {
+    const data = JSON.parse(jsonContent);
+    
+    // Parse rawSignals (new device export format)
+    if (data.rawSignals && Array.isArray(data.rawSignals)) {
+      for (const signal of data.rawSignals) {
+        if (!signal.position) continue;
+        const pos = signal.position;
+        const latLngStr = pos.LatLng || pos.latLng;
+        if (!latLngStr || !pos.timestamp) continue;
+        
+        const cleanedStr = latLngStr.replace(/°/g, '');
+        const parts = cleanedStr.split(',').map((s: string) => s.trim());
+        if (parts.length !== 2) continue;
+        
+        const lat = parseFloat(parts[0]);
+        const lng = parseFloat(parts[1]);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+        
+        const ts = new Date(pos.timestamp);
+        if (isNaN(ts.getTime())) continue;
+        
+        locations.push({
+          lat, lng,
+          ts: ts.toISOString(),
+          src: pos.source,
+          acc: pos.accuracyMeters
+        });
+      }
+    }
+    
+    // Parse semanticSegments
+    if (data.semanticSegments && Array.isArray(data.semanticSegments)) {
+      for (const segment of data.semanticSegments) {
+        if (segment.visit?.topCandidate?.placeLocation?.latLng) {
+          const latLngStr = segment.visit.topCandidate.placeLocation.latLng;
+          const cleanedStr = latLngStr.replace(/°/g, '');
+          const parts = cleanedStr.split(',').map((s: string) => s.trim());
+          if (parts.length !== 2) continue;
+          
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          if (isNaN(lat) || isNaN(lng)) continue;
+          
+          const ts = segment.startTime ? new Date(segment.startTime) : null;
+          if (!ts || isNaN(ts.getTime())) continue;
+          
+          locations.push({ lat, lng, ts: ts.toISOString() });
+        }
+      }
+    }
+    
+    // Parse legacy timelineObjects
+    if (data.timelineObjects && Array.isArray(data.timelineObjects)) {
+      for (const obj of data.timelineObjects) {
+        if (obj.placeVisit?.location) {
+          const loc = obj.placeVisit.location;
+          if (loc.latitudeE7 && loc.longitudeE7) {
+            const lat = loc.latitudeE7 / 10000000;
+            const lng = loc.longitudeE7 / 10000000;
+            const ts = obj.placeVisit.duration?.startTimestamp ? new Date(obj.placeVisit.duration.startTimestamp) : null;
+            if (ts && !isNaN(ts.getTime())) {
+              locations.push({ lat, lng, ts: ts.toISOString() });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Parse error:', e);
+  }
+  
+  return locations;
+}
+
 export default function LocationsPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,8 +181,8 @@ export default function LocationsPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: async (jsonContent: string) => {
-      const res = await apiRequest('POST', '/api/locations/import', { jsonContent });
+    mutationFn: async (locations: ParsedLocation[]) => {
+      const res = await apiRequest('POST', '/api/locations/import-parsed', { locations });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || 'Import failed');
@@ -181,8 +267,23 @@ export default function LocationsPage() {
 
     try {
       const content = await file.text();
-      setImportProgress('Processing locations...');
-      importMutation.mutate(content);
+      setImportProgress('Parsing locations...');
+      
+      const parsedLocations = parseTimelineFile(content);
+      
+      if (parsedLocations.length === 0) {
+        toast({
+          title: 'No locations found',
+          description: 'Could not find valid location data in this file',
+          variant: 'destructive',
+        });
+        setIsImporting(false);
+        setImportProgress('');
+        return;
+      }
+      
+      setImportProgress(`Uploading ${parsedLocations.length.toLocaleString()} locations...`);
+      importMutation.mutate(parsedLocations);
     } catch (error) {
       toast({
         title: 'File read error',
