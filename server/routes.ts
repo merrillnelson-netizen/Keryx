@@ -4005,6 +4005,17 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // Get hidden frequent places
+  app.get("/api/locations/places/hidden", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const places = await storage.getFrequentPlaces(user.id);
+      res.json(places.filter(p => p.isHidden));
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch hidden places", error);
+    }
+  });
+
   // Update a frequent place (set name, label, confirm, hide)
   app.patch("/api/locations/places/:id", requireAuth, async (req, res) => {
     try {

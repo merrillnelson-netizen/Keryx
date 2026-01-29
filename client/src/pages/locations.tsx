@@ -169,6 +169,7 @@ export default function LocationsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<string>('');
+  const [showHidden, setShowHidden] = useState(false);
 
   const { data: stats, isLoading: statsLoading } = useQuery<LocationStats>({
     queryKey: ['/api/locations/stats'],
@@ -178,6 +179,12 @@ export default function LocationsPage() {
   const { data: places, isLoading: placesLoading } = useQuery<FrequentPlace[]>({
     queryKey: ['/api/locations/places'],
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: hiddenPlaces } = useQuery<FrequentPlace[]>({
+    queryKey: ['/api/locations/places/hidden'],
+    staleTime: 5 * 60 * 1000,
+    enabled: showHidden,
   });
 
   const importMutation = useMutation({
@@ -219,6 +226,7 @@ export default function LocationsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/locations/places'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/locations/places/hidden'] });
       queryClient.invalidateQueries({ queryKey: ['/api/locations/stats'] });
     },
   });
@@ -339,6 +347,20 @@ export default function LocationsPage() {
     updatePlaceMutation.mutate({
       id: placeId,
       updates: { isHidden: true },
+    });
+  };
+
+  const unhidePlace = (placeId: string) => {
+    updatePlaceMutation.mutate({
+      id: placeId,
+      updates: { isHidden: false },
+    });
+  };
+
+  const clearLabel = (placeId: string) => {
+    updatePlaceMutation.mutate({
+      id: placeId,
+      updates: { label: undefined, isConfirmed: false },
     });
   };
 
@@ -533,8 +555,8 @@ export default function LocationsPage() {
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/50">
-                        {!place.isConfirmed && (
+                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/50 flex-wrap">
+                        {!place.isConfirmed ? (
                           <>
                             <Button
                               variant="outline"
@@ -564,6 +586,41 @@ export default function LocationsPage() {
                               Confirm
                             </Button>
                           </>
+                        ) : (
+                          <>
+                            {place.label !== 'home' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPlaceLabel(place.id, 'home')}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <Home className="w-3 h-3 mr-1" />
+                                Set Home
+                              </Button>
+                            )}
+                            {place.label !== 'work' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setPlaceLabel(place.id, 'work')}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <Building2 className="w-3 h-3 mr-1" />
+                                Set Work
+                              </Button>
+                            )}
+                            {place.label && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => clearLabel(place.id)}
+                                className="h-7 px-2 text-xs text-muted-foreground"
+                              >
+                                Clear Label
+                              </Button>
+                            )}
+                          </>
                         )}
                         <Button
                           variant="ghost"
@@ -587,6 +644,51 @@ export default function LocationsPage() {
               <p className="text-sm mt-1">Import your location history to get started</p>
             </div>
           )}
+          
+          {/* Show Hidden Places Toggle */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHidden(!showHidden)}
+              className="text-xs text-muted-foreground"
+            >
+              {showHidden ? 'Hide' : 'Show'} hidden places
+            </Button>
+            
+            {showHidden && hiddenPlaces && hiddenPlaces.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-muted-foreground mb-2">Hidden places:</p>
+                {hiddenPlaces.map((place) => (
+                  <div
+                    key={place.id}
+                    className="p-3 rounded-lg border border-dashed border-border/50 bg-muted/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium text-sm">{place.name}</h4>
+                        <p className="text-xs text-muted-foreground">
+                          {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => unhidePlace(place.id)}
+                        className="h-7 px-2 text-xs"
+                      >
+                        Unhide
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {showHidden && (!hiddenPlaces || hiddenPlaces.length === 0) && (
+              <p className="text-xs text-muted-foreground mt-2">No hidden places</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
