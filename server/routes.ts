@@ -4051,6 +4051,39 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // Geocode places without addresses
+  app.post("/api/locations/places/geocode", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const places = await storage.getFrequentPlaces(user.id);
+      
+      // Filter places without addresses
+      const placesToGeocode = places.filter(p => !p.address && !p.isHidden);
+      
+      if (placesToGeocode.length === 0) {
+        return res.json({ success: true, geocoded: 0 });
+      }
+      
+      const { reverseGeocode } = await import('./location-service');
+      
+      let geocodedCount = 0;
+      for (const place of placesToGeocode.slice(0, 10)) { // Limit to 10 at a time
+        const address = await reverseGeocode(place.latitude, place.longitude);
+        if (address) {
+          await storage.updateFrequentPlace(place.id, user.id, { address });
+          geocodedCount++;
+        }
+        // Rate limit: 1 request per second for Nominatim
+        await new Promise(resolve => setTimeout(resolve, 1100));
+      }
+      
+      res.json({ success: true, geocoded: geocodedCount, remaining: Math.max(0, placesToGeocode.length - 10) });
+    } catch (error) {
+      console.error('Geocoding failed:', error);
+      sendErrorResponse(res, 500, "Failed to geocode places", error);
+    }
+  });
+
   // Get location context for AI (formatted for briefings)
   app.get("/api/locations/context", requireAuth, async (req, res) => {
     try {

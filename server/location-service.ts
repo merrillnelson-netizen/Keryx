@@ -1,5 +1,68 @@
 import { InsertLocationHistory, InsertFrequentPlace, LocationHistory, FrequentPlace } from "@shared/schema";
 
+// Reverse geocode coordinates to get address using OpenStreetMap Nominatim
+export async function reverseGeocode(latitude: number, longitude: number): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+      {
+        headers: {
+          'User-Agent': 'Helix-App/1.0',
+          'Accept-Language': 'en'
+        }
+      }
+    );
+    
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    if (!data.address) return null;
+    
+    const addr = data.address;
+    const parts: string[] = [];
+    
+    // Build readable address
+    if (addr.house_number && addr.road) {
+      parts.push(`${addr.house_number} ${addr.road}`);
+    } else if (addr.road) {
+      parts.push(addr.road);
+    }
+    
+    if (addr.suburb || addr.neighbourhood) {
+      parts.push(addr.suburb || addr.neighbourhood);
+    }
+    
+    if (addr.city || addr.town || addr.village) {
+      parts.push(addr.city || addr.town || addr.village);
+    }
+    
+    return parts.length > 0 ? parts.join(', ') : data.display_name?.split(',').slice(0, 3).join(',') || null;
+  } catch (error) {
+    console.error('Reverse geocoding failed:', error);
+    return null;
+  }
+}
+
+// Batch reverse geocode multiple locations with rate limiting
+export async function batchReverseGeocode(
+  places: Array<{ latitude: number; longitude: number; id?: string }>
+): Promise<Map<string, string>> {
+  const results = new Map<string, string>();
+  
+  for (const place of places) {
+    // Rate limit: Nominatim requires 1 request per second
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    
+    const address = await reverseGeocode(place.latitude, place.longitude);
+    if (address) {
+      const key = place.id || `${place.latitude},${place.longitude}`;
+      results.set(key, address);
+    }
+  }
+  
+  return results;
+}
+
 export interface GoogleTimelineLocation {
   latitudeE7?: number;
   longitudeE7?: number;

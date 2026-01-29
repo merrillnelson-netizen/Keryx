@@ -249,6 +249,28 @@ export default function LocationsPage() {
     },
   });
 
+  const geocodeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/locations/places/geocode', {});
+      if (!res.ok) throw new Error('Failed to get addresses');
+      return res.json() as Promise<{ success: boolean; geocoded: number; remaining: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/locations/places'] });
+      if (data.geocoded > 0) {
+        toast({ 
+          title: `Found ${data.geocoded} addresses`,
+          description: data.remaining > 0 ? `${data.remaining} places remaining` : undefined
+        });
+      } else {
+        toast({ title: 'All places already have addresses' });
+      }
+    },
+    onError: () => {
+      toast({ title: 'Failed to get addresses', variant: 'destructive' });
+    },
+  });
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -256,7 +278,7 @@ export default function LocationsPage() {
     if (!file.name.endsWith('.json')) {
       toast({
         title: 'Invalid file',
-        description: 'Please select a JSON file from Google Takeout',
+        description: 'Please select a JSON file from your device Timeline export',
         variant: 'destructive',
       });
       return;
@@ -346,7 +368,7 @@ export default function LocationsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
-            Import from Google Takeout
+            Import Timeline Data
           </CardTitle>
           <CardDescription>
             Upload your Google Timeline data to enable location-aware insights
@@ -356,12 +378,11 @@ export default function LocationsPage() {
           <div className="bg-muted/50 rounded-lg p-4 space-y-3">
             <h4 className="font-medium text-sm">How to get your location data:</h4>
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-              <li>Go to <a href="https://takeout.google.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">Google Takeout <ExternalLink className="w-3 h-3" /></a></li>
-              <li>Click "Deselect all", then scroll to find "Location History"</li>
-              <li>Select it and choose JSON format (not KML)</li>
-              <li>Create export and wait for the download link</li>
-              <li>Extract the ZIP and find files in "Location History/Semantic Location History"</li>
-              <li>Upload the JSON files here (one at a time)</li>
+              <li>Open <strong>Settings</strong> on your Android phone</li>
+              <li>Go to <strong>Location → Location Services → Timeline</strong></li>
+              <li>Tap the menu (⋮) and select <strong>Export Timeline data</strong></li>
+              <li>Choose a date range and save the JSON file</li>
+              <li>Transfer the file to this device and upload it here</li>
             </ol>
           </div>
 
@@ -427,10 +448,32 @@ export default function LocationsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapPin className="w-5 h-5" />
-            Frequent Places
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              Frequent Places
+            </CardTitle>
+            {places && places.some(p => !p.address) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => geocodeMutation.mutate()}
+                disabled={geocodeMutation.isPending}
+              >
+                {geocodeMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Getting addresses...
+                  </>
+                ) : (
+                  <>
+                    <Navigation className="w-4 h-4 mr-2" />
+                    Get Addresses
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           <CardDescription>
             Places you visit often, detected from your location history. Confirm important ones to improve your briefings.
           </CardDescription>
@@ -469,11 +512,9 @@ export default function LocationsPage() {
                           )}
                         </div>
                         
-                        {place.address && (
-                          <p className="text-sm text-muted-foreground mt-1 truncate">
-                            {place.address}
-                          </p>
-                        )}
+                        <p className="text-sm text-muted-foreground mt-1 truncate">
+                          {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
+                        </p>
                         
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
