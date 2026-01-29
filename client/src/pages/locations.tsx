@@ -484,85 +484,83 @@ export default function LocationsPage() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : places && places.length > 0 ? (
-            <ScrollArea className="max-h-[500px]">
-              <div className="space-y-3">
-                {places.map((place) => (
-                  <div
-                    key={place.id}
-                    className={`p-4 rounded-lg border ${
-                      place.isConfirmed
-                        ? 'bg-primary/5 border-primary/20'
-                        : 'bg-muted/30 border-border'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {place.label && labelIcons[place.label] && (
-                            <span className={`p-1.5 rounded ${labelColors[place.label] || 'bg-muted'}`}>
-                              {labelIcons[place.label]}
-                            </span>
-                          )}
-                          <h4 className="font-medium truncate">{place.name}</h4>
-                          {place.isConfirmed && (
-                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/20">
-                              <Check className="w-3 h-3 mr-1" />
-                              Confirmed
-                            </Badge>
-                          )}
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground mt-1 truncate">
-                          {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
-                        </p>
-                        
-                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {place.visitCount || 0} visits
-                          </span>
-                          {place.averageVisitMinutes && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              ~{formatDuration(place.averageVisitMinutes)} avg
-                            </span>
-                          )}
-                          {place.typicalDays && place.typicalDays.length > 0 && (
-                            <span className="capitalize">
-                              {place.typicalDays.slice(0, 3).join(', ')}
-                            </span>
-                          )}
-                        </div>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {places.map((place) => (
+                <div
+                  key={place.id}
+                  className={`p-3 rounded-lg border ${
+                    place.isConfirmed
+                      ? 'bg-primary/5 border-primary/20'
+                      : 'bg-muted/30 border-border'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    {place.label && labelIcons[place.label] && (
+                      <span className={`p-1.5 rounded shrink-0 ${labelColors[place.label] || 'bg-muted'}`}>
+                        {labelIcons[place.label]}
+                      </span>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-medium">{place.name}</h4>
+                        {place.isConfirmed && (
+                          <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/20">
+                            <Check className="w-3 h-3 mr-1" />
+                            Confirmed
+                          </Badge>
+                        )}
                       </div>
                       
-                      <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
+                      </p>
+                      
+                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {place.visitCount || 0} visits
+                        </span>
+                        {place.averageVisitMinutes && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            ~{formatDuration(place.averageVisitMinutes)} avg
+                          </span>
+                        )}
+                        {place.typicalDays && place.typicalDays.length > 0 && (
+                          <span className="capitalize">
+                            {place.typicalDays.slice(0, 3).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/50">
                         {!place.isConfirmed && (
                           <>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() => setPlaceLabel(place.id, 'home')}
-                              className="h-8 px-2"
-                              title="Set as Home"
+                              className="h-7 px-2 text-xs"
                             >
-                              <Home className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setPlaceLabel(place.id, 'work')}
-                              className="h-8 px-2"
-                              title="Set as Work"
-                            >
-                              <Building2 className="w-4 h-4" />
+                              <Home className="w-3 h-3 mr-1" />
+                              Home
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => confirmPlace(place.id)}
-                              className="h-8"
+                              onClick={() => setPlaceLabel(place.id, 'work')}
+                              className="h-7 px-2 text-xs"
                             >
-                              <Check className="w-4 h-4 mr-1" />
+                              <Building2 className="w-3 h-3 mr-1" />
+                              Work
+                            </Button>
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => confirmPlace(place.id)}
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Check className="w-3 h-3 mr-1" />
                               Confirm
                             </Button>
                           </>
@@ -571,17 +569,17 @@ export default function LocationsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => hidePlace(place.id)}
-                          className="h-8 px-2 text-muted-foreground hover:text-destructive"
-                          title="Hide this place"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive ml-auto"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-3 h-3 mr-1" />
+                          Hide
                         </Button>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
