@@ -297,25 +297,46 @@ export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocatio
     return locations;
   }
 
+  // Log first signal for debugging
+  if (data.rawSignals.length > 0) {
+    console.log(`[Location Import] First rawSignal sample:`, JSON.stringify(data.rawSignals[0]).substring(0, 500));
+  }
+
+  let skippedNoPosition = 0;
+  let skippedNoLatLng = 0;
+  let skippedInvalidCoords = 0;
+  let skippedNoTimestamp = 0;
+
   for (const signal of data.rawSignals) {
-    if (!signal.position) continue;
+    if (!signal.position) {
+      skippedNoPosition++;
+      continue;
+    }
     
     const pos = signal.position;
     const latLngStr = pos.LatLng || pos.latLng;
     
-    if (!latLngStr) continue;
+    if (!latLngStr) {
+      skippedNoLatLng++;
+      continue;
+    }
     
     // Parse "33.3954644°, -111.8368823°" format
     const cleanedStr = latLngStr.replace(/°/g, '');
     const parts = cleanedStr.split(',').map(s => s.trim());
     
-    if (parts.length !== 2) continue;
+    if (parts.length !== 2) {
+      skippedInvalidCoords++;
+      continue;
+    }
     
     const lat = parseFloat(parts[0]);
     const lng = parseFloat(parts[1]);
     
-    if (isNaN(lat) || isNaN(lng)) continue;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      skippedInvalidCoords++;
+      continue;
+    }
     
     // Parse timestamp (ISO format: "2025-12-30T14:38:10.000-07:00")
     let timestamp: Date | null = null;
@@ -324,7 +345,10 @@ export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocatio
       if (isNaN(timestamp.getTime())) timestamp = null;
     }
     
-    if (!timestamp) continue;
+    if (!timestamp) {
+      skippedNoTimestamp++;
+      continue;
+    }
     
     locations.push({
       latitude: lat,
@@ -336,6 +360,8 @@ export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocatio
     });
   }
 
+  console.log(`[Location Import] Raw signals parsing stats - NoPosition: ${skippedNoPosition}, NoLatLng: ${skippedNoLatLng}, InvalidCoords: ${skippedInvalidCoords}, NoTimestamp: ${skippedNoTimestamp}, Valid: ${locations.length}`);
+
   return locations;
 }
 
@@ -343,11 +369,24 @@ export function parseGoogleTakeoutFile(jsonContent: string): ParsedLocation[] {
   try {
     const data = JSON.parse(jsonContent) as GoogleTimelineObject;
     
+    // Log what keys exist in the file for debugging
+    const topLevelKeys = Object.keys(data);
+    console.log(`[Location Import] File contains keys: ${topLevelKeys.join(', ')}`);
+    console.log(`[Location Import] timelineObjects: ${data.timelineObjects?.length ?? 0}`);
+    console.log(`[Location Import] semanticSegments: ${data.semanticSegments?.length ?? 0}`);
+    console.log(`[Location Import] rawSignals: ${data.rawSignals?.length ?? 0}`);
+    
     const legacyLocations = parseLegacyTimelineFormat(data);
+    console.log(`[Location Import] Parsed ${legacyLocations.length} legacy locations`);
+    
     const semanticLocations = parseSemanticLocationFormat(data);
+    console.log(`[Location Import] Parsed ${semanticLocations.length} semantic locations`);
+    
     const rawSignalLocations = parseRawSignalsFormat(data);
+    console.log(`[Location Import] Parsed ${rawSignalLocations.length} raw signal locations`);
     
     const allLocations = [...legacyLocations, ...semanticLocations, ...rawSignalLocations];
+    console.log(`[Location Import] Total locations parsed: ${allLocations.length}`);
     
     allLocations.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     
