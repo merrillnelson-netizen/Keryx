@@ -644,3 +644,107 @@ export const ideaChatMessageSchema = z.object({
 });
 
 export type IdeaChatMessage = z.infer<typeof ideaChatMessageSchema>;
+
+/**
+ * Location History table - stores imported Google Timeline and captured location data
+ * Used to enrich AI briefings and insights with location context and patterns
+ */
+export const locationHistory = pgTable("location_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Core location data
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  timestamp: timestamp("timestamp").notNull(),
+  // Place information
+  placeId: text("place_id"), // Google Place ID
+  placeName: text("place_name"), // Semantic name (e.g., "Starbucks", "Home", "Office")
+  address: text("address"), // Full address if available
+  placeType: text("place_type"), // Google place type or custom: 'home', 'work', 'restaurant', 'gym', etc.
+  // Source and accuracy
+  source: text("source").notNull().default('google_takeout'), // 'google_takeout', 'memory', 'manual'
+  accuracyMeters: real("accuracy_meters"), // GPS accuracy
+  // Duration for place visits (from Google Timeline activity segments)
+  durationMinutes: integer("duration_minutes"), // How long spent at this location
+  // Activity type from Google Timeline
+  activityType: text("activity_type"), // 'STILL', 'WALKING', 'IN_VEHICLE', 'ON_BICYCLE', etc.
+  confidence: integer("confidence"), // Confidence score 0-100
+  // Import batch tracking
+  importBatchId: text("import_batch_id"), // Groups locations from same import
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("location_history_user_id_idx").on(table.userId),
+  timestampIdx: index("location_history_timestamp_idx").on(table.timestamp.desc()),
+  userTimestampIdx: index("location_history_user_timestamp_idx").on(table.userId, table.timestamp.desc()),
+  placeNameIdx: index("location_history_place_name_idx").on(table.placeName),
+  importBatchIdx: index("location_history_import_batch_idx").on(table.importBatchId),
+}));
+
+export const locationHistoryRelations = relations(locationHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [locationHistory.userId],
+    references: [users.id],
+  }),
+}));
+
+/**
+ * Frequent Places table - stores detected patterns like home, work, favorite spots
+ * Derived from location_history analysis
+ */
+export const frequentPlaces = pgTable("frequent_places", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Place identification
+  name: text("name").notNull(), // User-defined or AI-detected name
+  label: text("label"), // 'home', 'work', 'gym', 'favorite_restaurant', etc.
+  // Center coordinates (average of visits)
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  radiusMeters: real("radius_meters").default(100), // Detection radius
+  // Place details
+  placeId: text("place_id"), // Google Place ID if known
+  address: text("address"),
+  category: text("category"), // 'residential', 'workplace', 'food_drink', 'fitness', 'entertainment', etc.
+  // Visit statistics
+  visitCount: integer("visit_count").default(0),
+  totalTimeMinutes: integer("total_time_minutes").default(0),
+  averageVisitMinutes: integer("average_visit_minutes"),
+  lastVisit: timestamp("last_visit"),
+  firstVisit: timestamp("first_visit"),
+  // Typical visit patterns
+  typicalDays: text("typical_days").array(), // ['monday', 'wednesday', 'friday']
+  typicalTimeRange: text("typical_time_range"), // '08:00-17:00' for work, '06:00-07:00' for gym
+  // User confirmation
+  isConfirmed: boolean("is_confirmed").default(false), // User has confirmed this place
+  isHidden: boolean("is_hidden").default(false), // User doesn't want this shown
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("frequent_places_user_id_idx").on(table.userId),
+  labelIdx: index("frequent_places_label_idx").on(table.label),
+  userLabelIdx: uniqueIndex("frequent_places_user_label_idx").on(table.userId, table.label),
+}));
+
+export const frequentPlacesRelations = relations(frequentPlaces, ({ one }) => ({
+  user: one(users, {
+    fields: [frequentPlaces.userId],
+    references: [users.id],
+  }),
+}));
+
+// Location History schemas and types
+export const insertLocationHistorySchema = createInsertSchema(locationHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertFrequentPlaceSchema = createInsertSchema(frequentPlaces).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type LocationHistory = typeof locationHistory.$inferSelect;
+export type InsertLocationHistory = z.infer<typeof insertLocationHistorySchema>;
+export type FrequentPlace = typeof frequentPlaces.$inferSelect;
+export type InsertFrequentPlace = z.infer<typeof insertFrequentPlaceSchema>;
