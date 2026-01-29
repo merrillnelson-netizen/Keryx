@@ -38,8 +38,8 @@ function validateEnvironment() {
 validateEnvironment();
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: false, limit: '100mb' }));
 
 // Trust Replit's reverse proxy for secure cookies in production
 app.set('trust proxy', 1);
