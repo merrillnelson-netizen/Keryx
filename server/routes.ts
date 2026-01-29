@@ -3717,6 +3717,229 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // ============================================
+  // LOCATION HISTORY ROUTES - Google Timeline import
+  // ============================================
+
+  // Get location history statistics
+  app.get("/api/locations/stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      const [count, frequentPlacesList, recentLocations] = await Promise.all([
+        storage.getLocationHistoryCount(user.id),
+        storage.getFrequentPlaces(user.id),
+        storage.getRecentLocations(user.id, 7, 10)
+      ]);
+      
+      res.json({
+        totalLocations: count,
+        frequentPlacesCount: frequentPlacesList.length,
+        hasHomeSet: frequentPlacesList.some(p => p.label === 'home' && p.isConfirmed),
+        hasWorkSet: frequentPlacesList.some(p => p.label === 'work' && p.isConfirmed),
+        recentLocationsCount: recentLocations.length,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch location stats", error);
+    }
+  });
+
+  // Get location history with pagination
+  app.get("/api/locations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const locations = await storage.getLocationHistory(user.id, limit, offset);
+      const total = await storage.getLocationHistoryCount(user.id);
+      
+      res.json({
+        locations,
+        total,
+        hasMore: offset + locations.length < total
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch location history", error);
+    }
+  });
+
+  // Import Google Takeout location data
+  app.post("/api/locations/import", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { jsonContent } = req.body;
+      
+      if (!jsonContent || typeof jsonContent !== 'string') {
+        return sendErrorResponse(res, 400, "JSON content is required");
+      }
+      
+      // Dynamic import of location service
+      const { parseGoogleTakeoutFile, convertToInsertLocation, clusterLocations, detectFrequentPlaces } = await import('./location-service');
+      
+      // Parse the file
+      const parsedLocations = parseGoogleTakeoutFile(jsonContent);
+      
+      if (parsedLocations.length === 0) {
+        return sendErrorResponse(res, 400, "No valid locations found in the file");
+      }
+      
+      // Generate batch ID
+      const importBatchId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Convert to insert format
+      const locationsToInsert = parsedLocations.map(loc => 
+        convertToInsertLocation(user.id, loc, importBatchId)
+      );
+      
+      // Insert in batches
+      const insertedCount = await storage.createLocationHistoryBatch(locationsToInsert);
+      
+      // Fetch all locations to detect patterns
+      const allLocations = await storage.getLocationHistory(user.id, 5000);
+      
+      // Cluster locations and detect frequent places
+      const clusters = clusterLocations(allLocations);
+      const detectedPlaces = detectFrequentPlaces(clusters, user.id, 3);
+      
+      // Upsert frequent places
+      const placesUpserted = await storage.upsertFrequentPlaces(detectedPlaces);
+      
+      res.json({
+        success: true,
+        importBatchId,
+        locationsImported: insertedCount,
+        placesDetected: placesUpserted,
+        dateRange: parsedLocations.length > 0 ? {
+          start: parsedLocations[0].timestamp.toISOString(),
+          end: parsedLocations[parsedLocations.length - 1].timestamp.toISOString()
+        } : undefined
+      });
+    } catch (error) {
+      console.error('Location import failed:', error);
+      sendErrorResponse(res, 500, "Failed to import location data", error);
+    }
+  });
+
+  // Delete an import batch
+  app.delete("/api/locations/batch/:batchId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { batchId } = req.params;
+      
+      const deletedCount = await storage.deleteLocationHistoryBatch(user.id, batchId);
+      
+      res.json({
+        success: true,
+        deletedCount
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete location batch", error);
+    }
+  });
+
+  // Delete all location history
+  app.delete("/api/locations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      const deletedCount = await storage.deleteAllLocationHistory(user.id);
+      
+      res.json({
+        success: true,
+        deletedCount
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete location history", error);
+    }
+  });
+
+  // ============================================
+  // FREQUENT PLACES ROUTES
+  // ============================================
+
+  // Get all frequent places
+  app.get("/api/locations/places", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const places = await storage.getFrequentPlaces(user.id);
+      res.json(places.filter(p => !p.isHidden));
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch frequent places", error);
+    }
+  });
+
+  // Update a frequent place (set name, label, confirm, hide)
+  app.patch("/api/locations/places/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const updateSchema = z.object({
+        name: z.string().optional(),
+        label: z.string().optional(),
+        isConfirmed: z.boolean().optional(),
+        isHidden: z.boolean().optional(),
+      });
+      
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid update data", parsed.error);
+      }
+      
+      const updated = await storage.updateFrequentPlace(id, user.id, parsed.data);
+      if (!updated) {
+        return sendErrorResponse(res, 404, "Place not found");
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update place", error);
+    }
+  });
+
+  // Delete a frequent place
+  app.delete("/api/locations/places/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteFrequentPlace(id, user.id);
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Place not found");
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete place", error);
+    }
+  });
+
+  // Get location context for AI (formatted for briefings)
+  app.get("/api/locations/context", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
+      
+      const [frequentPlacesList, recentLocations, totalCount] = await Promise.all([
+        storage.getFrequentPlaces(user.id),
+        storage.getRecentLocations(user.id, 14, 100),
+        storage.getLocationHistoryCount(user.id)
+      ]);
+      
+      const patterns = buildLocationContext(frequentPlacesList, recentLocations, totalCount);
+      const formatted = formatLocationContextForAI(patterns);
+      
+      res.json({
+        patterns,
+        formattedContext: formatted
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch location context", error);
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

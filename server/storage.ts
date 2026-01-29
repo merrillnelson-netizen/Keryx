@@ -1,5 +1,6 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
+  locationHistory, frequentPlaces,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -10,7 +11,9 @@ import {
   type AiCache,
   type Idea, type InsertIdea,
   type IdeaTask, type InsertIdeaTask,
-  type IdeaChatMessage
+  type IdeaChatMessage,
+  type LocationHistory, type InsertLocationHistory,
+  type FrequentPlace, type InsertFrequentPlace
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -103,6 +106,24 @@ export interface IStorage {
   updateIdeaTask(id: string, updates: Partial<InsertIdeaTask>): Promise<IdeaTask | undefined>;
   deleteIdeaTask(id: string): Promise<boolean>;
   reorderIdeaTasks(ideaId: string, taskIds: string[]): Promise<void>;
+
+  // Location History (user-scoped)
+  getLocationHistory(userId: string, limit?: number, offset?: number): Promise<LocationHistory[]>;
+  getLocationHistoryCount(userId: string): Promise<number>;
+  getLocationHistoryInRange(userId: string, startDate: Date, endDate: Date, limit?: number): Promise<LocationHistory[]>;
+  getRecentLocations(userId: string, daysBack: number, limit?: number): Promise<LocationHistory[]>;
+  createLocationHistoryBatch(locations: InsertLocationHistory[]): Promise<number>;
+  deleteLocationHistoryBatch(userId: string, importBatchId: string): Promise<number>;
+  deleteAllLocationHistory(userId: string): Promise<number>;
+
+  // Frequent Places (user-scoped)
+  getFrequentPlaces(userId: string): Promise<FrequentPlace[]>;
+  getFrequentPlace(id: string, userId: string): Promise<FrequentPlace | undefined>;
+  getFrequentPlaceByLabel(userId: string, label: string): Promise<FrequentPlace | undefined>;
+  createFrequentPlace(place: InsertFrequentPlace): Promise<FrequentPlace>;
+  updateFrequentPlace(id: string, userId: string, updates: Partial<InsertFrequentPlace>): Promise<FrequentPlace | undefined>;
+  deleteFrequentPlace(id: string, userId: string): Promise<boolean>;
+  upsertFrequentPlaces(places: InsertFrequentPlace[]): Promise<number>;
 }
 
 /**
@@ -1445,6 +1466,265 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to reorder idea tasks:', error);
       throw new Error('Database error while reordering tasks');
+    }
+  }
+
+  // ============================================
+  // LOCATION HISTORY METHODS
+  // ============================================
+
+  async getLocationHistory(userId: string, limit: number = 100, offset: number = 0): Promise<LocationHistory[]> {
+    try {
+      return await db
+        .select()
+        .from(locationHistory)
+        .where(eq(locationHistory.userId, userId))
+        .orderBy(desc(locationHistory.timestamp))
+        .limit(limit)
+        .offset(offset);
+    } catch (error) {
+      console.error('Failed to get location history:', error);
+      throw new Error('Database error while fetching location history');
+    }
+  }
+
+  async getLocationHistoryCount(userId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(locationHistory)
+        .where(eq(locationHistory.userId, userId));
+      return result[0]?.count ?? 0;
+    } catch (error) {
+      console.error('Failed to count location history:', error);
+      throw new Error('Database error while counting location history');
+    }
+  }
+
+  async getLocationHistoryInRange(userId: string, startDate: Date, endDate: Date, limit: number = 1000): Promise<LocationHistory[]> {
+    try {
+      return await db
+        .select()
+        .from(locationHistory)
+        .where(
+          and(
+            eq(locationHistory.userId, userId),
+            gte(locationHistory.timestamp, startDate),
+            lte(locationHistory.timestamp, endDate)
+          )
+        )
+        .orderBy(desc(locationHistory.timestamp))
+        .limit(limit);
+    } catch (error) {
+      console.error('Failed to get location history in range:', error);
+      throw new Error('Database error while fetching location history in range');
+    }
+  }
+
+  async getRecentLocations(userId: string, daysBack: number, limit: number = 500): Promise<LocationHistory[]> {
+    try {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - daysBack);
+      
+      return await db
+        .select()
+        .from(locationHistory)
+        .where(
+          and(
+            eq(locationHistory.userId, userId),
+            gte(locationHistory.timestamp, startDate)
+          )
+        )
+        .orderBy(desc(locationHistory.timestamp))
+        .limit(limit);
+    } catch (error) {
+      console.error('Failed to get recent locations:', error);
+      throw new Error('Database error while fetching recent locations');
+    }
+  }
+
+  async createLocationHistoryBatch(locations: InsertLocationHistory[]): Promise<number> {
+    try {
+      if (locations.length === 0) return 0;
+      
+      const BATCH_SIZE = 500;
+      let inserted = 0;
+      
+      for (let i = 0; i < locations.length; i += BATCH_SIZE) {
+        const batch = locations.slice(i, i + BATCH_SIZE);
+        const result = await db.insert(locationHistory).values(batch).returning({ id: locationHistory.id });
+        inserted += result.length;
+      }
+      
+      return inserted;
+    } catch (error) {
+      console.error('Failed to create location history batch:', error);
+      throw new Error('Database error while inserting location history');
+    }
+  }
+
+  async deleteLocationHistoryBatch(userId: string, importBatchId: string): Promise<number> {
+    try {
+      const result = await db
+        .delete(locationHistory)
+        .where(
+          and(
+            eq(locationHistory.userId, userId),
+            eq(locationHistory.importBatchId, importBatchId)
+          )
+        )
+        .returning({ id: locationHistory.id });
+      return result.length;
+    } catch (error) {
+      console.error('Failed to delete location history batch:', error);
+      throw new Error('Database error while deleting location history batch');
+    }
+  }
+
+  async deleteAllLocationHistory(userId: string): Promise<number> {
+    try {
+      const result = await db
+        .delete(locationHistory)
+        .where(eq(locationHistory.userId, userId))
+        .returning({ id: locationHistory.id });
+      return result.length;
+    } catch (error) {
+      console.error('Failed to delete all location history:', error);
+      throw new Error('Database error while deleting location history');
+    }
+  }
+
+  // ============================================
+  // FREQUENT PLACES METHODS
+  // ============================================
+
+  async getFrequentPlaces(userId: string): Promise<FrequentPlace[]> {
+    try {
+      return await db
+        .select()
+        .from(frequentPlaces)
+        .where(eq(frequentPlaces.userId, userId))
+        .orderBy(desc(frequentPlaces.visitCount));
+    } catch (error) {
+      console.error('Failed to get frequent places:', error);
+      throw new Error('Database error while fetching frequent places');
+    }
+  }
+
+  async getFrequentPlace(id: string, userId: string): Promise<FrequentPlace | undefined> {
+    try {
+      const [place] = await db
+        .select()
+        .from(frequentPlaces)
+        .where(
+          and(
+            eq(frequentPlaces.id, id),
+            eq(frequentPlaces.userId, userId)
+          )
+        );
+      return place || undefined;
+    } catch (error) {
+      console.error('Failed to get frequent place:', error);
+      throw new Error('Database error while fetching frequent place');
+    }
+  }
+
+  async getFrequentPlaceByLabel(userId: string, label: string): Promise<FrequentPlace | undefined> {
+    try {
+      const [place] = await db
+        .select()
+        .from(frequentPlaces)
+        .where(
+          and(
+            eq(frequentPlaces.userId, userId),
+            eq(frequentPlaces.label, label)
+          )
+        );
+      return place || undefined;
+    } catch (error) {
+      console.error('Failed to get frequent place by label:', error);
+      throw new Error('Database error while fetching frequent place by label');
+    }
+  }
+
+  async createFrequentPlace(place: InsertFrequentPlace): Promise<FrequentPlace> {
+    try {
+      const [newPlace] = await db
+        .insert(frequentPlaces)
+        .values(place)
+        .returning();
+      return newPlace;
+    } catch (error) {
+      console.error('Failed to create frequent place:', error);
+      throw new Error('Database error while creating frequent place');
+    }
+  }
+
+  async updateFrequentPlace(id: string, userId: string, updates: Partial<InsertFrequentPlace>): Promise<FrequentPlace | undefined> {
+    try {
+      const [updated] = await db
+        .update(frequentPlaces)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(
+          and(
+            eq(frequentPlaces.id, id),
+            eq(frequentPlaces.userId, userId)
+          )
+        )
+        .returning();
+      return updated || undefined;
+    } catch (error) {
+      console.error('Failed to update frequent place:', error);
+      throw new Error('Database error while updating frequent place');
+    }
+  }
+
+  async deleteFrequentPlace(id: string, userId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(frequentPlaces)
+        .where(
+          and(
+            eq(frequentPlaces.id, id),
+            eq(frequentPlaces.userId, userId)
+          )
+        )
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete frequent place:', error);
+      throw new Error('Database error while deleting frequent place');
+    }
+  }
+
+  async upsertFrequentPlaces(places: InsertFrequentPlace[]): Promise<number> {
+    try {
+      if (places.length === 0) return 0;
+      
+      let upserted = 0;
+      for (const place of places) {
+        // Check if a place with same label exists for this user
+        if (place.label) {
+          const existing = await this.getFrequentPlaceByLabel(place.userId, place.label);
+          if (existing) {
+            await this.updateFrequentPlace(existing.id, place.userId, {
+              ...place,
+              visitCount: (existing.visitCount ?? 0) + (place.visitCount ?? 0),
+              totalTimeMinutes: (existing.totalTimeMinutes ?? 0) + (place.totalTimeMinutes ?? 0),
+            });
+            upserted++;
+            continue;
+          }
+        }
+        
+        await this.createFrequentPlace(place);
+        upserted++;
+      }
+      
+      return upserted;
+    } catch (error) {
+      console.error('Failed to upsert frequent places:', error);
+      throw new Error('Database error while upserting frequent places');
     }
   }
 }
