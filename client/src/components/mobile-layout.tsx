@@ -35,7 +35,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
               <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
               <div className="bg-surface h-full">
                 <div className="p-6 border-b border-outline">
-                  <h1 className="text-xl font-medium text-foreground">Helix</h1>
+                  <h1 className="text-xl font-medium text-foreground">Keryx</h1>
                   <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
                 </div>
                 
@@ -78,7 +78,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
           </Sheet>
           
           <div>
-            <h2 className="text-lg font-medium text-foreground">{currentPage?.name || "Helix"}</h2>
+            <h2 className="text-lg font-medium text-foreground">{currentPage?.name || "Keryx"}</h2>
           </div>
         </div>
         
@@ -94,7 +94,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
       <div className="hidden lg:flex h-screen">
         <div className="w-64 bg-surface shadow-lg border-r border-outline">
           <div className="p-6 border-b border-outline">
-            <h1 className="text-xl font-medium text-foreground">Helix</h1>
+            <h1 className="text-xl font-medium text-foreground">Keryx</h1>
             <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
           </div>
           

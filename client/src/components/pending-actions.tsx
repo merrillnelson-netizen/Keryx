@@ -146,7 +146,7 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No pending actions. When you ask Helix to schedule meetings or send emails, 
+            No pending actions. When you ask Keryx to schedule meetings or send emails, 
             they'll appear here for your approval.
           </p>
         </CardContent>

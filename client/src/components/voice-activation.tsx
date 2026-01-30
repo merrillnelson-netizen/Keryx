@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Plus, Search, Volume2, Send, Keyboard } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import CalendarEventSuggestion from "./calendar-event-suggestion";
-import { HintChips } from "./helix-capabilities-modal";
+import { HintChips } from "./keryx-capabilities-modal";
 
 export default function VoiceActivation() {
   const [textInput, setTextInput] = useState("");

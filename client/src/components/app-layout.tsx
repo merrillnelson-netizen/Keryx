@@ -6,8 +6,8 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
-import { HelixLogoIcon } from "@/components/helix-logo";
-import { HelixCapabilitiesModal } from "@/components/helix-capabilities-modal";
+import { KeryxLogoIcon } from "@/components/keryx-logo";
+import { KeryxCapabilitiesModal } from "@/components/keryx-capabilities-modal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -47,7 +47,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {/* Logo & Branding */}
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center space-x-3">
-              <HelixLogoIcon size="md" />
+              <KeryxLogoIcon size="md" />
               <div>
                 <h1 className="text-xl font-bold text-foreground">Keryx</h1>
                 <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
@@ -90,7 +90,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           
           {/* Help & User Info */}
           <div className="p-4 border-t border-white/10 space-y-3">
-            <HelixCapabilitiesModal />
+            <KeryxCapabilitiesModal />
             <div className="glass-card p-3 rounded-xl">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
@@ -150,7 +150,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     {/* Mobile Menu Header */}
                     <div className="p-6 border-b border-white/10">
                       <div className="flex items-center space-x-3">
-                        <HelixLogoIcon size="md" />
+                        <KeryxLogoIcon size="md" />
                         <div>
                           <h1 className="text-xl font-bold text-foreground">Keryx</h1>
                           <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
@@ -185,7 +185,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     
                     {/* Mobile Help & User Info */}
                     <div className="p-4 border-t border-white/10 space-y-3">
-                      <HelixCapabilitiesModal />
+                      <KeryxCapabilitiesModal />
                       <div className="glass-card p-3 rounded-xl">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
@@ -226,7 +226,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               
               <div>
                 <h2 className="text-base font-semibold text-foreground">
-                  {currentPage?.name || "Helix"}
+                  {currentPage?.name || "Keryx"}
                 </h2>
               </div>
             </div>

@@ -6,7 +6,7 @@ import {
   MessageSquare, Lightbulb, Heart, Mail, Wallet, Bot, Sun
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { HelixLogo } from "@/components/helix-logo";
+import { KeryxLogo } from "@/components/keryx-logo";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -146,7 +146,7 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="relative z-50 px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <HelixLogo size="md" />
+          <KeryxLogo size="md" />
           <div className="flex items-center gap-3">
             <Button 
               variant="ghost" 
@@ -326,7 +326,7 @@ export default function LandingPage() {
                 <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent"> Beautifully Organized</span>
               </motion.h2>
               <motion.p variants={fadeIn} className="text-lg text-muted-foreground mb-10 leading-relaxed">
-                Stop losing thoughts to forgotten notes. Helix turns every voice note into a searchable, 
+                Stop losing thoughts to forgotten notes. Keryx turns every voice note into a searchable, 
                 analyzable piece of your personal history.
               </motion.p>
               
@@ -455,7 +455,7 @@ export default function LandingPage() {
               <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent"> Everything?</span>
             </motion.h2>
             <motion.p variants={fadeIn} className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
-              Join thousands of people who are capturing their life's moments with Helix. 
+              Join thousands of people who are capturing their life's moments with Keryx. 
               Start free, upgrade anytime.
             </motion.p>
             <motion.div variants={fadeIn} className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -476,9 +476,9 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="relative z-10 px-4 sm:px-6 lg:px-8 py-12 border-t border-white/10">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <HelixLogo size="sm" textClassName="text-lg" />
+          <KeryxLogo size="sm" textClassName="text-lg" />
           <p className="text-sm text-muted-foreground">
-            © 2024 Helix. Your memories, beautifully organized.
+            © 2024 Keryx. Your memories, beautifully organized.
           </p>
         </div>
       </footer>

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { LogIn, UserPlus, ArrowLeft } from "lucide-react";
-import { HelixLogo } from "@/components/helix-logo";
+import { KeryxLogo } from "@/components/keryx-logo";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
@@ -51,7 +51,7 @@ export default function LoginPage() {
           </Link>
           
           <div className="flex justify-center mb-4">
-            <HelixLogo size="lg" textClassName="text-2xl" />
+            <KeryxLogo size="lg" textClassName="text-2xl" />
           </div>
         </div>
 
@@ -115,7 +115,7 @@ export default function LoginPage() {
                   <div className="w-full border-t border-white/10"></div>
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="px-2 bg-card text-muted-foreground">New to Helix?</span>
+                  <span className="px-2 bg-card text-muted-foreground">New to Keryx?</span>
                 </div>
               </div>
               
