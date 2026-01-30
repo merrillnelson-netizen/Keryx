@@ -65,6 +65,7 @@ export default function People() {
   const [editName, setEditName] = useState("");
   const [editRelationship, setEditRelationship] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editPriority, setEditPriority] = useState(5);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
@@ -214,6 +215,7 @@ export default function People() {
     setEditName(person.name);
     setEditRelationship(person.relationship || "");
     setEditNotes(person.notes || "");
+    setEditPriority(person.priority || 5);
   };
 
   const handleSaveEdit = () => {
@@ -224,8 +226,25 @@ export default function People() {
           name: editName !== editingPerson.name ? editName : undefined,
           relationship: editRelationship || undefined,
           notes: editNotes || undefined,
+          priority: editPriority,
         },
       });
+    }
+  };
+
+  const getPriorityLabel = (priority: number) => {
+    switch (priority) {
+      case 10: return { label: 'VIP', color: 'bg-red-500/20 text-red-400 border-red-500/30' };
+      case 9: return { label: 'Critical', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
+      case 8: return { label: 'High', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' };
+      case 7: return { label: 'Important', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
+      case 6: return { label: 'Moderate', color: 'bg-lime-500/20 text-lime-400 border-lime-500/30' };
+      case 5: return { label: 'Standard', color: 'bg-green-500/20 text-green-400 border-green-500/30' };
+      case 4: return { label: 'Low', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' };
+      case 3: return { label: 'Minimal', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' };
+      case 2: return { label: 'Background', color: 'bg-sky-500/20 text-sky-400 border-sky-500/30' };
+      case 1: return { label: 'Archive', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
+      default: return { label: 'Unknown', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
     }
   };
 
@@ -384,6 +403,7 @@ export default function People() {
                   <TableRow className="border-white/10 hover:bg-transparent">
                     {mergeMode && <TableHead className="w-[50px] text-foreground font-semibold">Select</TableHead>}
                     <TableHead className="w-[200px] text-foreground font-semibold">Name</TableHead>
+                    <TableHead className="w-[80px] text-foreground font-semibold">Priority</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Relationship</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Mentions</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Last Mentioned</TableHead>
@@ -437,6 +457,11 @@ export default function People() {
                             </Badge>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell data-testid={`priority-cell-${person.id}`}>
+                        <Badge variant="outline" className={cn("text-xs", getPriorityLabel(person.priority || 5).color)}>
+                          {getPriorityLabel(person.priority || 5).label}
+                        </Badge>
                       </TableCell>
                       <TableCell data-testid={`relationship-cell-${person.id}`}>
                         {person.relationship ? (
@@ -607,11 +632,14 @@ export default function People() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                     <div className="flex items-center gap-1">
                       <MessageSquare className="w-4 h-4" />
                       <span>{person.mentionCount} mentions</span>
                     </div>
+                    <Badge variant="outline" className={cn("text-xs", getPriorityLabel(person.priority || 5).color)}>
+                      {getPriorityLabel(person.priority || 5).label}
+                    </Badge>
                   </div>
                   {person.notes && (
                     <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
@@ -723,6 +751,79 @@ export default function People() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="priority">Priority (Closeness Score)</Label>
+              <Select value={editPriority.toString()} onValueChange={(v) => setEditPriority(parseInt(v))}>
+                <SelectTrigger className="glass-card border-white/20" data-testid="select-priority">
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  <SelectItem value="10">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      10 - VIP (spouse, partner)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="9">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
+                      9 - Critical (close family, business partners)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="8">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      8 - High (close friends, key colleagues)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="7">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      7 - Important (good friends, team members)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="6">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-lime-500" />
+                      6 - Moderate (regular contacts)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="5">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      5 - Standard (default)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="4">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-500" />
+                      4 - Low (infrequent contacts)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="3">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                      3 - Minimal (rare contacts)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-sky-500" />
+                      2 - Background (historical)
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="1">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-500" />
+                      1 - Archive (inactive)
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                People with priority 8+ will trigger High-Signal Alerts when mentioned in discoveries.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>

@@ -16,6 +16,7 @@ import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
+import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
 import { getVapidPublicKey, sendPushNotification, sendBriefingReminder, sendPatternAlert, sendPlaidAlert } from "./push-service";
 
 // Feature flags - Plaid integration controlled by environment
@@ -2359,11 +2360,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         locationContext
       );
       
+      // Check for high-signal mentions of VIP people
+      let highSignalAlerts: HighSignalMatch[] = [];
+      if (discoveries.discoveries.length > 0) {
+        try {
+          const highSignalResult = await detectHighSignalMentions(user.id, discoveries.discoveries);
+          const alertableMatches = shouldTriggerAlert(highSignalResult.matches);
+          
+          if (alertableMatches.length > 0) {
+            highSignalAlerts = alertableMatches;
+            
+            // Send push notifications for high-signal alerts
+            for (const match of alertableMatches.slice(0, 3)) {
+              const alertData = formatHighSignalAlert(match);
+              try {
+                await sendPushNotification(user.id, {
+                  title: alertData.title,
+                  body: alertData.body,
+                  url: alertData.url,
+                  tag: `high-signal-${match.person.id}`,
+                  requireInteraction: match.person.priority === 10
+                });
+              } catch (pushError) {
+                console.error('Failed to send high-signal push notification:', pushError);
+              }
+            }
+          }
+        } catch (hsError) {
+          console.error('High-signal detection failed:', hsError);
+        }
+      }
+      
       // Cache the result for 30 minutes
       await storage.setAiCache(user.id, 'discoveries', cacheKey, {
         discoveries: discoveries.discoveries,
         insights: discoveries.insights,
-        generatedAt: discoveries.generatedAt
+        generatedAt: discoveries.generatedAt,
+        highSignalAlerts: highSignalAlerts.map(m => ({
+          personName: m.person.name,
+          personPriority: m.person.priority,
+          discoveryTitle: m.discovery.title,
+          matchContext: m.matchContext,
+          confidence: m.confidence
+        }))
       }, '', recentMemories.length, 30);
       
       res.json({
@@ -2371,7 +2410,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         data: {
           discoveries: discoveries.discoveries,
           insights: discoveries.insights,
-          generatedAt: discoveries.generatedAt
+          generatedAt: discoveries.generatedAt,
+          highSignalAlerts: highSignalAlerts.map(m => ({
+            personId: m.person.id,
+            personName: m.person.name,
+            personPriority: m.person.priority,
+            relationship: m.person.relationship,
+            discoveryId: m.discovery.id,
+            discoveryTitle: m.discovery.title,
+            discoveryUrl: m.discovery.url,
+            matchContext: m.matchContext,
+            confidence: m.confidence
+          }))
         },
         configured: true,
         error: discoveries.error
