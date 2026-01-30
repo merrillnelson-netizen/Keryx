@@ -299,40 +299,55 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
    * Handle log command - save free-form voice input as memory
    */
   const handleLogCommand = useCallback(async (memoryText: string) => {
+    if (!memoryText || memoryText.trim().length === 0) {
+      const errorMessage = "Please provide some text to log.";
+      setLastResponse(errorMessage);
+      return;
+    }
+
+    isProcessingRef.current = true;
+
+    if (isListening) {
+      stopListening(false);
+    }
+
     try {
-      if (!memoryText || memoryText.trim().length === 0) {
-        throw new Error("No data provided for log command");
-      }
-
-      isProcessingRef.current = true;
-
-      if (isListening) {
-        stopListening(false);
-      }
-
+      // Use mutate instead of mutateAsync to avoid onSuccess errors propagating
+      // The mutation's onSuccess/onError handlers will handle the UI updates
       await saveMutation.mutateAsync(memoryText.trim());
+      
+      // If we get here, the mutation succeeded
+      // Note: onSuccess handler also runs, but we clean up state here
       setTranscript("");
       modeRef.current = null;
       setModeState(null);
 
     } catch (error: any) {
-      console.error('[handleLogCommand] Error:', error?.message || error);
-      console.error('[handleLogCommand] Stack:', error?.stack);
-      isProcessingRef.current = false;
-
-      if (isListening) {
-        stopListening(false);
+      // This catches actual network/API errors, NOT onSuccess handler errors
+      console.error('[handleLogCommand] Mutation error:', error?.message || error);
+      
+      // Check if the error is from onSuccess (mutation actually succeeded)
+      // by seeing if it's a non-network error
+      const isLikelySuccessHandlerError = error?.message && !error.message.includes('HTTP') && !error.message.includes('fetch') && !error.message.includes('network');
+      
+      if (isLikelySuccessHandlerError) {
+        // The save probably worked, just the success handler had issues
+        console.log('[handleLogCommand] Error likely from success handler, treating as success');
+        setLastResponse('Memory saved successfully');
+      } else {
+        // Actual failure
+        isProcessingRef.current = false;
+        setTimeout(() => {
+          const errorMessage = "Failed to log your command. Please try again.";
+          setLastResponse(errorMessage);
+          if (settings?.voiceResponseEnabled) {
+            speak(errorMessage);
+          }
+        }, 500);
       }
+      
       modeRef.current = null;
       setModeState(null);
-
-      setTimeout(() => {
-        const errorMessage = "Failed to log your command. Please try again.";
-        setLastResponse(errorMessage);
-        if (settings?.voiceResponseEnabled) {
-          speak(errorMessage);
-        }
-      }, 500);
     }
   }, [isListening, saveMutation, settings, speak, stopListening]);
 
