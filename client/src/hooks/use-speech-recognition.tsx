@@ -333,24 +333,28 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
     } catch (error: any) {
       // This catches actual network/API errors, NOT onSuccess handler errors
-      console.error('[handleLogCommand] Mutation error:', error?.message || error);
+      const errorMsg = error?.message || String(error) || 'Unknown error';
+      console.error('[handleLogCommand] Mutation error:', errorMsg);
       
       // Check if the error is from onSuccess (mutation actually succeeded)
       // by seeing if it's a non-network error
-      const isLikelySuccessHandlerError = error?.message && !error.message.includes('HTTP') && !error.message.includes('fetch') && !error.message.includes('network');
+      const isNetworkError = errorMsg.includes('HTTP') || errorMsg.includes('fetch') || errorMsg.includes('network') || errorMsg.includes('Failed to fetch');
       
-      if (isLikelySuccessHandlerError) {
+      if (!isNetworkError) {
         // The save probably worked, just the success handler had issues
         console.log('[handleLogCommand] Error likely from success handler, treating as success');
         setLastResponse('Memory saved successfully');
+        // Invalidate queries so the new memory shows up
+        queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
       } else {
-        // Actual failure
+        // Actual network failure
         isProcessingRef.current = false;
         setTimeout(() => {
-          const errorMessage = "Failed to log your command. Please try again.";
+          // Show the actual error in production for debugging
+          const errorMessage = `Failed to log: ${errorMsg.substring(0, 100)}`;
           setLastResponse(errorMessage);
           if (settings?.voiceResponseEnabled) {
-            speak(errorMessage);
+            speak("Failed to log your command. Please try again.");
           }
         }, 500);
       }
@@ -358,7 +362,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       modeRef.current = null;
       setModeState(null);
     }
-  }, [isListening, saveMutation, settings, speak, stopListening]);
+  }, [isListening, saveMutation, settings, speak, stopListening, queryClient]);
 
   /**
    * Handle query command - search memories with hybrid search
