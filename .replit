@@ -45,3 +45,5 @@ integrations = ["javascript_openai:1.0.0", "google-calendar:1.0.0", "outlook:1.0
 
 [userenv.shared]
 TELEGRAM_BOT_USERNAME = "HelixAppBot"
+VAPID_PUBLIC_KEY = "BD5BwsfaBnZZdMf54i5XHbEDcTFHBArSPWDb_ySAkA85OaniAY6txwkLJtvIGpQ6lOjFz2HImFq7JypNfS7rWxg"
+VAPID_PRIVATE_KEY = "T4pOnn_6PUAG7M-US2BUWIQxJufLJlWEbHVSAFRcvaI"

@@ -748,3 +748,37 @@ export type LocationHistory = typeof locationHistory.$inferSelect;
 export type InsertLocationHistory = z.infer<typeof insertLocationHistorySchema>;
 export type FrequentPlace = typeof frequentPlaces.$inferSelect;
 export type InsertFrequentPlace = z.infer<typeof insertFrequentPlaceSchema>;
+
+/**
+ * Push Subscriptions table - stores Web Push API subscriptions for notifications
+ * Each user can have multiple subscriptions (different devices/browsers)
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(), // Public key for encryption
+  auth: text("auth").notNull(), // Auth secret for encryption
+  userAgent: text("user_agent"), // Browser/device info for identification
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsed: timestamp("last_used"), // Track when last notification was sent
+}, (table) => ({
+  userIdIdx: index("push_subscriptions_user_id_idx").on(table.userId),
+  endpointIdx: uniqueIndex("push_subscriptions_endpoint_idx").on(table.endpoint),
+}));
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  lastUsed: true,
+});
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
