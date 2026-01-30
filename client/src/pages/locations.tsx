@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import AppLayout from "@/components/app-layout";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -373,13 +374,14 @@ export default function LocationsPage() {
   };
 
   return (
-    <div className="container max-w-4xl mx-auto p-4 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-primary" />
-            Location History
-          </h1>
+    <AppLayout>
+      <div className="container max-w-4xl mx-auto p-4 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <MapPin className="w-6 h-6 text-primary" />
+              Location History
+            </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Import your Google Timeline data to enrich your briefings with location context
           </p>
@@ -712,6 +714,7 @@ export default function LocationsPage() {
           </p>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
