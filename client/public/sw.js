@@ -1,4 +1,4 @@
-const CACHE_NAME = 'helix-v1';
+const CACHE_NAME = 'keryx-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -25,13 +25,13 @@ self.addEventListener('push', (event) => {
         id: data.id
       },
       actions: data.actions || [],
-      tag: data.tag || 'helix-notification',
+      tag: data.tag || 'keryx-notification',
       renotify: true,
       requireInteraction: data.requireInteraction || false
     };
 
     event.waitUntil(
-      self.registration.showNotification(data.title || 'Helix', options)
+      self.registration.showNotification(data.title || 'Keryx', options)
     );
   } catch (error) {
     console.error('Push notification error:', error);

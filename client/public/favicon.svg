@@ -1,50 +1,50 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="helixGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="keryxGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#6366f1" />
       <stop offset="50%" stop-color="#8b5cf6" />
       <stop offset="100%" stop-color="#a855f7" />
     </linearGradient>
-    <linearGradient id="helixGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+    <linearGradient id="keryxGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#a855f7" />
       <stop offset="50%" stop-color="#8b5cf6" />
       <stop offset="100%" stop-color="#6366f1" />
     </linearGradient>
   </defs>
   
-  <!-- Left helix strand - curves to form left side of H -->
+  <!-- Left strand - curves to form left side of K -->
   <path
     d="M16 6 C6 14, 6 22, 16 30 C26 38, 26 48, 16 58"
-    stroke="url(#helixGrad1)"
+    stroke="url(#keryxGrad1)"
     stroke-width="4.5"
     stroke-linecap="round"
     fill="none"
   />
   
-  <!-- Right helix strand - curves to form right side of H -->
+  <!-- Right strand - curves to form right side of K -->
   <path
     d="M48 6 C58 14, 58 22, 48 30 C38 38, 38 48, 48 58"
-    stroke="url(#helixGrad2)"
+    stroke="url(#keryxGrad2)"
     stroke-width="4.5"
     stroke-linecap="round"
     fill="none"
   />
   
-  <!-- Center horizontal bar - the crossbar of the H -->
+  <!-- Center horizontal bar - the crossbar -->
   <line 
     x1="16" y1="32" x2="48" y2="32" 
-    stroke="url(#helixGrad1)" 
+    stroke="url(#keryxGrad1)" 
     stroke-width="4" 
     stroke-linecap="round" 
   />
   
-  <!-- DNA connecting rungs above center -->
-  <line x1="14" y1="18" x2="50" y2="18" stroke="url(#helixGrad1)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+  <!-- Connecting rungs above center -->
+  <line x1="14" y1="18" x2="50" y2="18" stroke="url(#keryxGrad1)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
   
-  <!-- DNA connecting rungs below center -->
-  <line x1="14" y1="46" x2="50" y2="46" stroke="url(#helixGrad2)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+  <!-- Connecting rungs below center -->
+  <line x1="14" y1="46" x2="50" y2="46" stroke="url(#keryxGrad2)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
   
-  <!-- Accent dots at the helix crossings -->
-  <circle cx="16" cy="30" r="3" fill="url(#helixGrad1)" opacity="0.8" />
-  <circle cx="48" cy="30" r="3" fill="url(#helixGrad2)" opacity="0.8" />
+  <!-- Accent dots at crossings -->
+  <circle cx="16" cy="30" r="3" fill="url(#keryxGrad1)" opacity="0.8" />
+  <circle cx="48" cy="30" r="3" fill="url(#keryxGrad2)" opacity="0.8" />
 </svg>

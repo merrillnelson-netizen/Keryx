@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-interface HelixLogoProps {
+interface KeryxLogoProps {
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   showText?: boolean;
@@ -15,7 +15,7 @@ const sizeMap = {
 };
 
 function DNAHelixSVG({ size = 40 }: { size?: number }) {
-  const uniqueId = `helix-${Math.random().toString(36).substr(2, 9)}`;
+  const uniqueId = `keryx-${Math.random().toString(36).substr(2, 9)}`;
   return (
     <svg 
       width={size} 
@@ -23,7 +23,7 @@ function DNAHelixSVG({ size = 40 }: { size?: number }) {
       viewBox="0 0 64 64" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="Helix DNA Logo"
+      aria-label="Keryx Logo"
     >
       <defs>
         <linearGradient id={`${uniqueId}-grad1`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -86,12 +86,12 @@ function DNAHelixSVG({ size = 40 }: { size?: number }) {
   );
 }
 
-export function HelixLogo({ 
+export function KeryxLogo({ 
   size = "md", 
   className,
   showText = true,
   textClassName
-}: HelixLogoProps) {
+}: KeryxLogoProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <div className="flex-shrink-0">
@@ -102,17 +102,17 @@ export function HelixLogo({
           "font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent",
           textClassName || "text-xl lg:text-2xl"
         )}>
-          Helix
+          Keryx
         </span>
       )}
     </div>
   );
 }
 
-export function HelixLogoIcon({ 
+export function KeryxLogoIcon({ 
   size = "md", 
   className 
-}: Omit<HelixLogoProps, "showText" | "textClassName">) {
+}: Omit<KeryxLogoProps, "showText" | "textClassName">) {
   return (
     <div className={cn("flex-shrink-0", className)}>
       <DNAHelixSVG size={sizeMap[size]} />
@@ -120,4 +120,5 @@ export function HelixLogoIcon({
   );
 }
 
-export default HelixLogo;
+export { KeryxLogo as HelixLogo, KeryxLogoIcon as HelixLogoIcon };
+export default KeryxLogo;
