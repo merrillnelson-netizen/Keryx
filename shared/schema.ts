@@ -184,12 +184,14 @@ export const people = pgTable("people", {
   name: text("name").notNull(), // Person's name as detected/entered
   relationship: text("relationship"), // e.g., "colleague", "friend", "family", "client"
   notes: text("notes"), // User notes about this person
+  priority: integer("priority").default(5).notNull(), // 1-10 closeness score (10 = highest, e.g., spouse/partner)
   mentionCount: integer("mention_count").default(0), // How many times mentioned
   firstMentioned: timestamp("first_mentioned").defaultNow().notNull(),
   lastMentioned: timestamp("last_mentioned").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("people_user_id_idx").on(table.userId),
   uniqueUserPerson: uniqueIndex("people_user_name_idx").on(table.userId, table.name),
+  priorityIdx: index("people_priority_idx").on(table.userId, table.priority),
 }));
 
 /**

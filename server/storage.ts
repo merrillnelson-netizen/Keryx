@@ -62,6 +62,7 @@ export interface IStorage {
   getPeople(userId: string): Promise<Person[]>;
   getPerson(userId: string, name: string): Promise<Person | undefined>;
   getActivePeopleCount(userId: string): Promise<number>;
+  getHighPriorityPeople(userId: string, minPriority?: number): Promise<Person[]>;
   upsertPerson(userId: string, name: string): Promise<Person>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
   deletePerson(userId: string, id: string): Promise<boolean>;
@@ -718,6 +719,27 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to count active people:', error);
       throw new Error('Database error while counting active people');
+    }
+  }
+
+  /**
+   * Get high-priority people (for high-signal alerts)
+   * Default minimum priority is 8 (high importance)
+   */
+  async getHighPriorityPeople(userId: string, minPriority: number = 8): Promise<Person[]> {
+    try {
+      const result = await db
+        .select()
+        .from(people)
+        .where(and(
+          eq(people.userId, userId),
+          sql`${people.priority} >= ${minPriority}`
+        ))
+        .orderBy(desc(people.priority));
+      return result;
+    } catch (error) {
+      console.error('Failed to fetch high-priority people:', error);
+      throw new Error('Database error while fetching high-priority people');
     }
   }
 
