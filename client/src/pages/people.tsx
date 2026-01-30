@@ -96,7 +96,7 @@ export default function People() {
   });
 
   const updatePersonMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { name?: string; relationship?: string; notes?: string } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { name?: string; relationship?: string; notes?: string; priority?: number } }) => {
       const response = await apiRequest("PATCH", `/api/people/${id}`, data);
       if (!response.ok) throw new Error("Failed to update person");
       return response.json();

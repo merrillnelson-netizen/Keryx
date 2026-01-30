@@ -47,29 +47,31 @@ export async function detectHighSignalMentions(
       let matchContext = '';
       let confidence = 0;
 
+      // Skip invalid names (empty or too short)
+      if (!person.name || person.name.trim().length < 2) {
+        continue;
+      }
+
       // Full name match (highest confidence)
       if (searchText.includes(personNameLower)) {
         matched = true;
         matchContext = `Full name "${person.name}" found in discovery`;
         confidence = 0.95;
       }
-      // First and last name separate (if person has multi-part name)
+      // Multi-part name matching
       else if (nameParts.length >= 2) {
         const firstName = nameParts[0];
         const lastName = nameParts[nameParts.length - 1];
         
-        // Both first and last name must appear
+        // Both first and last name appear (medium-high confidence)
         if (searchText.includes(firstName) && searchText.includes(lastName) && 
             firstName.length > 2 && lastName.length > 2) {
           matched = true;
-          matchContext = `Both "${nameParts[0]}" and "${lastName}" found in discovery`;
+          matchContext = `Both "${firstName}" and "${lastName}" found in discovery`;
           confidence = 0.75;
         }
-      }
-      // Last name only (lower confidence, must be unique enough)
-      else if (nameParts.length >= 2) {
-        const lastName = nameParts[nameParts.length - 1];
-        if (lastName.length >= 4 && searchText.includes(lastName)) {
+        // Last name only (lower confidence, must be unique enough)
+        else if (lastName.length >= 4 && searchText.includes(lastName)) {
           matched = true;
           matchContext = `Last name "${lastName}" found - verify manually`;
           confidence = 0.5;
