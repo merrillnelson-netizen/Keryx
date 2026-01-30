@@ -11,13 +11,19 @@ import { pool } from "./db";
  * Exits process if critical variables are missing
  */
 function validateEnvironment() {
-  const required = ['OPENAI_API_KEY', 'SESSION_SECRET', 'DATABASE_URL'];
+  const required = ['SESSION_SECRET', 'DATABASE_URL'];
   const missing: string[] = [];
 
   for (const envVar of required) {
     if (!process.env[envVar]) {
       missing.push(envVar);
     }
+  }
+
+  // Check for OpenAI API key (either Replit AI Integration or direct key)
+  const hasOpenAIKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!hasOpenAIKey) {
+    missing.push('OPENAI_API_KEY (or AI_INTEGRATIONS_OPENAI_API_KEY)');
   }
 
   if (missing.length > 0) {

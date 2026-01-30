@@ -33,7 +33,8 @@ import { isOutlookConnected } from "./outlook-calendar-service";
 import { sendOutlookEmail, isOutlookMailConnected } from "./outlook-mail-service";
 
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   timeout: 30000,
   maxRetries: 2,
 });
