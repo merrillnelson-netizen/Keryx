@@ -149,37 +149,44 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       return await response.json();
     },
     onSuccess: (data, variables) => {
-      console.log('[saveMutation] onSuccess called, data:', data);
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      try {
+        console.log('[saveMutation] onSuccess called, data:', JSON.stringify(data, null, 2));
+        queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
-      isProcessingRef.current = false;
+        isProcessingRef.current = false;
 
-      const topicTag = data?.data?.topicTag || data?.topicTag || 'unknown';
-      const successMessage = `Memory saved as ${topicTag}`;
-      
-      // AI action detection runs in background - invalidate pending actions after a delay
-      // to allow backend to process and create any pending actions
-      if (data?.actionDetectionInitiated) {
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
-        }, 3000); // Check after 3 seconds for new pending actions
-      }
-      
-      setLastResponse(successMessage);
-      
-      // Store saved memory data for calendar event detection
-      const memoryData = data?.data || data;
-      setLastSavedMemory({
-        id: memoryData?.id,
-        memoryText: variables,
-        topicTag: topicTag,
-      });
-
-      setTimeout(() => {
-        if (settings?.voiceResponseEnabled) {
-          speak(successMessage);
+        const topicTag = data?.data?.topicTag || data?.topicTag || 'General';
+        const successMessage = `Memory saved as ${topicTag}`;
+        
+        // AI action detection runs in background - invalidate pending actions after a delay
+        // to allow backend to process and create any pending actions
+        if (data?.actionDetectionInitiated) {
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
+          }, 3000); // Check after 3 seconds for new pending actions
         }
-      }, 1000);
+        
+        setLastResponse(successMessage);
+        
+        // Store saved memory data for calendar event detection
+        const memoryData = data?.data || data;
+        setLastSavedMemory({
+          id: memoryData?.id,
+          memoryText: variables,
+          topicTag: topicTag,
+        });
+
+        setTimeout(() => {
+          if (settings?.voiceResponseEnabled) {
+            speak(successMessage);
+          }
+        }, 1000);
+      } catch (onSuccessError) {
+        console.error('[saveMutation] Error in onSuccess handler:', onSuccessError);
+        // Still mark as successful since save actually worked
+        isProcessingRef.current = false;
+        setLastResponse('Memory saved successfully');
+      }
     },
     onError: (error) => {
       console.error('Failed to save memory:', error);
