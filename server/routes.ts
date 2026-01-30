@@ -2255,8 +2255,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get recent memories
-      const recentMemories = await storage.getRecentLogEntries(user.id, 14, 30);
+      // Get recent memories (only last 7 days for discoveries - more relevant)
+      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 30);
       
       // Get calendar events (next 14 days for travel/event insights)
       let calendarEvents: Array<{ summary?: string; location?: string; start?: { dateTime?: string; date?: string } }> = [];
@@ -2295,9 +2295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Email fetch failed, continue without email context
       }
       
-      // Get financial data
+      // Get financial data with transaction details
       const userSettings = await storage.getSettings(user.id);
-      let financialData: { merchants?: string[]; categories?: string[]; recentTransactions?: Array<{ name: string; amount: number }> } | undefined;
+      let financialData: { merchants?: string[]; categories?: string[]; recentTransactions?: Array<{ name: string; amount: number; category?: string }> } | undefined;
       if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 30);
@@ -2305,9 +2305,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             financialData = {
               merchants: rawSummary.topMerchants.map(m => m.merchant),
               categories: rawSummary.categoryBreakdown.map(c => c.category),
-              recentTransactions: rawSummary.topMerchants.slice(0, 5).map(m => ({
+              recentTransactions: rawSummary.topMerchants.slice(0, 10).map(m => ({
                 name: m.merchant,
-                amount: m.amount
+                amount: m.amount,
+                category: rawSummary.categoryBreakdown.find(c => c.category)?.category
               }))
             };
           }
@@ -2316,17 +2317,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Get location context - check if user is visiting a new location
+      let locationContext: { currentCity?: string; homeCity?: string; isAway?: boolean } | undefined;
+      try {
+        const frequentPlaces = await storage.getFrequentPlaces(user.id);
+        const homePlace = frequentPlaces.find(p => p.label === 'home');
+        
+        // Get most recent memory location to determine current city
+        const latestMemoryWithLocation = recentMemories.find(m => m.geoPlaceName);
+        if (latestMemoryWithLocation?.geoPlaceName && homePlace?.name) {
+          const currentLocation = latestMemoryWithLocation.geoPlaceName;
+          const homeLocation = homePlace.name;
+          
+          // Simple check if user seems to be in a different city
+          const isAway = !currentLocation.toLowerCase().includes(homeLocation.split(',')[0].toLowerCase());
+          
+          if (isAway) {
+            locationContext = {
+              currentCity: currentLocation,
+              homeCity: homeLocation,
+              isAway: true
+            };
+          }
+        }
+      } catch (locError) {
+        // Location context fetch failed, continue without it
+      }
+      
       const discoveries = await getContextualDiscoveries(
         recentMemories.map((m: LogEntry) => ({
           memoryText: m.memoryText,
           topicTag: m.topicTag,
           detectedPeople: m.detectedPeople || [],
-          locationName: m.geoPlaceName || undefined
+          locationName: m.geoPlaceName || undefined,
+          timestamp: m.timestamp
         })),
         calendarEvents,
         emails,
         financialData,
-        tavilyApiKey
+        tavilyApiKey,
+        locationContext
       );
       
       // Cache the result for 30 minutes

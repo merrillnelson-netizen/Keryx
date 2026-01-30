@@ -16,7 +16,10 @@ import {
   AlertCircle,
   Calendar,
   Mail,
-  Brain
+  Brain,
+  Navigation,
+  Clock,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
@@ -30,14 +33,17 @@ interface Discovery {
   insightContext: string;
   category: 'travel' | 'shopping' | 'local' | 'professional' | 'lifestyle' | 'financial' | 'general';
   relevanceScore: number;
+  urgency?: 'immediate' | 'upcoming' | 'general';
 }
 
 interface InsightContext {
-  type: 'calendar' | 'email' | 'memory' | 'financial';
+  type: 'calendar' | 'email' | 'memory' | 'financial' | 'location';
   summary: string;
   location?: string;
   date?: string;
   topics: string[];
+  urgency?: 'immediate' | 'upcoming' | 'general';
+  confidence?: number;
 }
 
 interface DiscoveriesData {
@@ -50,7 +56,7 @@ const getCategoryIcon = (category: Discovery['category']) => {
   switch (category) {
     case 'travel': return MapPin;
     case 'shopping': return ShoppingBag;
-    case 'local': return MapPin;
+    case 'local': return Navigation;
     case 'professional': return Briefcase;
     case 'lifestyle': return Heart;
     case 'financial': return DollarSign;
@@ -70,12 +76,34 @@ const getCategoryColor = (category: Discovery['category']) => {
   }
 };
 
+const getUrgencyBadge = (urgency?: Discovery['urgency']) => {
+  switch (urgency) {
+    case 'immediate':
+      return (
+        <Badge variant="outline" className="text-xs bg-red-500/20 text-red-400 border-red-500/30">
+          <Zap className="w-3 h-3 mr-1" />
+          Now
+        </Badge>
+      );
+    case 'upcoming':
+      return (
+        <Badge variant="outline" className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+          <Clock className="w-3 h-3 mr-1" />
+          Soon
+        </Badge>
+      );
+    default:
+      return null;
+  }
+};
+
 const getInsightIcon = (type: InsightContext['type']) => {
   switch (type) {
     case 'calendar': return Calendar;
     case 'email': return Mail;
     case 'memory': return Brain;
     case 'financial': return DollarSign;
+    case 'location': return Navigation;
     default: return Lightbulb;
   }
 };
@@ -83,6 +111,7 @@ const getInsightIcon = (type: InsightContext['type']) => {
 function DiscoveryCard({ discovery }: { discovery: Discovery }) {
   const CategoryIcon = getCategoryIcon(discovery.category);
   const categoryColors = getCategoryColor(discovery.category);
+  const urgencyBadge = getUrgencyBadge(discovery.urgency);
   
   return (
     <a 
@@ -110,6 +139,7 @@ function DiscoveryCard({ discovery }: { discovery: Discovery }) {
           
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">{discovery.source}</span>
+            {urgencyBadge}
             <Badge variant="outline" className={cn("text-xs capitalize ml-auto", categoryColors)}>
               {discovery.category}
             </Badge>
@@ -117,7 +147,7 @@ function DiscoveryCard({ discovery }: { discovery: Discovery }) {
           
           <p className="text-xs text-primary/80 mt-2 flex items-center gap-1">
             <Sparkles className="w-3 h-3" />
-            Based on: {discovery.insightContext}
+            {discovery.insightContext}
           </p>
         </div>
       </div>
@@ -128,17 +158,29 @@ function DiscoveryCard({ discovery }: { discovery: Discovery }) {
 function InsightBadge({ insight }: { insight: InsightContext }) {
   const Icon = getInsightIcon(insight.type);
   
+  const urgencyColors = {
+    immediate: 'border-red-500/30 bg-red-500/10',
+    upcoming: 'border-amber-500/30 bg-amber-500/10',
+    general: ''
+  };
+  
   return (
-    <div className="glass-card p-2 rounded-lg flex items-center gap-2">
+    <div className={cn(
+      "glass-card p-2 rounded-lg flex items-center gap-2",
+      insight.urgency && urgencyColors[insight.urgency]
+    )}>
       <Icon className="w-4 h-4 text-primary" />
       <span className="text-xs text-muted-foreground truncate">
-        {insight.summary.slice(0, 40)}{insight.summary.length > 40 ? '...' : ''}
+        {insight.summary.slice(0, 50)}{insight.summary.length > 50 ? '...' : ''}
       </span>
       {insight.location && (
         <Badge variant="outline" className="text-xs bg-white/5 ml-auto">
           <MapPin className="w-3 h-3 mr-1" />
           {insight.location.split(',')[0]}
         </Badge>
+      )}
+      {insight.urgency === 'immediate' && (
+        <Zap className="w-3 h-3 text-red-400 flex-shrink-0" />
       )}
     </div>
   );
@@ -171,7 +213,7 @@ export default function ContextualDiscoveries() {
             <div>
               <CardTitle className="text-xl">Discoveries For You</CardTitle>
               <CardDescription>
-                AI-curated content based on your life insights
+                Personalized content based on what's happening in your life
               </CardDescription>
             </div>
           </div>
@@ -223,10 +265,10 @@ export default function ContextualDiscoveries() {
           </div>
         ) : discoveries.length === 0 ? (
           <div className="text-center py-8">
-            <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No discoveries yet</h3>
+            <Sparkles className="w-12 h-12 text-primary/50 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-foreground mb-2">Nothing to discover right now</h3>
             <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-              Connect your calendar, email, or log some memories to get personalized discoveries based on your life.
+              When you have upcoming trips, recent interests, or notable activities, personalized discoveries will appear here.
             </p>
           </div>
         ) : (
@@ -239,7 +281,7 @@ export default function ContextualDiscoveries() {
         
         {insights.length > 0 && (
           <div className="pt-4 border-t border-white/10">
-            <p className="text-xs text-muted-foreground mb-2">Insights driving your discoveries:</p>
+            <p className="text-xs text-muted-foreground mb-2">What's driving these discoveries:</p>
             <div className="space-y-2">
               {insights.slice(0, 3).map((insight, i) => (
                 <InsightBadge key={i} insight={insight} />
