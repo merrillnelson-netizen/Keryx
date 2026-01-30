@@ -937,9 +937,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const full = req.query.full === 'true';
       
       // Use light version for list views (excludes embeddings and heavy metadata)
-      const entries = full 
+      const rawEntries = full 
         ? await storage.getLogEntries(user.id, limit, offset)
         : await storage.getLogEntriesLight(user.id, limit, offset);
+      
+      // Sanitize: exclude embeddingVector from all entries
+      const entries = rawEntries.map(entry => {
+        const { embeddingVector: _, ...sanitized } = entry as any;
+        return sanitized;
+      });
       
       // Get total count for pagination (only if offset is 0 to reduce queries)
       const total = offset === 0 ? await storage.getLogEntriesCount(user.id) : undefined;
@@ -984,14 +990,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         embeddingVector,
       });
       
-      // Invalidate AI cache when new memory is added
-      await storage.invalidateAiCache(user.id);
+      // Sanitize response: exclude embeddingVector (large array) to prevent serialization issues
+      const { embeddingVector: _, ...sanitizedEntry } = logEntry;
       
+      // Send response immediately before any side effects
       res.status(201).json({
         status: 'success',
-        data: logEntry,
+        data: sanitizedEntry,
         timestamp: new Date().toISOString()
       });
+      
+      // Invalidate AI cache in background (after response sent)
+      storage.invalidateAiCache(user.id).catch(err => {
+        console.error('Background cache invalidation failed:', err);
+      });
+      
+      return; // Ensure no further processing
     } catch (error) {
       console.error("Failed to create log entry:", error);
       sendErrorResponse(res, 500, "Failed to create log entry", error);
@@ -1017,9 +1031,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
       
+      // Sanitize response: exclude embeddingVector
+      const { embeddingVector: _, ...sanitizedEntry } = entry;
+      
       res.json({
         status: 'success',
-        data: entry,
+        data: sanitizedEntry,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -1071,15 +1088,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 404, "Log entry not found");
       }
       
-      // Invalidate AI cache when memory is updated
-      await storage.invalidateAiCache(user.id);
+      // Sanitize response: exclude embeddingVector
+      const { embeddingVector: _, ...sanitizedEntry } = updated;
       
+      // Send response immediately
       res.json({
         status: 'success',
-        data: updated,
+        data: sanitizedEntry,
         message: 'Log entry updated successfully',
         timestamp: new Date().toISOString()
       });
+      
+      // Invalidate AI cache in background (after response sent)
+      storage.invalidateAiCache(user.id).catch(err => {
+        console.error('Background cache invalidation failed:', err);
+      });
+      
+      return;
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update log entry", error);
     }
