@@ -1,6 +1,6 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
-  locationHistory, frequentPlaces,
+  locationHistory, frequentPlaces, pushSubscriptions,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -13,7 +13,8 @@ import {
   type IdeaTask, type InsertIdeaTask,
   type IdeaChatMessage,
   type LocationHistory, type InsertLocationHistory,
-  type FrequentPlace, type InsertFrequentPlace
+  type FrequentPlace, type InsertFrequentPlace,
+  type PushSubscription, type InsertPushSubscription
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -124,6 +125,14 @@ export interface IStorage {
   updateFrequentPlace(id: string, userId: string, updates: Partial<InsertFrequentPlace>): Promise<FrequentPlace | undefined>;
   deleteFrequentPlace(id: string, userId: string): Promise<boolean>;
   upsertFrequentPlaces(places: InsertFrequentPlace[]): Promise<number>;
+
+  // Push Subscriptions (user-scoped)
+  getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
+  getPushSubscriptionByEndpoint(endpoint: string): Promise<PushSubscription | undefined>;
+  createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription>;
+  updatePushSubscriptionLastUsed(id: string): Promise<void>;
+  deletePushSubscription(endpoint: string): Promise<boolean>;
+  deleteAllPushSubscriptions(userId: string): Promise<number>;
 }
 
 /**
@@ -1725,6 +1734,90 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to upsert frequent places:', error);
       throw new Error('Database error while upserting frequent places');
+    }
+  }
+
+  // Push Subscription Methods
+  async getPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    try {
+      return await db
+        .select()
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.userId, userId));
+    } catch (error) {
+      console.error('Failed to get push subscriptions:', error);
+      throw new Error('Database error while fetching push subscriptions');
+    }
+  }
+
+  async getPushSubscriptionByEndpoint(endpoint: string): Promise<PushSubscription | undefined> {
+    try {
+      const [subscription] = await db
+        .select()
+        .from(pushSubscriptions)
+        .where(eq(pushSubscriptions.endpoint, endpoint));
+      return subscription;
+    } catch (error) {
+      console.error('Failed to get push subscription by endpoint:', error);
+      throw new Error('Database error while fetching push subscription');
+    }
+  }
+
+  async createPushSubscription(subscription: InsertPushSubscription): Promise<PushSubscription> {
+    try {
+      const [created] = await db
+        .insert(pushSubscriptions)
+        .values(subscription)
+        .onConflictDoUpdate({
+          target: pushSubscriptions.endpoint,
+          set: {
+            p256dh: subscription.p256dh,
+            auth: subscription.auth,
+            userAgent: subscription.userAgent,
+          }
+        })
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Failed to create push subscription:', error);
+      throw new Error('Database error while creating push subscription');
+    }
+  }
+
+  async updatePushSubscriptionLastUsed(id: string): Promise<void> {
+    try {
+      await db
+        .update(pushSubscriptions)
+        .set({ lastUsed: new Date() })
+        .where(eq(pushSubscriptions.id, id));
+    } catch (error) {
+      console.error('Failed to update push subscription last used:', error);
+    }
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.endpoint, endpoint))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete push subscription:', error);
+      throw new Error('Database error while deleting push subscription');
+    }
+  }
+
+  async deleteAllPushSubscriptions(userId: string): Promise<number> {
+    try {
+      const result = await db
+        .delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.userId, userId))
+        .returning();
+      return result.length;
+    } catch (error) {
+      console.error('Failed to delete all push subscriptions:', error);
+      throw new Error('Database error while deleting push subscriptions');
     }
   }
 }
