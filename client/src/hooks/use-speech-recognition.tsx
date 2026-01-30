@@ -147,9 +147,18 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       }
       
       // Parse response with error handling for production edge cases
+      // Read as text first, then parse - more reliable in some environments
       try {
-        const jsonData = await response.json();
-        console.log('[saveMutation] Response parsed successfully');
+        const responseText = await response.text();
+        console.log('[saveMutation] Response text received, length:', responseText.length);
+        
+        if (!responseText) {
+          console.warn('[saveMutation] Empty response body, returning default success');
+          return { status: 'success', data: { topicTag: 'General' } };
+        }
+        
+        const jsonData = JSON.parse(responseText);
+        console.log('[saveMutation] Response parsed successfully, status:', jsonData?.status);
         return jsonData;
       } catch (parseError) {
         console.error('[saveMutation] Failed to parse response:', parseError);
