@@ -518,104 +518,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiReasoning,
       });
 
-      // Track people mentions in the people table (non-blocking)
-      if (extracted.detectedPeople.length > 0) {
-        Promise.all(
-          extracted.detectedPeople.map(name => storage.upsertPerson(user.id, name))
-        ).catch(err => console.error("Failed to track people:", err));
-      }
+      // CRITICAL: Send response IMMEDIATELY after DB save - nothing else can fail the response
+      // Use only primitive values to avoid any serialization issues
+      const responsePayload = {
+        status: 'success',
+        data: {
+          id: logEntry.id + '',
+          topicTag: topicTag + '',
+          memoryText: memoryText.substring(0, 100) + (memoryText.length > 100 ? '...' : ''),
+          mood: extracted.mood || null,
+          moodScore: extracted.moodScore || null,
+        },
+        message: 'Memory saved successfully',
+        timestamp: new Date().toISOString(),
+      };
       
-      // Store location in location_history table (non-blocking)
-      if (geoLat !== undefined && geoLng !== undefined) {
-        const lat = parseFloat(geoLat);
-        const lng = parseFloat(geoLng);
-        // Only store if valid coordinates (not NaN and within valid ranges)
-        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          storage.createLocationHistory({
-            userId: user.id,
-            latitude: lat,
-            longitude: lng,
-            timestamp: new Date(),
-            placeName: geoPlaceName || undefined,
-            source: 'memory',
-            accuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
-          }).catch(err => console.error("Failed to save location history:", err));
-        }
-      }
-
-      // AI Action Detection: Fire-and-forget - runs in background without blocking response
-      // This ensures memory save is fast while action detection happens asynchronously
-      import('./ai-actions-service').then(({ processUserInputForActions }) => {
-        processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone })
-          .then(result => {
-            if (result.actionDetected) {
-              console.log(`AI action detected for memory ${logEntry.id}: ${result.action?.actionType || 'unknown'}`);
-            }
-          })
-          .catch(err => console.warn('AI action detection failed:', err));
-      }).catch(err => console.warn('Failed to load ai-actions-service:', err));
-
-      // Helper to safely clone JSON objects (handles BigInt, circular refs, etc.)
-      const safeJsonClone = (obj: any, fallback: any = null): any => {
-        if (!obj || typeof obj !== 'object') return fallback;
+      res.status(201).json(responsePayload);
+      
+      // ALL background processing happens AFTER response is sent
+      // These are completely decoupled from the response
+      setImmediate(() => {
         try {
-          return JSON.parse(JSON.stringify(obj));
-        } catch {
-          return fallback;
-        }
-      };
+          // Track people mentions in the people table
+          if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
+            Promise.all(
+              extracted.detectedPeople.map(name => storage.upsertPerson(user.id, name))
+            ).catch(err => console.error("Failed to track people:", err));
+          }
+          
+          // Store location in location_history table
+          if (geoLat !== undefined && geoLng !== undefined) {
+            const lat = parseFloat(geoLat);
+            const lng = parseFloat(geoLng);
+            if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+              storage.createLocationHistory({
+                userId: user.id,
+                latitude: lat,
+                longitude: lng,
+                timestamp: new Date(),
+                placeName: geoPlaceName || undefined,
+                source: 'memory',
+                accuracyMeters: geoAccuracyMeters !== undefined ? parseFloat(geoAccuracyMeters) : undefined,
+              }).catch(err => console.error("Failed to save location history:", err));
+            }
+          }
 
-      // Create a fully sanitized response DTO with explicit JSON-safe types
-      // This prevents any Postgres/Drizzle type serialization issues in production
-      const safeResponse = {
-        id: String(logEntry.id),
-        userId: String(logEntry.userId),
-        memoryText: String(logEntry.memoryText),
-        topicTag: String(logEntry.topicTag),
-        metadataJson: safeJsonClone(logEntry.metadataJson, {}),
-        timestamp: logEntry.timestamp instanceof Date 
-          ? logEntry.timestamp.toISOString() 
-          : String(logEntry.timestamp || new Date().toISOString()),
-        mood: logEntry.mood ? String(logEntry.mood) : null,
-        moodScore: typeof logEntry.moodScore === 'number' ? logEntry.moodScore : null,
-        detectedPeople: Array.isArray(logEntry.detectedPeople) 
-          ? logEntry.detectedPeople.map(p => String(p)) 
-          : [],
-        geoLat: typeof logEntry.geoLat === 'number' ? logEntry.geoLat : null,
-        geoLng: typeof logEntry.geoLng === 'number' ? logEntry.geoLng : null,
-        geoPlaceId: logEntry.geoPlaceId ? String(logEntry.geoPlaceId) : null,
-        geoPlaceName: logEntry.geoPlaceName ? String(logEntry.geoPlaceName) : null,
-        geoAccuracyMeters: typeof logEntry.geoAccuracyMeters === 'number' ? logEntry.geoAccuracyMeters : null,
-        deviceId: logEntry.deviceId ? String(logEntry.deviceId) : null,
-        deviceType: logEntry.deviceType ? String(logEntry.deviceType) : null,
-        deviceConnection: logEntry.deviceConnection ? String(logEntry.deviceConnection) : null,
-        calendarEventId: logEntry.calendarEventId ? String(logEntry.calendarEventId) : null,
-        calendarEventTitle: logEntry.calendarEventTitle ? String(logEntry.calendarEventTitle) : null,
-        calendarEventAttendees: Array.isArray(logEntry.calendarEventAttendees) 
-          ? logEntry.calendarEventAttendees.map(a => String(a)) 
-          : null,
-        aiReasoning: safeJsonClone(logEntry.aiReasoning, null),
-      };
+          // AI Action Detection
+          import('./ai-actions-service').then(({ processUserInputForActions }) => {
+            processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone })
+              .catch(err => console.warn('AI action detection failed:', err));
+          }).catch(err => console.warn('Failed to load ai-actions-service:', err));
+        } catch (bgError) {
+          console.error('Background processing error (non-fatal):', bgError);
+        }
+      });
       
-      // Send response with additional safety wrapper
-      try {
-        res.status(201).json({
-          status: 'success',
-          data: safeResponse,
-          message: 'Memory saved successfully',
-          timestamp: new Date().toISOString(),
-          actionDetectionInitiated: true,
-        });
-      } catch (responseError) {
-        // If full response fails, send minimal success response
-        // The memory was already saved at this point
-        console.error('Response serialization failed, sending minimal response:', responseError);
-        res.status(201).json({
-          status: 'success',
-          data: { id: String(logEntry.id), topicTag: String(logEntry.topicTag) },
-          message: 'Memory saved successfully',
-        });
-      }
+      return; // Ensure function exits cleanly
     } catch (error) {
       // Log full error details for debugging
       console.error("Failed to save memory - Full error:", error);
