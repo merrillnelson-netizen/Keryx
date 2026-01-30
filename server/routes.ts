@@ -2052,7 +2052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * GET /api/news-feed - Generate personalized news feed from user's Helix ecosystem
+   * GET /api/news-feed - Generate personalized news feed from user's Keryx ecosystem
    * 
    * Aggregates data from memories, calendars, emails, and financial accounts
    * to create news-style stories about the user's personal ecosystem.
@@ -2934,7 +2934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         telegramVerificationExpires: expiresAt,
       });
       
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'HelixMemoryBot';
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'KeryxMemoryBot';
       
       res.json({
         status: 'success',
@@ -3018,7 +3018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const success = await sendTelegramMessage(
         userSettings.telegramChatId,
-        '🎉 <b>Test message from Helix!</b>\n\nYour Telegram integration is working correctly.'
+        '🎉 <b>Test message from Keryx!</b>\n\nYour Telegram integration is working correctly.'
       );
       
       if (!success) {

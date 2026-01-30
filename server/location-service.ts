@@ -7,7 +7,7 @@ export async function reverseGeocode(latitude: number, longitude: number): Promi
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
       {
         headers: {
-          'User-Agent': 'Helix-App/1.0',
+          'User-Agent': 'Keryx-App/1.0',
           'Accept-Language': 'en'
         }
       }

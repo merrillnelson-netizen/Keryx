@@ -867,7 +867,7 @@ export interface CalendarContext {
 }
 
 /**
- * Generate a personalized news feed from user's Helix ecosystem
+ * Generate a personalized news feed from user's Keryx ecosystem
  * Creates news-style stories from memories, calendar events, emails, and financial data
  */
 export async function generatePersonalNewsFeed(
@@ -1029,7 +1029,7 @@ Respond with JSON:
         },
         {
           role: "user",
-          content: `Generate my personal news feed based on this data from my Helix ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}\n\nCreate news stories that synthesize insights across these data sources.`
+          content: `Generate my personal news feed based on this data from my Keryx ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}\n\nCreate news stories that synthesize insights across these data sources.`
         },
       ],
       response_format: { type: "json_object" },

@@ -41,7 +41,7 @@ export async function createLinkToken(userId: string): Promise<string> {
   // Balance is included automatically with Transactions
   const response = await client.linkTokenCreate({
     user: { client_user_id: userId },
-    client_name: 'Helix',
+    client_name: 'Keryx',
     products: [Products.Transactions],
     country_codes: [CountryCode.Us],
     language: 'en',

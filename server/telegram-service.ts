@@ -185,7 +185,7 @@ export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ s
         });
 
         await sendTelegramMessage(chatId, 
-          `🎉 <b>Successfully connected!</b>\n\nYour Telegram is now linked to Helix. You can:\n\n` +
+          `🎉 <b>Successfully connected!</b>\n\nYour Telegram is now linked to Keryx. You can:\n\n` +
           `📝 Send text messages to record memories\n` +
           `🎤 Send voice notes to record memories\n` +
           `🔍 Ask questions about your memories\n\n` +
@@ -194,14 +194,14 @@ export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ s
         return { success: true, response: 'Account linked' };
       } else {
         await sendTelegramMessage(chatId, 
-          `❌ Invalid or expired verification code.\n\nPlease generate a new code in Helix Settings → Telegram.`
+          `❌ Invalid or expired verification code.\n\nPlease generate a new code in Keryx Settings → Telegram.`
         );
         return { success: true, response: 'Invalid code' };
       }
     } else {
       await sendTelegramMessage(chatId, 
-        `👋 <b>Welcome to Helix!</b>\n\n` +
-        `To connect your account, go to Helix Settings → Telegram and click "Connect Telegram".`
+        `👋 <b>Welcome to Keryx!</b>\n\n` +
+        `To connect your account, go to Keryx Settings → Telegram and click "Connect Telegram".`
       );
       return { success: true, response: 'Welcome message sent' };
     }
@@ -211,7 +211,7 @@ export async function handleTelegramWebhook(update: TelegramUpdate): Promise<{ s
   if (!user) {
     await sendTelegramMessage(chatId, 
       `🔗 <b>Account not linked</b>\n\n` +
-      `Please connect your Telegram in Helix Settings → Telegram first.`
+      `Please connect your Telegram in Keryx Settings → Telegram first.`
     );
     return { success: true, response: 'User not linked' };
   }
