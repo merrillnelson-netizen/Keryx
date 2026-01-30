@@ -28,7 +28,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions` tables.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Performance Optimizations
@@ -58,6 +58,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
 - **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, location clustering, and location context integrated into AI briefings and insights.
+- **Web Push Notifications**: Native browser push notifications using Web Push API with VAPID keys. Supports multi-device subscriptions per user. Notification types: briefing reminders, pattern alerts, financial alerts (large transactions, subscription changes, unusual spending). Service worker handles push events, notification clicks, and window focusing. Settings page includes enable/disable toggle, device management, and test notification button.
 
 ## External Dependencies
 

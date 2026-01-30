@@ -72,8 +72,8 @@ export async function sendPushNotification(
   return { sent, failed };
 }
 
-export async function sendBriefingReminder(userId: string): Promise<void> {
-  await sendPushNotification(userId, {
+export async function sendBriefingReminder(userId: string): Promise<{ sent: number; failed: number }> {
+  return sendPushNotification(userId, {
     title: 'Good Morning!',
     body: 'Your daily briefing is ready. Start your day with AI-powered insights.',
     url: '/',
@@ -87,8 +87,8 @@ export async function sendPatternAlert(
   userId: string,
   patternTitle: string,
   patternBody: string
-): Promise<void> {
-  await sendPushNotification(userId, {
+): Promise<{ sent: number; failed: number }> {
+  return sendPushNotification(userId, {
     title: patternTitle,
     body: patternBody,
     url: '/insights',
@@ -102,8 +102,8 @@ export async function sendPlaidAlert(
   userId: string,
   alertTitle: string,
   alertBody: string
-): Promise<void> {
-  await sendPushNotification(userId, {
+): Promise<{ sent: number; failed: number }> {
+  return sendPushNotification(userId, {
     title: alertTitle,
     body: alertBody,
     url: '/settings',

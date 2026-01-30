@@ -2026,6 +2026,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const briefingText = formatBriefingForTelegram(briefing);
         telegramSent = await sendBriefingToTelegram(user.id, briefingText);
       }
+
+      // Send push notification when briefing is freshly generated
+      let pushSent = 0;
+      const { sendBriefingReminder } = await import('./push-service');
+      const pushResult = await sendBriefingReminder(user.id);
+      pushSent = pushResult.sent;
       
       res.json({
         status: 'success',
@@ -2035,6 +2041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailSource,
         hasFinancialData: !!financialSummary,
         telegramSent,
+        pushSent,
         cached: false,
         generatedAt: new Date().toISOString()
       });
@@ -2416,12 +2423,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Send push notifications for new alerts (automatic when fresh alerts are generated)
+      let pushSent = 0;
+      if (alerts.length > 0) {
+        const { sendPatternAlert } = await import('./push-service');
+        for (const alert of alerts.slice(0, 3)) {
+          const result = await sendPatternAlert(user.id, alert.title, alert.description);
+          if (result.sent > 0) pushSent++;
+        }
+      }
+      
       res.json({
         status: 'success',
         data: alerts,
         memoriesAnalyzed: recentMemories.length,
         periodDays: days,
         telegramSent,
+        pushSent,
         cached: false,
         timestamp: new Date().toISOString()
       });
@@ -3289,11 +3307,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await plaidService.syncTransactions(user.id, itemId);
       await plaidService.updateAccountBalances(user.id, itemId);
       
+      // Detect financial alerts from newly added transactions and send push notifications
+      let alertsSent = 0;
+      if (result.addedTransactions.length > 0) {
+        const alerts = await plaidService.detectFinancialAlerts(user.id, result.addedTransactions);
+        
+        if (alerts.length > 0) {
+          const { sendPlaidAlert } = await import('./push-service');
+          for (const alert of alerts) {
+            const sendResult = await sendPlaidAlert(user.id, alert.title, alert.description);
+            if (sendResult.sent > 0) alertsSent++;
+          }
+        }
+      }
+      
       res.json({
         status: 'success',
         added: result.added,
         modified: result.modified,
         removed: result.removed,
+        alertsSent,
       });
     } catch (error: any) {
       // Log detailed Plaid error info

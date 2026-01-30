@@ -100,10 +100,19 @@ export async function exchangePublicToken(
   return { itemId: plaidItem.id, accounts: insertedAccounts };
 }
 
+export interface SyncTransactionResult {
+  amount: number;
+  name: string;
+  merchantName: string | null;
+  date: Date;
+  primaryCategory: string | null;
+}
+
 export async function syncTransactions(userId: string, plaidItemId: string): Promise<{
   added: number;
   modified: number;
   removed: number;
+  addedTransactions: SyncTransactionResult[];
 }> {
   const client = getPlaidClient();
   
@@ -125,6 +134,7 @@ export async function syncTransactions(userId: string, plaidItemId: string): Pro
   let added = 0;
   let modified = 0;
   let removed = 0;
+  const addedTransactions: SyncTransactionResult[] = [];
   let cursor = item.cursor || undefined;
   let hasMore = true;
   
@@ -167,6 +177,17 @@ export async function syncTransactions(userId: string, plaidItemId: string): Pro
     if (toInsert.length > 0) {
       await db.insert(financialTransactions).values(toInsert).onConflictDoNothing();
       added += toInsert.length;
+      
+      // Track added transactions for alert detection
+      for (const txn of toInsert) {
+        addedTransactions.push({
+          amount: txn.amount,
+          name: txn.name,
+          merchantName: txn.merchantName,
+          date: txn.date,
+          primaryCategory: txn.primaryCategory
+        });
+      }
     }
     
     // Parallel update modified transactions (individual updates due to different values per row)
@@ -207,7 +228,7 @@ export async function syncTransactions(userId: string, plaidItemId: string): Pro
     })
     .where(eq(plaidItems.id, plaidItemId));
   
-  return { added, modified, removed };
+  return { added, modified, removed, addedTransactions };
 }
 
 export async function updateAccountBalances(userId: string, plaidItemId: string): Promise<void> {
@@ -331,4 +352,112 @@ export async function hideAccount(userId: string, plaidAccountId: string, hidden
       eq(financialAccounts.accountId, plaidAccountId),
       eq(financialAccounts.userId, userId)
     ));
+}
+
+export interface FinancialAlert {
+  type: 'unusual_spending' | 'subscription_change' | 'large_transaction';
+  title: string;
+  description: string;
+  amount?: number;
+  merchant?: string;
+  date?: Date;
+}
+
+export async function detectFinancialAlerts(
+  userId: string,
+  newTransactions: Array<{
+    amount: number;
+    name: string;
+    merchantName?: string | null;
+    date: Date;
+    primaryCategory?: string | null;
+  }>
+): Promise<FinancialAlert[]> {
+  const alerts: FinancialAlert[] = [];
+  
+  if (newTransactions.length === 0) {
+    return alerts;
+  }
+
+  // Detect large transactions (over $500)
+  const largeTransactions = newTransactions.filter(t => Math.abs(t.amount) > 500);
+  for (const txn of largeTransactions.slice(0, 2)) {
+    const merchant = txn.merchantName || txn.name;
+    alerts.push({
+      type: 'large_transaction',
+      title: 'Large Transaction Detected',
+      description: `$${Math.abs(txn.amount).toFixed(2)} charge at ${merchant}`,
+      amount: txn.amount,
+      merchant,
+      date: txn.date
+    });
+  }
+
+  // Detect potential subscription changes (recurring merchant with different amount)
+  const subscriptionKeywords = ['subscription', 'monthly', 'recurring', 'streaming', 'membership'];
+  const potentialSubscriptions = newTransactions.filter(t => {
+    const name = (t.merchantName || t.name).toLowerCase();
+    return subscriptionKeywords.some(kw => name.includes(kw)) ||
+           ['netflix', 'spotify', 'amazon prime', 'hulu', 'disney', 'youtube', 'apple', 'google'].some(s => name.includes(s));
+  });
+
+  for (const sub of potentialSubscriptions.slice(0, 2)) {
+    const merchant = sub.merchantName || sub.name;
+    
+    // Look for historical transactions from same merchant with different amount
+    const historicalTxns = await getRecentTransactions(userId, 90, 500);
+    const similarTxns = historicalTxns.filter(h => {
+      const hMerchant = (h.merchantName || h.name).toLowerCase();
+      return hMerchant.includes(merchant.toLowerCase()) && h.amount !== sub.amount;
+    });
+
+    if (similarTxns.length > 0) {
+      const oldAmount = similarTxns[0].amount;
+      const diff = sub.amount - oldAmount;
+      if (Math.abs(diff) > 1) {
+        alerts.push({
+          type: 'subscription_change',
+          title: 'Subscription Price Change',
+          description: `${merchant} changed from $${oldAmount.toFixed(2)} to $${sub.amount.toFixed(2)}`,
+          amount: sub.amount,
+          merchant,
+          date: sub.date
+        });
+      }
+    }
+  }
+
+  // Detect unusual daily spending (compare to user's average)
+  const today = new Date();
+  const todaySpending = newTransactions
+    .filter(t => t.amount > 0 && t.date.toDateString() === today.toDateString())
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  if (todaySpending > 0) {
+    const historicalTxns = await getRecentTransactions(userId, 30, 1000);
+    const dailyTotals: Record<string, number> = {};
+    
+    for (const t of historicalTxns) {
+      if (t.amount > 0) {
+        const dateKey = t.date.toISOString().split('T')[0];
+        dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + t.amount;
+      }
+    }
+
+    const days = Object.values(dailyTotals);
+    if (days.length >= 7) {
+      const avgDaily = days.reduce((a, b) => a + b, 0) / days.length;
+      if (todaySpending > avgDaily * 2 && todaySpending > 100) {
+        alerts.push({
+          type: 'unusual_spending',
+          title: 'Unusual Spending Today',
+          description: `You've spent $${todaySpending.toFixed(2)} today, which is ${Math.round((todaySpending / avgDaily) * 100)}% of your daily average`,
+          amount: todaySpending,
+          date: today
+        });
+      }
+    }
+  }
+
+  return alerts.slice(0, 3);
 }
