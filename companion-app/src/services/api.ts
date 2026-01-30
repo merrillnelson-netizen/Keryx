@@ -1,6 +1,6 @@
 /**
- * Helix API Service
- * Handles communication with the Helix backend
+ * Keryx API Service
+ * Handles communication with the Keryx backend
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,13 +8,13 @@ import type { MCPPayload, MCPResponse } from '../types/mcp';
 
 const API_BASE_URL = __DEV__ 
   ? 'http://localhost:5000' 
-  : 'https://your-helix-instance.replit.app';
+  : 'https://your-keryx-instance.replit.app';
 
-class HelixApiService {
+class KeryxApiService {
   private sessionCookie: string | null = null;
 
   async init(): Promise<void> {
-    this.sessionCookie = await AsyncStorage.getItem('helix_session');
+    this.sessionCookie = await AsyncStorage.getItem('keryx_session');
   }
 
   async login(username: string, password: string): Promise<boolean> {
@@ -32,7 +32,7 @@ class HelixApiService {
         const setCookie = response.headers.get('set-cookie');
         if (setCookie) {
           this.sessionCookie = setCookie;
-          await AsyncStorage.setItem('helix_session', setCookie);
+          await AsyncStorage.setItem('keryx_session', setCookie);
         }
         return true;
       }
@@ -52,7 +52,7 @@ class HelixApiService {
       });
     } finally {
       this.sessionCookie = null;
-      await AsyncStorage.removeItem('helix_session');
+      await AsyncStorage.removeItem('keryx_session');
     }
   }
 
@@ -121,4 +121,5 @@ class HelixApiService {
   }
 }
 
-export const helixApi = new HelixApiService();
+export const keryxApi = new KeryxApiService();
+export { keryxApi as helixApi };

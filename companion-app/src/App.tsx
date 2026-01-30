@@ -1,5 +1,5 @@
 /**
- * Helix Companion App
+ * Keryx Companion App
  * Main application component for Meta Glasses integration
  */
 
@@ -14,18 +14,18 @@ import {
   Platform,
   PermissionsAndroid,
 } from 'react-native';
-import { useHelix, HelixState } from './hooks/useHelix';
+import { useKeryx, KeryxState } from './hooks/useKeryx';
 
-const STATE_MESSAGES: Record<HelixState, string> = {
+const STATE_MESSAGES: Record<KeryxState, string> = {
   'idle': 'Tap to start',
-  'listening-wake': 'Listening for "Hey Helix"...',
+  'listening-wake': 'Listening for "Hey Keryx"...',
   'listening-command': 'Listening...',
   'processing': 'Processing...',
   'speaking': 'Speaking...',
   'error': 'Error occurred',
 };
 
-const STATE_COLORS: Record<HelixState, string> = {
+const STATE_COLORS: Record<KeryxState, string> = {
   'idle': '#6B7280',
   'listening-wake': '#3B82F6',
   'listening-command': '#10B981',
@@ -61,7 +61,7 @@ export default function App(): JSX.Element {
     startListening,
     stopListening,
     connectGlasses,
-  } = useHelix();
+  } = useKeryx();
 
   useEffect(() => {
     requestPermissions();
@@ -82,7 +82,7 @@ export default function App(): JSX.Element {
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
       
       <View style={styles.header}>
-        <Text style={styles.title}>Helix</Text>
+        <Text style={styles.title}>Keryx</Text>
         <View style={styles.statusRow}>
           <View style={[styles.statusDot, { backgroundColor: isAuthenticated ? '#10B981' : '#EF4444' }]} />
           <Text style={styles.statusText}>{isAuthenticated ? 'Connected' : 'Not logged in'}</Text>

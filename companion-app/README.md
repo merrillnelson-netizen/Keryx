@@ -1,10 +1,10 @@
-# Helix Companion App
+# Keryx Companion App
 
-React Native companion app for Helix - enables hands-free voice interaction with Oakley Meta HSTN glasses.
+React Native companion app for Keryx - enables hands-free voice interaction with Oakley Meta HSTN glasses.
 
 ## Features
 
-- **Wake Word Detection**: "Hey Helix" activation using Picovoice Porcupine
+- **Wake Word Detection**: "Hey Keryx" activation using Picovoice Porcupine
 - **Bluetooth SCO Audio**: Routes audio through connected Meta glasses
 - **Geofenced Context**: Enriches memories with location data via GPS + Google Places
 - **Voice Commands**: Natural language processing for record/query actions
@@ -14,7 +14,7 @@ React Native companion app for Helix - enables hands-free voice interaction with
 
 1. **Picovoice Account**: Get an access key at https://console.picovoice.ai
 2. **Google Places API Key**: For reverse geocoding (optional)
-3. **Helix Backend**: Running instance of the Helix web app
+3. **Keryx Backend**: Running instance of the Keryx web app
 
 ## Setup
 
@@ -33,13 +33,13 @@ Create a `.env` file:
 ```env
 PICOVOICE_ACCESS_KEY=your_picovoice_key
 GOOGLE_PLACES_API_KEY=your_google_key
-HELIX_API_URL=https://your-helix-instance.replit.app
+KERYX_API_URL=https://your-keryx-instance.replit.app
 ```
 
 ### 3. Train Custom Wake Word (Optional)
 
 1. Go to https://console.picovoice.ai
-2. Create a new wake word model for "Hey Helix"
+2. Create a new wake word model for "Hey Keryx"
 3. Download the `.ppn` file
 4. Place in `android/app/src/main/assets/` and `ios/` directories
 
@@ -60,9 +60,9 @@ companion-app/
 ├── src/
 │   ├── App.tsx              # Main application component
 │   ├── hooks/
-│   │   └── useHelix.ts      # Main state management hook
+│   │   └── useKeryx.ts      # Main state management hook
 │   ├── services/
-│   │   ├── api.ts           # Helix backend API client
+│   │   ├── api.ts           # Keryx backend API client
 │   │   ├── wakeWord.ts      # Picovoice Porcupine integration
 │   │   ├── bluetooth.ts     # Bluetooth SCO management
 │   │   ├── location.ts      # GPS + reverse geocoding
@@ -74,7 +74,7 @@ companion-app/
 
 ## Voice Command Flow
 
-1. Wake word detected ("Hey Helix")
+1. Wake word detected ("Hey Keryx")
 2. App plays confirmation sound and starts listening
 3. User speaks command
 4. Action Router classifies intent (record vs query)

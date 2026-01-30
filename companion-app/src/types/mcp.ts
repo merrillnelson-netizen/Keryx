@@ -1,5 +1,5 @@
 /**
- * MCP (Model Context Protocol) Types for Helix Companion App
+ * MCP (Model Context Protocol) Types for Keryx Companion App
  * Matches the schema defined in shared/schema.ts
  */
 

@@ -1,7 +1,7 @@
 {
-  "name": "helix-companion",
+  "name": "keryx-companion",
   "version": "1.0.0",
-  "description": "Helix Companion App for Meta Glasses integration",
+  "description": "Keryx Companion App for Meta Glasses integration",
   "main": "index.js",
   "scripts": {
     "start": "react-native start",

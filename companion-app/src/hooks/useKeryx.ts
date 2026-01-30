@@ -1,10 +1,10 @@
 /**
- * useHelix Hook
- * Main React hook for Helix companion app functionality
+ * useKeryx Hook
+ * Main React hook for Keryx companion app functionality
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { helixApi } from '../services/api';
+import { keryxApi } from '../services/api';
 import { wakeWordService } from '../services/wakeWord';
 import { speechService } from '../services/speech';
 import { bluetoothService } from '../services/bluetooth';
@@ -12,7 +12,7 @@ import { locationService } from '../services/location';
 import { actionRouter, ActionType } from '../services/actionRouter';
 import type { DeviceContext, GeoContext, MCPResponse } from '../types/mcp';
 
-export type HelixState = 
+export type KeryxState = 
   | 'idle'
   | 'listening-wake'
   | 'listening-command'
@@ -20,8 +20,8 @@ export type HelixState =
   | 'speaking'
   | 'error';
 
-interface HelixStatus {
-  state: HelixState;
+interface KeryxStatus {
+  state: KeryxState;
   isAuthenticated: boolean;
   isGlassesConnected: boolean;
   deviceContext: DeviceContext | null;
@@ -32,7 +32,7 @@ interface HelixStatus {
   error: string | null;
 }
 
-interface UseHelixReturn extends HelixStatus {
+interface UseKeryxReturn extends KeryxStatus {
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
   processCommand: (transcript: string) => Promise<void>;
@@ -41,8 +41,8 @@ interface UseHelixReturn extends HelixStatus {
   logout: () => Promise<void>;
 }
 
-export function useHelix(): UseHelixReturn {
-  const [state, setState] = useState<HelixState>('idle');
+export function useKeryx(): UseKeryxReturn {
+  const [state, setState] = useState<KeryxState>('idle');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isGlassesConnected, setIsGlassesConnected] = useState(false);
   const [deviceContext, setDeviceContext] = useState<DeviceContext | null>(null);
@@ -61,8 +61,8 @@ export function useHelix(): UseHelixReturn {
 
   const initializeServices = async () => {
     try {
-      await helixApi.init();
-      const authed = await helixApi.checkAuth();
+      await keryxApi.init();
+      const authed = await keryxApi.checkAuth();
       setIsAuthenticated(authed);
 
       await speechService.initialize();
@@ -175,13 +175,13 @@ export function useHelix(): UseHelixReturn {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    const success = await helixApi.login(username, password);
+    const success = await keryxApi.login(username, password);
     setIsAuthenticated(success);
     return success;
   }, []);
 
   const logout = useCallback(async () => {
-    await helixApi.logout();
+    await keryxApi.logout();
     setIsAuthenticated(false);
   }, []);
 
@@ -203,3 +203,6 @@ export function useHelix(): UseHelixReturn {
     logout,
   };
 }
+
+export { useKeryx as useHelix };
+export type { KeryxState as HelixState };

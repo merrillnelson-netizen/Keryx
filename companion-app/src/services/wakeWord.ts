@@ -1,6 +1,6 @@
 /**
  * Wake Word Detection Service
- * Uses Picovoice Porcupine for "Hey Helix" detection
+ * Uses Picovoice Porcupine for "Hey Keryx" detection
  */
 
 import {
@@ -16,7 +16,7 @@ class WakeWordService {
   private porcupineManager: PorcupineManager | null = null;
   private isListening: boolean = false;
   private accessKey: string = ''; // Picovoice Access Key
-  private customKeywordPath: string | null = null; // Path to custom "Hey Helix" .ppn file
+  private customKeywordPath: string | null = null; // Path to custom "Hey Keryx" .ppn file
 
   setAccessKey(key: string): void {
     this.accessKey = key;
@@ -65,7 +65,7 @@ class WakeWordService {
           processErrorCallback
         );
         console.warn(
-          'Using fallback "Computer" keyword. Train custom "Hey Helix" at console.picovoice.ai'
+          'Using fallback "Computer" keyword. Train custom "Hey Keryx" at console.picovoice.ai'
         );
       }
 
