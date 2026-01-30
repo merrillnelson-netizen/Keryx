@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { LogEntry, Person } from "@shared/schema";
+import { getPriorityInfo, DEFAULT_PRIORITY_VALUE } from "@shared/priority-utils";
 
 const RELATIONSHIP_OPTIONS = [
   "friend",
@@ -65,7 +66,7 @@ export default function People() {
   const [editName, setEditName] = useState("");
   const [editRelationship, setEditRelationship] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editPriority, setEditPriority] = useState(5);
+  const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY_VALUE);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
@@ -215,7 +216,7 @@ export default function People() {
     setEditName(person.name);
     setEditRelationship(person.relationship || "");
     setEditNotes(person.notes || "");
-    setEditPriority(person.priority || 5);
+    setEditPriority(person.priority || DEFAULT_PRIORITY_VALUE);
   };
 
   const handleSaveEdit = () => {
@@ -232,20 +233,9 @@ export default function People() {
     }
   };
 
-  const getPriorityLabel = (priority: number) => {
-    switch (priority) {
-      case 10: return { label: 'VIP', color: 'bg-red-500/20 text-red-400 border-red-500/30' };
-      case 9: return { label: 'Critical', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
-      case 8: return { label: 'High', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' };
-      case 7: return { label: 'Important', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
-      case 6: return { label: 'Moderate', color: 'bg-lime-500/20 text-lime-400 border-lime-500/30' };
-      case 5: return { label: 'Standard', color: 'bg-green-500/20 text-green-400 border-green-500/30' };
-      case 4: return { label: 'Low', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' };
-      case 3: return { label: 'Minimal', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' };
-      case 2: return { label: 'Background', color: 'bg-sky-500/20 text-sky-400 border-sky-500/30' };
-      case 1: return { label: 'Archive', color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
-      default: return { label: 'Unknown', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
-    }
+  const getPriorityLabelInfo = (priority: number) => {
+    const info = getPriorityInfo(priority);
+    return { label: info.label, color: info.bgClass };
   };
 
   if (isLoading) {
@@ -459,8 +449,8 @@ export default function People() {
                         </div>
                       </TableCell>
                       <TableCell data-testid={`priority-cell-${person.id}`}>
-                        <Badge variant="outline" className={cn("text-xs", getPriorityLabel(person.priority || 5).color)}>
-                          {getPriorityLabel(person.priority || 5).label}
+                        <Badge variant="outline" className={cn("text-xs", getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).color)}>
+                          {getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).label}
                         </Badge>
                       </TableCell>
                       <TableCell data-testid={`relationship-cell-${person.id}`}>
@@ -637,8 +627,8 @@ export default function People() {
                       <MessageSquare className="w-4 h-4" />
                       <span>{person.mentionCount} mentions</span>
                     </div>
-                    <Badge variant="outline" className={cn("text-xs", getPriorityLabel(person.priority || 5).color)}>
-                      {getPriorityLabel(person.priority || 5).label}
+                    <Badge variant="outline" className={cn("text-xs", getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).color)}>
+                      {getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).label}
                     </Badge>
                   </div>
                   {person.notes && (

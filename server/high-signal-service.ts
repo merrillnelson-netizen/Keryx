@@ -146,32 +146,10 @@ export function formatHighSignalAlert(match: HighSignalMatch): {
   };
 }
 
-/**
- * Get priority level description for UI display
- */
-export function getPriorityDescription(priority: number): { label: string; description: string; color: string } {
-  switch (priority) {
-    case 10:
-      return { label: 'VIP', description: 'Spouse, partner, immediate family', color: 'red' };
-    case 9:
-      return { label: 'Critical', description: 'Close family, business partners', color: 'orange' };
-    case 8:
-      return { label: 'High', description: 'Close friends, key colleagues', color: 'amber' };
-    case 7:
-      return { label: 'Important', description: 'Good friends, team members', color: 'yellow' };
-    case 6:
-      return { label: 'Moderate', description: 'Acquaintances, regular contacts', color: 'lime' };
-    case 5:
-      return { label: 'Standard', description: 'Default - occasional contacts', color: 'green' };
-    case 4:
-      return { label: 'Low', description: 'Infrequent contacts', color: 'teal' };
-    case 3:
-      return { label: 'Minimal', description: 'Rare contacts', color: 'cyan' };
-    case 2:
-      return { label: 'Background', description: 'Historical mentions', color: 'sky' };
-    case 1:
-      return { label: 'Archive', description: 'Archived/inactive', color: 'slate' };
-    default:
-      return { label: 'Unknown', description: 'Not set', color: 'gray' };
-  }
-}
+// Re-export from shared utilities for backward compatibility
+export { 
+  getPriorityInfo, 
+  getPriorityLabel, 
+  getPriorityDisplayInfo,
+  HIGH_SIGNAL_MIN_PRIORITY 
+} from "@shared/priority-utils";
