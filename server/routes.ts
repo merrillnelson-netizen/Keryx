@@ -555,17 +555,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch(err => console.warn('AI action detection failed:', err));
       }).catch(err => console.warn('Failed to load ai-actions-service:', err));
 
+      // Exclude embeddingVector from response (it's large and may not serialize properly)
+      const { embeddingVector: _excludedVector, ...responseEntry } = logEntry;
+      
       res.status(201).json({
         status: 'success',
-        data: logEntry,
+        data: responseEntry,
         message: 'Memory saved successfully',
         timestamp: new Date().toISOString(),
         // Flag that action detection is running in background
         actionDetectionInitiated: true,
       });
     } catch (error) {
-      // Log error for debugging but don't expose details to client
-      console.error("Failed to save memory:", error instanceof Error ? error.message : error);
+      // Log full error details for debugging
+      console.error("Failed to save memory - Full error:", error);
+      if (error instanceof Error) {
+        console.error("Error name:", error.name);
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+      }
       sendErrorResponse(res, 500, "Failed to save memory. Please try again.", error);
     }
   });
