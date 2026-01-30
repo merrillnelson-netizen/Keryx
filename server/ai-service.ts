@@ -2,8 +2,12 @@ import OpenAI from "openai";
 
 // Using gpt-4o-mini for fast, cost-effective AI processing
 // Supports both Replit AI Integration and direct OpenAI API key
+const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const hasIntegration = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+console.log(`[ai-service] OpenAI initialized - using ${hasIntegration ? 'Replit AI Integration' : 'direct API key'}, key present: ${!!apiKey}`);
+
 const openai = new OpenAI({ 
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+  apiKey,
   // Only set baseURL when using Replit AI Integration
   ...(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL && { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL }),
   timeout: 30000,

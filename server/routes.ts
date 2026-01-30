@@ -409,6 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/memories", requireAuth, aiLimiter, async (req, res) => {
     try {
+      console.log('[memories] Starting memory creation...');
       const { 
         memoryText, 
         topicTag: userProvidedTag,
@@ -419,10 +420,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timezone,
       } = req.body;
       const user = req.user as any;
+      console.log('[memories] User authenticated:', user?.id ? 'yes' : 'no');
       
       if (!memoryText || typeof memoryText !== 'string') {
         return sendErrorResponse(res, 400, "memoryText is required");
       }
+      console.log('[memories] Memory text length:', memoryText.length);
 
       // Validate category if provided (just ensure it's a non-empty string)
       if (userProvidedTag && (typeof userProvidedTag !== 'string' || userProvidedTag.trim() === '')) {
@@ -435,14 +438,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Always extract metadata with AI (now includes mood and people)
-      const extracted = await extractMetadata(memoryText);
+      console.log('[memories] Calling extractMetadata...');
+      let extracted;
+      try {
+        extracted = await extractMetadata(memoryText);
+        console.log('[memories] extractMetadata success, topic:', extracted.topicTag);
+      } catch (aiError: any) {
+        console.error('[memories] extractMetadata failed:', aiError?.message || aiError);
+        throw aiError;
+      }
       
       // Use user-provided category or AI extraction
       const topicTag = userProvidedTag || extracted.topicTag;
       const metadataJson = userProvidedTag ? {} : extracted.metadataJson;
 
       // Generate embedding vector for semantic search
-      const embeddingVector = await generateEmbedding(memoryText);
+      console.log('[memories] Calling generateEmbedding...');
+      let embeddingVector;
+      try {
+        embeddingVector = await generateEmbedding(memoryText);
+        console.log('[memories] generateEmbedding success');
+      } catch (embError: any) {
+        console.error('[memories] generateEmbedding failed:', embError?.message || embError);
+        throw embError;
+      }
       const isZeroVector = embeddingVector.every(v => v === 0);
       if (isZeroVector) {
         console.warn("Using zero vector fallback - OpenAI embedding may have failed");
