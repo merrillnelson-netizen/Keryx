@@ -16,6 +16,7 @@ import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
+import { getVapidPublicKey, sendPushNotification, sendBriefingReminder, sendPatternAlert, sendPlaidAlert } from "./push-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -4117,6 +4118,104 @@ Return ONLY the JSON array, no other text.`;
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to fetch location context", error);
+    }
+  });
+
+  /**
+   * PUSH NOTIFICATION ROUTES
+   * Handle Web Push subscription management
+   */
+
+  // Get VAPID public key for client subscription
+  app.get("/api/push/vapid-key", requireAuth, (req, res) => {
+    const publicKey = getVapidPublicKey();
+    if (!publicKey) {
+      return sendErrorResponse(res, 503, "Push notifications not configured");
+    }
+    res.json({ publicKey });
+  });
+
+  // Subscribe to push notifications
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { endpoint, keys, userAgent } = req.body;
+
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return sendErrorResponse(res, 400, "Invalid subscription data");
+      }
+
+      const subscription = await storage.createPushSubscription({
+        userId: user.id,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        userAgent: userAgent || req.get('user-agent')
+      });
+
+      res.json({ success: true, subscription: { id: subscription.id } });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to subscribe to push notifications", error);
+    }
+  });
+
+  // Unsubscribe from push notifications
+  app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+
+      if (!endpoint) {
+        return sendErrorResponse(res, 400, "Endpoint required");
+      }
+
+      await storage.deletePushSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to unsubscribe from push notifications", error);
+    }
+  });
+
+  // Get user's push subscription status
+  app.get("/api/push/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const subscriptions = await storage.getPushSubscriptions(user.id);
+      
+      res.json({
+        enabled: subscriptions.length > 0,
+        deviceCount: subscriptions.length,
+        devices: subscriptions.map(s => ({
+          id: s.id,
+          userAgent: s.userAgent,
+          createdAt: s.createdAt,
+          lastUsed: s.lastUsed
+        }))
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get push status", error);
+    }
+  });
+
+  // Send a test push notification
+  app.post("/api/push/test", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      
+      const result = await sendPushNotification(user.id, {
+        title: 'Test Notification',
+        body: 'Push notifications are working! You\'ll receive alerts for briefings, pattern insights, and financial updates.',
+        url: '/',
+        type: 'general',
+        tag: 'test-notification'
+      });
+
+      if (result.sent === 0) {
+        return sendErrorResponse(res, 400, "No active subscriptions found. Please enable notifications first.");
+      }
+
+      res.json({ success: true, ...result });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to send test notification", error);
     }
   });
 
