@@ -410,6 +410,19 @@ export default function LocationsPage() {
             </ol>
           </div>
 
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Calendar className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <h4 className="font-medium text-sm">How often should I import?</h4>
+                <p className="text-sm text-muted-foreground">
+                  For best results, import your Timeline data <strong>monthly</strong> or after trips. 
+                  Each import adds new locations — duplicates are automatically handled, so re-importing is safe.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center gap-4">
             <Input
               ref={fileInputRef}
