@@ -149,15 +149,17 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       return await response.json();
     },
     onSuccess: (data, variables) => {
+      console.log('[saveMutation] onSuccess called, data:', data);
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
       isProcessingRef.current = false;
 
-      const successMessage = `Memory saved as ${data.data.topicTag}`;
+      const topicTag = data?.data?.topicTag || data?.topicTag || 'unknown';
+      const successMessage = `Memory saved as ${topicTag}`;
       
       // AI action detection runs in background - invalidate pending actions after a delay
       // to allow backend to process and create any pending actions
-      if (data.actionDetectionInitiated) {
+      if (data?.actionDetectionInitiated) {
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
         }, 3000); // Check after 3 seconds for new pending actions
@@ -166,10 +168,11 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setLastResponse(successMessage);
       
       // Store saved memory data for calendar event detection
+      const memoryData = data?.data || data;
       setLastSavedMemory({
-        id: data.data.id,
+        id: memoryData?.id,
         memoryText: variables,
-        topicTag: data.data.topicTag,
+        topicTag: topicTag,
       });
 
       setTimeout(() => {
@@ -295,8 +298,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       modeRef.current = null;
       setModeState(null);
 
-    } catch (error) {
-      console.error('Error handling log command:', error);
+    } catch (error: any) {
+      console.error('[handleLogCommand] Error:', error?.message || error);
+      console.error('[handleLogCommand] Stack:', error?.stack);
       isProcessingRef.current = false;
 
       if (isListening) {
