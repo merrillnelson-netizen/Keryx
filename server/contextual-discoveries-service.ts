@@ -97,11 +97,19 @@ export async function extractSearchableInsights(
 
   // 1. LOCATION AWARENESS: If user is visiting a new location, show local discoveries
   if (locationContext?.isAway && locationContext.currentCity) {
+    const cityName = locationContext.currentCity.split(',')[0].trim();
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+    
     insights.push({
       type: 'location',
-      summary: `Currently visiting ${locationContext.currentCity}`,
+      summary: `Currently visiting ${cityName}`,
       location: locationContext.currentCity,
-      topics: ['things to do', 'local restaurants', 'events happening now'],
+      topics: [
+        `${cityName} events ${currentMonth} ${currentYear}`,
+        `best places to eat ${cityName} local favorites`,
+        `${cityName} hidden gems locals recommend`
+      ],
       urgency: 'immediate',
       confidence: 0.95
     });
@@ -136,7 +144,7 @@ export async function extractSearchableInsights(
 
   // 3. RECENT ACTIONABLE MEMORIES: Look for specific interests/needs from last 7 days
   const recentMemories = memories.filter(m => {
-    if (!m.timestamp) return true; // Include if no timestamp (assume recent)
+    if (!m.timestamp) return false; // Exclude if no timestamp (could be old)
     const memoryDate = new Date(m.timestamp);
     return memoryDate >= sevenDaysAgo;
   });
