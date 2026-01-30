@@ -597,13 +597,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiReasoning: safeJsonClone(logEntry.aiReasoning, null),
       };
       
-      res.status(201).json({
-        status: 'success',
-        data: safeResponse,
-        message: 'Memory saved successfully',
-        timestamp: new Date().toISOString(),
-        actionDetectionInitiated: true,
-      });
+      // Send response with additional safety wrapper
+      try {
+        res.status(201).json({
+          status: 'success',
+          data: safeResponse,
+          message: 'Memory saved successfully',
+          timestamp: new Date().toISOString(),
+          actionDetectionInitiated: true,
+        });
+      } catch (responseError) {
+        // If full response fails, send minimal success response
+        // The memory was already saved at this point
+        console.error('Response serialization failed, sending minimal response:', responseError);
+        res.status(201).json({
+          status: 'success',
+          data: { id: String(logEntry.id), topicTag: String(logEntry.topicTag) },
+          message: 'Memory saved successfully',
+        });
+      }
     } catch (error) {
       // Log full error details for debugging
       console.error("Failed to save memory - Full error:", error);
