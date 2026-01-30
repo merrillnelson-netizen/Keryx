@@ -555,15 +555,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch(err => console.warn('AI action detection failed:', err));
       }).catch(err => console.warn('Failed to load ai-actions-service:', err));
 
-      // Exclude embeddingVector from response (it's large and may not serialize properly)
-      const { embeddingVector: _excludedVector, ...responseEntry } = logEntry;
+      // Helper to safely clone JSON objects (handles BigInt, circular refs, etc.)
+      const safeJsonClone = (obj: any, fallback: any = null): any => {
+        if (!obj || typeof obj !== 'object') return fallback;
+        try {
+          return JSON.parse(JSON.stringify(obj));
+        } catch {
+          return fallback;
+        }
+      };
+
+      // Create a fully sanitized response DTO with explicit JSON-safe types
+      // This prevents any Postgres/Drizzle type serialization issues in production
+      const safeResponse = {
+        id: String(logEntry.id),
+        userId: String(logEntry.userId),
+        memoryText: String(logEntry.memoryText),
+        topicTag: String(logEntry.topicTag),
+        metadataJson: safeJsonClone(logEntry.metadataJson, {}),
+        timestamp: logEntry.timestamp instanceof Date 
+          ? logEntry.timestamp.toISOString() 
+          : String(logEntry.timestamp || new Date().toISOString()),
+        mood: logEntry.mood ? String(logEntry.mood) : null,
+        moodScore: typeof logEntry.moodScore === 'number' ? logEntry.moodScore : null,
+        detectedPeople: Array.isArray(logEntry.detectedPeople) 
+          ? logEntry.detectedPeople.map(p => String(p)) 
+          : [],
+        geoLat: typeof logEntry.geoLat === 'number' ? logEntry.geoLat : null,
+        geoLng: typeof logEntry.geoLng === 'number' ? logEntry.geoLng : null,
+        geoPlaceId: logEntry.geoPlaceId ? String(logEntry.geoPlaceId) : null,
+        geoPlaceName: logEntry.geoPlaceName ? String(logEntry.geoPlaceName) : null,
+        geoAccuracyMeters: typeof logEntry.geoAccuracyMeters === 'number' ? logEntry.geoAccuracyMeters : null,
+        deviceId: logEntry.deviceId ? String(logEntry.deviceId) : null,
+        deviceType: logEntry.deviceType ? String(logEntry.deviceType) : null,
+        deviceConnection: logEntry.deviceConnection ? String(logEntry.deviceConnection) : null,
+        calendarEventId: logEntry.calendarEventId ? String(logEntry.calendarEventId) : null,
+        calendarEventTitle: logEntry.calendarEventTitle ? String(logEntry.calendarEventTitle) : null,
+        calendarEventAttendees: Array.isArray(logEntry.calendarEventAttendees) 
+          ? logEntry.calendarEventAttendees.map(a => String(a)) 
+          : null,
+        aiReasoning: safeJsonClone(logEntry.aiReasoning, null),
+      };
       
       res.status(201).json({
         status: 'success',
-        data: responseEntry,
+        data: safeResponse,
         message: 'Memory saved successfully',
         timestamp: new Date().toISOString(),
-        // Flag that action detection is running in background
         actionDetectionInitiated: true,
       });
     } catch (error) {

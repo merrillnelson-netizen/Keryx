@@ -99,7 +99,12 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        try {
+          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        } catch (serializeError) {
+          // Prevent logging serialization failures from affecting the response
+          logLine += ` :: [response logging failed: ${serializeError instanceof Error ? serializeError.message : 'unknown error'}]`;
+        }
       }
 
       if (logLine.length > 80) {
