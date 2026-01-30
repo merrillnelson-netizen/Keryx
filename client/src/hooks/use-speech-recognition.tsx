@@ -332,15 +332,12 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       setModeState(null);
 
     } catch (error: any) {
-      // Show the ACTUAL error so we can debug production issues
-      const errorMsg = error?.message || String(error) || 'Unknown error';
-      console.error('[handleLogCommand] Caught error:', errorMsg);
-      
-      // Always treat as success since the memory IS being saved
-      // Just show what error occurred for debugging
+      console.error('[handleLogCommand] Error:', error?.message || error);
       isProcessingRef.current = false;
-      setLastResponse(`Memory saved (debug: ${errorMsg.substring(0, 50)})`);
-      queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      
+      // Show error to user - the mutation's onError should have already handled this
+      // but we catch here as a fallback
+      setLastResponse("Failed to save memory. Please try again.");
       
       modeRef.current = null;
       setModeState(null);
