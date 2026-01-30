@@ -17,7 +17,7 @@ import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, 
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
 import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
-import { getVapidPublicKey, sendPushNotification, sendBriefingReminder, sendPatternAlert, sendPlaidAlert } from "./push-service";
+// Push notifications disabled - import removed
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -2105,12 +2105,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         telegramSent = await sendBriefingToTelegram(user.id, briefingText);
       }
 
-      // Send push notification when briefing is freshly generated
-      let pushSent = 0;
-      const { sendBriefingReminder } = await import('./push-service');
-      const pushResult = await sendBriefingReminder(user.id);
-      pushSent = pushResult.sent;
-      
       res.json({
         status: 'success',
         data: briefing,
@@ -2119,7 +2113,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailSource,
         hasFinancialData: !!financialSummary,
         telegramSent,
-        pushSent,
         cached: false,
         generatedAt: new Date().toISOString()
       });
@@ -2446,22 +2439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (alertableMatches.length > 0) {
             highSignalAlerts = alertableMatches;
-            
-            // Send push notifications for high-signal alerts
-            for (const match of alertableMatches.slice(0, 3)) {
-              const alertData = formatHighSignalAlert(match);
-              try {
-                await sendPushNotification(user.id, {
-                  title: alertData.title,
-                  body: alertData.body,
-                  url: alertData.url,
-                  tag: `high-signal-${match.person.id}`,
-                  requireInteraction: match.person.priority === 10
-                });
-              } catch (pushError) {
-                console.error('Failed to send high-signal push notification:', pushError);
-              }
-            }
+            // Push notifications disabled
           }
         } catch (hsError) {
           console.error('High-signal detection failed:', hsError);
@@ -2580,23 +2558,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Send push notifications for new alerts (automatic when fresh alerts are generated)
-      let pushSent = 0;
-      if (alerts.length > 0) {
-        const { sendPatternAlert } = await import('./push-service');
-        for (const alert of alerts.slice(0, 3)) {
-          const result = await sendPatternAlert(user.id, alert.title, alert.description);
-          if (result.sent > 0) pushSent++;
-        }
-      }
-      
       res.json({
         status: 'success',
         data: alerts,
         memoriesAnalyzed: recentMemories.length,
         periodDays: days,
         telegramSent,
-        pushSent,
         cached: false,
         timestamp: new Date().toISOString()
       });
@@ -3464,26 +3431,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await plaidService.syncTransactions(user.id, itemId);
       await plaidService.updateAccountBalances(user.id, itemId);
       
-      // Detect financial alerts from newly added transactions and send push notifications
-      let alertsSent = 0;
-      if (result.addedTransactions.length > 0) {
-        const alerts = await plaidService.detectFinancialAlerts(user.id, result.addedTransactions);
-        
-        if (alerts.length > 0) {
-          const { sendPlaidAlert } = await import('./push-service');
-          for (const alert of alerts) {
-            const sendResult = await sendPlaidAlert(user.id, alert.title, alert.description);
-            if (sendResult.sent > 0) alertsSent++;
-          }
-        }
-      }
-      
       res.json({
         status: 'success',
         added: result.added,
         modified: result.modified,
         removed: result.removed,
-        alertsSent,
       });
     } catch (error: any) {
       // Log detailed Plaid error info
@@ -4312,101 +4264,29 @@ Return ONLY the JSON array, no other text.`;
   });
 
   /**
-   * PUSH NOTIFICATION ROUTES
-   * Handle Web Push subscription management
+   * PUSH NOTIFICATION ROUTES - DISABLED
+   * Push notifications have been temporarily disabled
    */
 
-  // Get VAPID public key for client subscription
-  app.get("/api/push/vapid-key", requireAuth, (req, res) => {
-    const publicKey = getVapidPublicKey();
-    if (!publicKey) {
-      return sendErrorResponse(res, 503, "Push notifications not configured");
-    }
-    res.json({ publicKey });
+  // All push endpoints return disabled status
+  app.get("/api/push/vapid-key", requireAuth, (_req, res) => {
+    res.json({ publicKey: null, disabled: true });
   });
 
-  // Subscribe to push notifications
-  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const { endpoint, keys, userAgent } = req.body;
-
-      if (!endpoint || !keys?.p256dh || !keys?.auth) {
-        return sendErrorResponse(res, 400, "Invalid subscription data");
-      }
-
-      const subscription = await storage.createPushSubscription({
-        userId: user.id,
-        endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-        userAgent: userAgent || req.get('user-agent')
-      });
-
-      res.json({ success: true, subscription: { id: subscription.id } });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to subscribe to push notifications", error);
-    }
+  app.post("/api/push/subscribe", requireAuth, (_req, res) => {
+    res.json({ success: false, disabled: true, message: "Push notifications are temporarily disabled" });
   });
 
-  // Unsubscribe from push notifications
-  app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
-    try {
-      const { endpoint } = req.body;
-
-      if (!endpoint) {
-        return sendErrorResponse(res, 400, "Endpoint required");
-      }
-
-      await storage.deletePushSubscription(endpoint);
-      res.json({ success: true });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to unsubscribe from push notifications", error);
-    }
+  app.post("/api/push/unsubscribe", requireAuth, (_req, res) => {
+    res.json({ success: true, disabled: true });
   });
 
-  // Get user's push subscription status
-  app.get("/api/push/status", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const subscriptions = await storage.getPushSubscriptions(user.id);
-      
-      res.json({
-        enabled: subscriptions.length > 0,
-        deviceCount: subscriptions.length,
-        devices: subscriptions.map(s => ({
-          id: s.id,
-          userAgent: s.userAgent,
-          createdAt: s.createdAt,
-          lastUsed: s.lastUsed
-        }))
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to get push status", error);
-    }
+  app.get("/api/push/status", requireAuth, (_req, res) => {
+    res.json({ enabled: false, deviceCount: 0, devices: [], disabled: true });
   });
 
-  // Send a test push notification
-  app.post("/api/push/test", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      
-      const result = await sendPushNotification(user.id, {
-        title: 'Test Notification',
-        body: 'Push notifications are working! You\'ll receive alerts for briefings, pattern insights, and financial updates.',
-        url: '/',
-        type: 'general',
-        tag: 'test-notification'
-      });
-
-      if (result.sent === 0) {
-        return sendErrorResponse(res, 400, "No active subscriptions found. Please enable notifications first.");
-      }
-
-      res.json({ success: true, ...result });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to send test notification", error);
-    }
+  app.post("/api/push/test", requireAuth, (_req, res) => {
+    res.json({ success: false, disabled: true, message: "Push notifications are temporarily disabled" });
   });
 
   const httpServer = createServer(app);

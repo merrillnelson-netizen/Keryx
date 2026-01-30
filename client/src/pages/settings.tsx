@@ -1319,84 +1319,17 @@ export default function SettingsPage() {
                 Get notified about briefings, pattern insights, and financial alerts directly on your device.
               </p>
 
-              {isPushLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : !isPushSupported ? (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                  <p className="text-sm text-amber-500">
-                    Push notifications are not supported in this browser. Try using Chrome, Edge, or Firefox on desktop/Android.
-                  </p>
-                </div>
-              ) : pushPermission === 'denied' ? (
-                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                  <div className="flex items-center gap-2">
-                    <BellOff className="w-5 h-5 text-red-500" />
-                    <div>
-                      <p className="text-sm font-medium text-red-500">Notifications Blocked</p>
-                      <p className="text-xs text-muted-foreground">
-                        You've blocked notifications for this site. Please enable them in your browser settings.
-                      </p>
-                    </div>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="flex items-center gap-2">
+                  <BellOff className="w-5 h-5 text-amber-500" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-500">Temporarily Disabled</p>
+                    <p className="text-xs text-muted-foreground">
+                      Push notifications are temporarily disabled while we improve stability. You can still receive updates via Telegram.
+                    </p>
                   </div>
                 </div>
-              ) : pushStatus?.enabled ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                    <div className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
-                      <div>
-                        <p className="text-sm font-medium text-green-500">Notifications Enabled</p>
-                        <p className="text-xs text-muted-foreground">
-                          {pushStatus.deviceCount} device{pushStatus.deviceCount !== 1 ? 's' : ''} registered
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={unsubscribeFromPush}
-                      data-testid="button-push-disable"
-                    >
-                      Disable
-                    </Button>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={sendTestNotification}
-                    data-testid="button-push-test"
-                  >
-                    <Bell className="w-4 h-4 mr-2" />
-                    Send Test Notification
-                  </Button>
-
-                  {pushStatus.devices.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-white/10">
-                      <p className="text-xs text-muted-foreground">Registered devices:</p>
-                      {pushStatus.devices.map((device) => (
-                        <div key={device.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Smartphone className="w-3 h-3" />
-                          <span className="truncate flex-1">
-                            {device.userAgent?.split(' ').slice(0, 3).join(' ') || 'Unknown device'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <Button
-                  className="w-full"
-                  onClick={subscribeToPush}
-                  data-testid="button-push-enable"
-                >
-                  <Bell className="w-4 h-4 mr-2" />
-                  Enable Notifications
-                </Button>
-              )}
+              </div>
 
               <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
                 <div className="flex gap-2 text-xs text-muted-foreground">
