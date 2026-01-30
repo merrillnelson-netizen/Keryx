@@ -3,7 +3,7 @@
  * Central coordinator for voice commands - routes to record or query actions
  */
 
-import { helixApi } from './api';
+import { keryxApi } from './api';
 import { locationService } from './location';
 import { bluetoothService } from './bluetooth';
 import { speechService } from './speech';
@@ -62,10 +62,10 @@ class ActionRouter {
       let spokenFeedback: string;
 
       if (action === 'query') {
-        response = await helixApi.queryMemories(transcript, geo, device);
+        response = await keryxApi.queryMemories(transcript, geo, device);
         spokenFeedback = response.spokenResponse || 'No results found.';
       } else {
-        response = await helixApi.recordMemory(transcript, geo, device);
+        response = await keryxApi.recordMemory(transcript, geo, device);
         spokenFeedback = response.confirmation || 'Memory saved.';
       }
 

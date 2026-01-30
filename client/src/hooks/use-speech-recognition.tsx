@@ -103,7 +103,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         body.topicTag = manualCategory;
       } else {
         // Check session storage for session category
-        const sessionCategory = sessionStorage.getItem("helix_session_category");
+        const sessionCategory = sessionStorage.getItem("keryx_session_category");
         if (sessionCategory) {
           body.topicTag = sessionCategory;
         }

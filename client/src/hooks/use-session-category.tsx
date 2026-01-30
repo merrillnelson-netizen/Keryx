@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-const SESSION_CATEGORY_KEY = "helix_session_category";
+const SESSION_CATEGORY_KEY = "keryx_session_category";
 
 export function useSessionCategory() {
   const [sessionCategory, setSessionCategoryState] = useState<string | null>(() => {
