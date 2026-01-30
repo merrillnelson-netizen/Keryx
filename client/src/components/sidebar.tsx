@@ -14,7 +14,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-surface shadow-lg border-r border-outline">
       <div className="p-6 border-b border-outline">
-        <h1 className="text-xl font-medium text-foreground">Helix</h1>
+        <h1 className="text-xl font-medium text-foreground">Keryx</h1>
         <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
       </div>
       

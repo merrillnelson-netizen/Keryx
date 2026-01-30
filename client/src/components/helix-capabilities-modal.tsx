@@ -69,7 +69,7 @@ const capabilities: CapabilityCategory[] = [
     color: "text-purple-500",
     description: "Record memories on-the-go and receive proactive notifications",
     examples: [
-      { phrase: "Send voice notes to Helix via Telegram", description: "Record memories hands-free from your phone" },
+      { phrase: "Send voice notes to Keryx via Telegram", description: "Record memories hands-free from your phone" },
       { phrase: "Get morning briefings via Telegram", description: "Receive your daily summary as a message" },
       { phrase: "Quick text notes while commuting", description: "Log thoughts without opening the app" },
       { phrase: "Receive pattern alerts on Telegram", description: "Get notified about important trends in your data" },
@@ -251,7 +251,7 @@ export function HintChips() {
   );
 }
 
-export function HelixCapabilitiesModal() {
+export function KeryxCapabilitiesModal() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -264,7 +264,7 @@ export function HelixCapabilitiesModal() {
           data-testid="button-help-capabilities"
         >
           <Sparkles className="w-4 h-4 text-primary" />
-          <span>What can Helix do?</span>
+          <span>What can Keryx do?</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl h-[85vh] sm:h-auto sm:max-h-[85vh] glass-card-strong border-white/20 p-0 flex flex-col">
@@ -273,10 +273,10 @@ export function HelixCapabilitiesModal() {
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center shrink-0">
               <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            What Helix Can Do For You
+            What Keryx Can Do For You
           </DialogTitle>
           <DialogDescription className="text-muted-foreground mt-2 text-sm">
-            Explore all the ways Helix can help manage your memories, calendar, email, and more
+            Explore all the ways Keryx can help manage your memories, calendar, email, and more
           </DialogDescription>
         </DialogHeader>
 
@@ -356,7 +356,7 @@ export function HelixCapabilitiesModal() {
                           <p className="text-sm font-medium text-foreground">Pro Tip</p>
                           <p className="text-sm text-muted-foreground">
                             Power tasks combine multiple integrations in one command. The more context you provide, 
-                            the smarter Helix can be about helping you.
+                            the smarter Keryx can be about helping you.
                           </p>
                         </div>
                       </div>
@@ -372,4 +372,5 @@ export function HelixCapabilitiesModal() {
   );
 }
 
-export default HelixCapabilitiesModal;
+export { KeryxCapabilitiesModal as HelixCapabilitiesModal };
+export default KeryxCapabilitiesModal;

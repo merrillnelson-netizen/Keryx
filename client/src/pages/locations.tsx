@@ -702,7 +702,7 @@ export default function LocationsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>Your location history helps Helix provide more personalized and contextual insights:</p>
+          <p>Your location history helps Keryx provide more personalized and contextual insights:</p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li>Morning briefings can mention your commute patterns and routines</li>
             <li>AI insights understand your lifestyle based on places you frequent</li>

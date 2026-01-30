@@ -49,7 +49,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="flex items-center space-x-3">
               <HelixLogoIcon size="md" />
               <div>
-                <h1 className="text-xl font-bold text-foreground">Helix</h1>
+                <h1 className="text-xl font-bold text-foreground">Keryx</h1>
                 <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
               </div>
             </div>
@@ -152,7 +152,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       <div className="flex items-center space-x-3">
                         <HelixLogoIcon size="md" />
                         <div>
-                          <h1 className="text-xl font-bold text-foreground">Helix</h1>
+                          <h1 className="text-xl font-bold text-foreground">Keryx</h1>
                           <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
                         </div>
                       </div>

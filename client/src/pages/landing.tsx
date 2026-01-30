@@ -28,7 +28,7 @@ export default function LandingPage() {
     {
       icon: Mic,
       title: "Voice-First Capture",
-      description: "Speak naturally to log memories. No typing, no forms—just talk and Helix handles the rest.",
+      description: "Speak naturally to log memories. No typing, no forms—just talk and Keryx handles the rest.",
       gradient: "from-violet-500 to-purple-600"
     },
     {
@@ -122,7 +122,7 @@ export default function LandingPage() {
 
   const testimonials = [
     {
-      quote: "Helix changed how I capture ideas. I just speak and everything is organized perfectly.",
+      quote: "Keryx changed how I capture ideas. I just speak and everything is organized perfectly.",
       author: "Alex Chen",
       role: "Product Designer"
     },
@@ -199,7 +199,7 @@ export default function LandingPage() {
               variants={fadeIn}
               className="text-lg sm:text-xl lg:text-2xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
             >
-              Speak naturally to log memories. Helix uses AI to organize, analyze, and help you rediscover your life's moments.
+              Speak naturally to log memories. Keryx uses AI to organize, analyze, and help you rediscover your life's moments.
             </motion.p>
             
             <motion.div variants={fadeIn} className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -245,7 +245,7 @@ export default function LandingPage() {
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
                 <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="ml-4 text-sm text-muted-foreground">Helix — Voice Log</span>
+                <span className="ml-4 text-sm text-muted-foreground">Keryx — Voice Log</span>
               </div>
               <div className="space-y-4">
                 <div className="flex items-center justify-center">

@@ -1245,7 +1245,7 @@ export default function SettingsPage() {
                           data-testid="link-telegram-connect"
                         >
                           <ExternalLink className="w-4 h-4" />
-                          Open Helix Bot in Telegram
+                          Open Keryx Bot in Telegram
                         </a>
                       </div>
                       
@@ -1640,7 +1640,7 @@ export default function SettingsPage() {
                     <div className="flex gap-2 text-xs text-muted-foreground">
                       <Landmark className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                       <p>
-                        Bank connections are secured by Plaid and never share your login credentials with Helix.
+                        Bank connections are secured by Plaid and never share your login credentials with Keryx.
                         Your data is encrypted and used only for spending insights.
                       </p>
                     </div>
@@ -1659,7 +1659,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Allow Helix to perform actions on your behalf. Choose how each action type should be handled.
+                Allow Keryx to perform actions on your behalf. Choose how each action type should be handled.
               </p>
               
               <div className="space-y-3">
