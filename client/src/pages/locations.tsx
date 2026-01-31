@@ -6,15 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { 
   MapPin, Upload, Trash2, Home, Building2, Coffee, Dumbbell, 
-  ChevronRight, Loader2, Check, X, AlertCircle, ExternalLink,
-  Calendar, Clock, Navigation
+  Loader2, Check, X, AlertCircle, Calendar, Clock, Navigation, Edit3
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -35,7 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Edit3 } from 'lucide-react';
 
 interface LocationStats {
   totalLocations: number;
@@ -87,6 +82,16 @@ const labelColors: Record<string, string> = {
   gym: 'bg-green-500/20 text-green-400 border-green-500/30',
   cafe: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
 };
+
+function getDisplayName(place: { label?: string | null; name: string }): { displayName: string; originalName: string | null } {
+  if (!place.label) {
+    return { displayName: place.name, originalName: null };
+  }
+  const displayName = place.label === 'home' ? 'Home' 
+    : place.label === 'work' ? 'Work' 
+    : place.label;
+  return { displayName, originalName: place.name };
+}
 
 interface ParsedLocation {
   lat: number;
@@ -579,14 +584,17 @@ export default function LocationsPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-medium">
-                          {place.label 
-                            ? (place.label === 'home' ? 'Home' : place.label === 'work' ? 'Work' : place.label)
-                            : place.name}
-                        </h4>
-                        {place.label && (
-                          <span className="text-xs text-muted-foreground">({place.name})</span>
-                        )}
+                        {(() => {
+                          const { displayName, originalName } = getDisplayName(place);
+                          return (
+                            <>
+                              <h4 className="font-medium">{displayName}</h4>
+                              {originalName && (
+                                <span className="text-xs text-muted-foreground">({originalName})</span>
+                              )}
+                            </>
+                          );
+                        })()}
                         {place.isConfirmed && (
                           <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/20">
                             <Check className="w-3 h-3 mr-1" />
@@ -755,11 +763,17 @@ export default function LocationsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-medium text-sm">
-                          {place.label 
-                            ? (place.label === 'home' ? 'Home' : place.label === 'work' ? 'Work' : place.label)
-                            : place.name}
-                        </h4>
+                        {(() => {
+                          const { displayName, originalName } = getDisplayName(place);
+                          return (
+                            <h4 className="font-medium text-sm">
+                              {displayName}
+                              {originalName && (
+                                <span className="text-xs text-muted-foreground ml-1">({originalName})</span>
+                              )}
+                            </h4>
+                          );
+                        })()}
                         <p className="text-xs text-muted-foreground">
                           {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
                         </p>

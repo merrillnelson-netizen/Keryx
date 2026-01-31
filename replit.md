@@ -58,7 +58,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **AI Task Execution**: Detection of actionable requests (calendar, email, reminders) with policy-based approval and rollback capability.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
-- **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, location clustering, and location context integrated into AI briefings and insights.
+- **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, custom place naming (Gym, Coffee Shop, etc.), location clustering, and location context integrated into AI briefings and insights.
 - **Web Push Notifications**: TEMPORARILY DISABLED for stability. Database schema (pushSubscriptions table) preserved for future re-enablement. Users can receive notifications via Telegram integration instead.
 
 ## External Dependencies
