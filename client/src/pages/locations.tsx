@@ -27,6 +27,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Edit3 } from 'lucide-react';
 
 interface LocationStats {
   totalLocations: number;
@@ -171,6 +180,11 @@ export default function LocationsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<string>('');
   const [showHidden, setShowHidden] = useState(false);
+  
+  // Custom name dialog state
+  const [customNameDialogOpen, setCustomNameDialogOpen] = useState(false);
+  const [customNamePlaceId, setCustomNamePlaceId] = useState<string | null>(null);
+  const [customNameValue, setCustomNameValue] = useState('');
 
   const { data: stats, isLoading: statsLoading } = useQuery<LocationStats>({
     queryKey: ['/api/locations/stats'],
@@ -363,6 +377,32 @@ export default function LocationsPage() {
       id: placeId,
       updates: { label: undefined, isConfirmed: false },
     });
+  };
+
+  const unconfirmPlace = (placeId: string) => {
+    updatePlaceMutation.mutate({
+      id: placeId,
+      updates: { isConfirmed: false },
+    });
+  };
+
+  const openCustomNameDialog = (placeId: string, currentLabel?: string) => {
+    setCustomNamePlaceId(placeId);
+    setCustomNameValue(currentLabel && !['home', 'work'].includes(currentLabel) ? currentLabel : '');
+    setCustomNameDialogOpen(true);
+  };
+
+  const saveCustomName = () => {
+    if (!customNamePlaceId || !customNameValue.trim()) return;
+    
+    updatePlaceMutation.mutate({
+      id: customNamePlaceId,
+      updates: { label: customNameValue.trim(), isConfirmed: true },
+    });
+    
+    setCustomNameDialogOpen(false);
+    setCustomNamePlaceId(null);
+    setCustomNameValue('');
   };
 
   const formatDuration = (minutes?: number) => {
@@ -592,6 +632,15 @@ export default function LocationsPage() {
                               Work
                             </Button>
                             <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openCustomNameDialog(place.id, place.label)}
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Edit3 className="w-3 h-3 mr-1" />
+                              Name...
+                            </Button>
+                            <Button
                               variant="default"
                               size="sm"
                               onClick={() => confirmPlace(place.id)}
@@ -625,6 +674,24 @@ export default function LocationsPage() {
                                 Set Work
                               </Button>
                             )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openCustomNameDialog(place.id, place.label)}
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Edit3 className="w-3 h-3 mr-1" />
+                              {place.label && !['home', 'work'].includes(place.label) ? 'Rename' : 'Name...'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => unconfirmPlace(place.id)}
+                              className="h-7 px-2 text-xs text-amber-500 hover:text-amber-400"
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Unconfirm
+                            </Button>
                             {place.label && (
                               <Button
                                 variant="ghost"
@@ -728,6 +795,57 @@ export default function LocationsPage() {
         </CardContent>
       </Card>
       </div>
+
+      {/* Custom Name Dialog */}
+      <Dialog open={customNameDialogOpen} onOpenChange={setCustomNameDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Name This Place</DialogTitle>
+            <DialogDescription>
+              Enter a custom name for this location (e.g., "Gym", "Coffee Shop", "Mom's House")
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="customName">Place Name</Label>
+              <Input
+                id="customName"
+                value={customNameValue}
+                onChange={(e) => setCustomNameValue(e.target.value)}
+                placeholder="Enter a name..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveCustomName();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="text-xs text-muted-foreground">Quick picks:</span>
+              {['Gym', 'Cafe', 'Restaurant', 'Store', 'Park', 'Church', 'School'].map((name) => (
+                <Button
+                  key={name}
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setCustomNameValue(name)}
+                >
+                  {name}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCustomNameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveCustomName} disabled={!customNameValue.trim()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
