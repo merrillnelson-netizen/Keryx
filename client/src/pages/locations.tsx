@@ -580,11 +580,11 @@ export default function LocationsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-medium">
-                          {place.label && !['home', 'work'].includes(place.label) 
-                            ? place.label 
+                          {place.label 
+                            ? (place.label === 'home' ? 'Home' : place.label === 'work' ? 'Work' : place.label)
                             : place.name}
                         </h4>
-                        {place.label && !['home', 'work'].includes(place.label) && (
+                        {place.label && (
                           <span className="text-xs text-muted-foreground">({place.name})</span>
                         )}
                         {place.isConfirmed && (
@@ -756,8 +756,8 @@ export default function LocationsPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-medium text-sm">
-                          {place.label && !['home', 'work'].includes(place.label) 
-                            ? place.label 
+                          {place.label 
+                            ? (place.label === 'home' ? 'Home' : place.label === 'work' ? 'Work' : place.label)
                             : place.name}
                         </h4>
                         <p className="text-xs text-muted-foreground">
