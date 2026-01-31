@@ -579,7 +579,14 @@ export default function LocationsPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-medium">{place.name}</h4>
+                        <h4 className="font-medium">
+                          {place.label && !['home', 'work'].includes(place.label) 
+                            ? place.label 
+                            : place.name}
+                        </h4>
+                        {place.label && !['home', 'work'].includes(place.label) && (
+                          <span className="text-xs text-muted-foreground">({place.name})</span>
+                        )}
                         {place.isConfirmed && (
                           <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/20">
                             <Check className="w-3 h-3 mr-1" />
@@ -748,7 +755,11 @@ export default function LocationsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-medium text-sm">{place.name}</h4>
+                        <h4 className="font-medium text-sm">
+                          {place.label && !['home', 'work'].includes(place.label) 
+                            ? place.label 
+                            : place.name}
+                        </h4>
                         <p className="text-xs text-muted-foreground">
                           {place.address || `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`}
                         </p>
