@@ -1326,9 +1326,9 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2">
                     <BellOff className="w-5 h-5 text-amber-500" />
                     <div>
-                      <p className="text-sm font-medium text-amber-500">Not Supported</p>
+                      <p className="text-sm font-medium text-amber-500">Not Supported in Preview</p>
                       <p className="text-xs text-muted-foreground">
-                        Push notifications are not supported in this browser. Try Chrome, Firefox, or Edge on desktop/Android.
+                        Push notifications require a regular browser tab. If you're using Replit's preview pane, open the app in a new tab using the "Open in new tab" button. Works in Chrome, Firefox, or Edge on desktop/Android.
                       </p>
                     </div>
                   </div>
