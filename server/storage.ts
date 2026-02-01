@@ -1580,6 +1580,16 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async createLocationHistory(location: InsertLocationHistory): Promise<LocationHistory> {
+    try {
+      const [result] = await db.insert(locationHistory).values(location).returning();
+      return result;
+    } catch (error) {
+      console.error('Failed to create location history:', error);
+      throw new Error('Database error while inserting location history');
+    }
+  }
+
   async createLocationHistoryBatch(locations: InsertLocationHistory[]): Promise<number> {
     try {
       if (locations.length === 0) return 0;

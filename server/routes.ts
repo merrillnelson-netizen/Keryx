@@ -2023,7 +2023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
           const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
             storage.getFrequentPlaces(user.id),
-            storage.getRecentLocationHistory(user.id, 7, 50),
+            storage.getRecentLocations(user.id, 7, 50),
             storage.getLocationHistoryCount(user.id)
           ]);
           if (frequentPlaces.length > 0 || recentLocations.length > 0) {
@@ -2222,7 +2222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
           const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
             storage.getFrequentPlaces(user.id),
-            storage.getRecentLocationHistory(user.id, 7, 50),
+            storage.getRecentLocations(user.id, 7, 50),
             storage.getLocationHistoryCount(user.id)
           ]);
           if (frequentPlaces.length > 0 || recentLocations.length > 0) {
@@ -2480,7 +2480,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await sendPushToAllUserDevices(user.id, {
               type: 'discovery',
               title: `🚨 ${topAlert.person.name} mentioned`,
-              body: alertMessage.substring(0, 120),
+              body: alertMessage.body.substring(0, 120),
               url: topAlert.discovery.url || '/insights',
               requireInteraction: topAlert.person.priority >= 9,
             });
@@ -2593,8 +2593,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (topAlert) {
                 const result = await sendPushToAllUserDevices(user.id, {
                   type: 'alert',
-                  title: `Pattern Alert: ${topAlert.category}`,
-                  body: topAlert.summary.substring(0, 120) + (topAlert.summary.length > 120 ? '...' : ''),
+                  title: `Pattern Alert: ${topAlert.type}`,
+                  body: topAlert.description.substring(0, 120) + (topAlert.description.length > 120 ? '...' : ''),
                   url: '/dashboard',
                 });
                 pushSent = result.sent;
