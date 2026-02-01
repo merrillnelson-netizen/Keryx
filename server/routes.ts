@@ -2060,15 +2060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const memoriesHash = recentMemories.map(m => m.id).join(',');
       await storage.setAiCache(user.id, 'briefing', cacheKey, briefing, memoriesHash, recentMemories.length, 30);
 
-      // Optionally send briefing to Telegram
-      const sendToTelegram = req.query.sendToTelegram === 'true';
-      let telegramSent = false;
-      if (sendToTelegram && userSettings?.telegramEnabled && userSettings?.telegramBriefingsEnabled && userSettings?.telegramChatId) {
-        const { sendBriefingToTelegram } = await import('./telegram-service');
-        const briefingText = formatBriefingForTelegram(briefing);
-        telegramSent = await sendBriefingToTelegram(user.id, briefingText);
-      }
-
+      // Send response immediately
       res.json({
         status: 'success',
         data: briefing,
@@ -2076,10 +2068,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emailsAnalyzed: emailContext.length,
         emailSource,
         hasFinancialData: !!financialSummary,
-        telegramSent,
         cached: false,
         generatedAt: new Date().toISOString()
       });
+
+      // Background: Send notifications
+      const sendToTelegram = req.query.sendToTelegram === 'true';
+      const sendPushNotif = req.query.sendPush === 'true';
+      
+      if (sendToTelegram || sendPushNotif) {
+        setImmediate(async () => {
+          try {
+            // Telegram notification
+            if (sendToTelegram && userSettings?.telegramEnabled && userSettings?.telegramBriefingsEnabled && userSettings?.telegramChatId) {
+              const { sendBriefingToTelegram } = await import('./telegram-service');
+              const briefingText = formatBriefingForTelegram(briefing);
+              await sendBriefingToTelegram(user.id, briefingText);
+            }
+            
+            // Push notification
+            if (sendPushNotif && isPushConfigured()) {
+              const focusAreas = briefing.focusAreas?.slice(0, 2).join(' • ') || 'Your daily briefing is ready';
+              await sendPushToAllUserDevices(user.id, {
+                type: 'briefing',
+                title: 'Good Morning ☀️',
+                body: focusAreas.substring(0, 100),
+                url: '/dashboard',
+              });
+            }
+          } catch (err) {
+            console.error('Background briefing notification error:', err);
+          }
+        });
+      }
+      
+      return;
     } catch (error) {
       console.error("Failed to generate briefing:", error);
       sendErrorResponse(res, 500, "Failed to generate briefing", error);
@@ -2403,7 +2426,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (alertableMatches.length > 0) {
             highSignalAlerts = alertableMatches;
-            // Push notifications disabled
           }
         } catch (hsError) {
           console.error('High-signal detection failed:', hsError);
@@ -2445,6 +2467,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         configured: true,
         error: discoveries.error
       });
+
+      // Background: Send push notification for high-signal alerts
+      if (highSignalAlerts.length > 0 && isPushConfigured()) {
+        setImmediate(async () => {
+          try {
+            const topAlert = highSignalAlerts[0];
+            const alertMessage = formatHighSignalAlert(topAlert);
+            await sendPushToAllUserDevices(user.id, {
+              type: 'discovery',
+              title: `🚨 ${topAlert.person.name} mentioned`,
+              body: alertMessage.substring(0, 120),
+              url: topAlert.discovery.url || '/insights',
+              requireInteraction: topAlert.person.priority >= 9,
+            });
+          } catch (err) {
+            console.error('High-signal push notification error:', err);
+          }
+        });
+      }
+      
+      return;
     } catch (error) {
       console.error("Failed to fetch contextual discoveries:", error);
       sendErrorResponse(res, 500, "Failed to fetch contextual discoveries", error);
@@ -2513,24 +2556,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Optionally send alerts to Telegram
       const sendToTelegram = req.query.sendToTelegram === 'true';
       let telegramSent = false;
-      if (sendToTelegram && alerts.length > 0) {
-        const userSettings = await storage.getSettings(user.id);
-        if (userSettings?.telegramEnabled && userSettings?.telegramAlertsEnabled && userSettings?.telegramChatId) {
-          const { sendAlertToTelegram } = await import('./telegram-service');
-          const alertsText = formatAlertsForTelegram(alerts);
-          telegramSent = await sendAlertToTelegram(user.id, alertsText);
-        }
-      }
+      let pushSent = 0;
       
+      // Send notifications in background after response
       res.json({
         status: 'success',
         data: alerts,
         memoriesAnalyzed: recentMemories.length,
         periodDays: days,
-        telegramSent,
         cached: false,
         timestamp: new Date().toISOString()
       });
+
+      // Background: Send notifications for alerts
+      if (sendToTelegram && alerts.length > 0) {
+        setImmediate(async () => {
+          try {
+            const userSettings = await storage.getSettings(user.id);
+            
+            // Telegram notification
+            if (userSettings?.telegramEnabled && userSettings?.telegramAlertsEnabled && userSettings?.telegramChatId) {
+              const { sendAlertToTelegram } = await import('./telegram-service');
+              const alertsText = formatAlertsForTelegram(alerts);
+              await sendAlertToTelegram(user.id, alertsText);
+            }
+            
+            // Push notification for most important alert
+            if (isPushConfigured()) {
+              const topAlert = alerts[0];
+              if (topAlert) {
+                const result = await sendPushToAllUserDevices(user.id, {
+                  type: 'alert',
+                  title: `Pattern Alert: ${topAlert.category}`,
+                  body: topAlert.summary.substring(0, 120) + (topAlert.summary.length > 120 ? '...' : ''),
+                  url: '/dashboard',
+                });
+                pushSent = result.sent;
+              }
+            }
+          } catch (err) {
+            console.error('Background notification error:', err);
+          }
+        });
+      }
+      
+      return;
     } catch (error) {
       console.error("Failed to detect patterns:", error);
       sendErrorResponse(res, 500, "Failed to detect patterns", error);

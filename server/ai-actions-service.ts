@@ -14,6 +14,7 @@
 
 import OpenAI from "openai";
 import { storage } from "./storage";
+import { isPushConfigured, sendPushToAllUserDevices } from "./push-service";
 import { 
   AI_ACTION_TYPES, 
   AI_ACTION_CATEGORIES, 
@@ -261,7 +262,29 @@ export async function createPendingAction(
     expiresAt,
   };
   
-  return await storage.createAiAction(action);
+  const createdAction = await storage.createAiAction(action);
+  
+  // Send push notification for pending action (background, non-blocking)
+  if (isPushConfigured()) {
+    setImmediate(async () => {
+      try {
+        const actionEmoji = detected.actionCategory === 'calendar' ? '📅' :
+                           detected.actionCategory === 'email' ? '📧' :
+                           detected.actionCategory === 'reminder' ? '⏰' : '🤖';
+        await sendPushToAllUserDevices(userId, {
+          type: 'action',
+          title: `${actionEmoji} Action needs approval`,
+          body: detected.title.substring(0, 100),
+          url: '/actions',
+          requireInteraction: true,
+        });
+      } catch (err) {
+        console.error('Push notification for pending action failed:', err);
+      }
+    });
+  }
+  
+  return createdAction;
 }
 
 /**

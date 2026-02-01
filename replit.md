@@ -59,7 +59,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
 - **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, custom place naming (Gym, Coffee Shop, etc.), location clustering, and location context integrated into AI briefings and insights.
-- **Web Push Notifications**: TEMPORARILY DISABLED for stability. Database schema (pushSubscriptions table) preserved for future re-enablement. Users can receive notifications via Telegram integration instead.
+- **Web Push Notifications**: Enabled via web-push library with VAPID authentication. Sends notifications for briefings, pattern alerts, high-signal VIP mentions, contextual discoveries, and AI action approvals. Uses setImmediate for non-blocking background delivery. Settings page has subscription controls with permission state handling. Service worker at /service-worker.js handles notification clicks with deep linking.
 
 ## External Dependencies
 
