@@ -36,7 +36,7 @@ export default function MobileLayout({ children }: MobileLayoutProps) {
               <div className="bg-surface h-full">
                 <div className="p-6 border-b border-outline">
                   <h1 className="text-xl font-medium text-foreground">Keryx</h1>
-                  <p className="text-sm text-muted-foreground mt-1">AI Memory Assistant</p>
+                  <p className="text-xs text-muted-foreground mt-1">Kinetic Enterprise & Resource Yielding X-system</p>
                 </div>
                 
                 <nav className="mt-6">

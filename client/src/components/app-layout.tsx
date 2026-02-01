@@ -50,7 +50,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <KeryxLogoIcon size="md" />
               <div>
                 <h1 className="text-xl font-bold text-foreground">Keryx</h1>
-                <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">Kinetic Enterprise &<br/>Resource Yielding X-system</p>
               </div>
             </div>
           </div>
