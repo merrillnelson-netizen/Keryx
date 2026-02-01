@@ -3727,8 +3727,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedIdea = await storage.getIdea(id, user.id);
       const chatHistory = (updatedIdea?.chatHistory as IdeaChatMessage[]) || [];
       
-      // Build context for AI
-      const systemPrompt = `You are a helpful brainstorming assistant helping the user develop their idea. 
+      // Build context for AI based on type
+      const ideaType = idea.type || 'idea';
+      let systemPrompt: string;
+      
+      if (ideaType === 'list') {
+        const listItems = (idea.listItems as Array<{id: string; text: string; isChecked: boolean}>) || [];
+        const uncheckedItems = listItems.filter(i => !i.isChecked).map(i => i.text);
+        const checkedItems = listItems.filter(i => i.isChecked).map(i => i.text);
+        
+        systemPrompt = `You are a helpful assistant for the user's list titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
+
+Current items to do: ${uncheckedItems.length > 0 ? uncheckedItems.join(', ') : 'none'}
+Completed items: ${checkedItems.length > 0 ? checkedItems.join(', ') : 'none'}
+
+Your role is to:
+- Suggest additional items they might need based on context
+- Help organize or prioritize their list
+- Answer questions about items on the list
+- Suggest alternatives or substitutions
+
+Be concise and practical.`;
+      } else if (ideaType === 'note') {
+        const content = idea.content || '';
+        systemPrompt = `You are a helpful assistant for the user's note titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
+
+Note content: ${content.substring(0, 2000)}${content.length > 2000 ? '...' : ''}
+
+Your role is to:
+- Answer questions about the note content
+- Help summarize or clarify the note
+- Suggest improvements or additions
+- Help organize thoughts
+
+Be concise and helpful.`;
+      } else if (ideaType === 'document') {
+        const content = idea.content || '';
+        systemPrompt = `You are a helpful writing assistant for the user's document titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
+
+Document content: ${content.substring(0, 3000)}${content.length > 3000 ? '...' : ''}
+
+Your role is to:
+- Help improve the writing
+- Suggest structure and organization
+- Answer questions about the content
+- Help expand or refine sections
+- Provide feedback on clarity and flow
+
+Be constructive and supportive.`;
+      } else {
+        systemPrompt = `You are a helpful brainstorming assistant helping the user develop their idea. 
 The idea is titled "${idea.title}"${idea.description ? ` and described as: ${idea.description}` : ''}.
 Current stage: ${idea.stage}
 
@@ -3740,6 +3788,7 @@ Your role is to:
 - Help them decide if the idea is worth pursuing
 
 Be encouraging but honest. Keep responses concise and actionable.`;
+      }
 
       // Format chat history for OpenAI
       const messages = [

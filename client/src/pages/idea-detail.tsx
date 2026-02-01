@@ -614,6 +614,102 @@ export default function IdeaDetailPage() {
           </Card>
         )}
 
+        {/* AI ASSISTANCE CARD FOR NON-IDEA TYPES */}
+        {(ideaType === 'list' || ideaType === 'note' || ideaType === 'document') && (
+          <Card className="glass-card border-white/20 flex flex-col h-[400px]">
+            <CardHeader className="flex-shrink-0">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MessageCircle className="w-5 h-5 text-blue-500" />
+                AI Assistant
+              </CardTitle>
+              <CardDescription>
+                {ideaType === 'list' 
+                  ? "Get suggestions for items, organization, or alternatives"
+                  : ideaType === 'note'
+                  ? "Ask questions about your note or get help organizing"
+                  : "Get writing feedback, suggestions, or help expanding content"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+                {(!idea.chatHistory || idea.chatHistory.length === 0) ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>Ask AI for assistance</p>
+                    {ideaType === 'list' && (
+                      <p className="text-sm mt-1">e.g., "What else might I need for a camping trip?"</p>
+                    )}
+                    {ideaType === 'note' && (
+                      <p className="text-sm mt-1">e.g., "Can you summarize the key points?"</p>
+                    )}
+                    {ideaType === 'document' && (
+                      <p className="text-sm mt-1">e.g., "How can I make this clearer?"</p>
+                    )}
+                  </div>
+                ) : (
+                  idea.chatHistory.map((msg, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "flex",
+                        msg.role === 'user' ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-lg px-4 py-2",
+                          msg.role === 'user'
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        )}
+                      >
+                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        <p className={cn(
+                          "text-xs mt-1",
+                          msg.role === 'user' ? "text-primary-foreground/70" : "text-muted-foreground"
+                        )}>
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {chatMutation.isPending && (
+                  <div className="flex justify-start">
+                    <div className="bg-muted rounded-lg px-4 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+              
+              <div className="flex-shrink-0 flex gap-2 items-end">
+                <Textarea
+                  ref={inputRef}
+                  value={message}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask AI for help..."
+                  className="min-h-[60px] max-h-[150px] resize-none"
+                  rows={2}
+                />
+                <Button 
+                  onClick={handleSendMessage} 
+                  disabled={!message.trim() || chatMutation.isPending}
+                  size="icon"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* IDEA TYPE VIEW - AI Chat and Tasks */}
         {ideaType === 'idea' && (
           <div className="grid gap-6 lg:grid-cols-2">
