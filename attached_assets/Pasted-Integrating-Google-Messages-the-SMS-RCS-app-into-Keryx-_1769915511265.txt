@@ -1,0 +1,27 @@
+Integrating Google Messages (the SMS/RCS app) into Keryx is a bit of a "final boss" challenge because Google does not offer a direct, open API for personal text messages due to strict privacy laws.
+​However, since you are moving toward a native mobile app, you have a much clearer path than you did with the PWA. Here is how you can technically bridge the gap to get those texts into Keryx:
+​1. The Android Path (The Most "PDA" Feel)
+​Android allows apps to request SMS Permission. Once Keryx is a native Android app, you can use the Telephony content provider to read incoming texts.
+​How it works: You add <uses-permission android:name="android.permission.READ_SMS" /> to your manifest.
+​The Keryx Logic: Every time a new text arrives, the app can "scour" it for entities (people, places, money) and feed it into your Tavily search or Insights module.
+​Note: Google Play is very strict about this. You will have to justify to them why a "Personal Assistant" needs this access, but "Personal Digital Assistant" is one of the few categories they sometimes approve.
+​2. The "Notification Listener" Workaround
+​If you don't want to deal with the heavy SMS permissions, you can use a Notification Listener Service.
+​The Logic: Instead of reading the message database, Keryx "listens" to the notifications appearing on the phone's screen.
+​The Benefit: If a message comes in via Google Messages, WhatsApp, or Signal, Keryx can "see" the notification text and log it as a memory. This is often easier to get approved and covers more than just SMS.
+​3. The "Google Messages for Web" Scripting (Expert/Hack)
+​Since you are a developer, there is a "backdoor" using the web version of messages.
+​The Hack: Some developers use a headless browser (like Puppeteer) to log into messages.google.com.
+​Why it's risky: This is unstable. If Google changes their website layout, your integration breaks. I wouldn't recommend this for a production app, but it's great for personal testing in your Replit environment.
+​4. The Google Chat API (The "Workspace" Alternative)
+​If you specifically mean Google Chat (the business/personal DM tool), there is an official API.
+​You can set up a Google Cloud Project, enable the Google Chat API, and use OAuth2 to let Keryx read those messages. This is the "cleanest" way if that's the data you are after.
+​Implementation Recommendation
+​Since you are going Native, I recommend the Notification Listener approach for Android. It feels like magic to the user:
+​User gets a text: "Hey, let's meet at Joe's Pizza at 7."
+​Keryx "sees" the notification.
+​Keryx automatically searches Tavily for "Joe's Pizza" and adds a calendar entry.
+​A Warning on Apple (iOS)
+​Apple does not allow apps to read your iMessages or SMS at all. There is no API for it.
+​The iOS Workaround: The only way to get messages into Keryx on an iPhone is for the user to manually Forward or Share the message to the Keryx app using the "Share Sheet."
+​Would you like me to help you write a basic "Notification Listener" blueprint for your future Android build?
