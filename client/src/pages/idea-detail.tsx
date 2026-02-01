@@ -24,7 +24,11 @@ import {
   Plus,
   Wand2,
   GripVertical,
-  ChevronDown
+  ChevronDown,
+  StickyNote,
+  CheckSquare,
+  FileEdit,
+  Save
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -63,17 +67,34 @@ interface IdeaTask {
   createdAt: string;
 }
 
+interface ListItem {
+  id: string;
+  text: string;
+  isChecked: boolean;
+  order: number;
+}
+
 interface Idea {
   id: string;
   userId: string;
   title: string;
   description: string | null;
+  type: 'idea' | 'note' | 'list' | 'document';
   stage: string;
+  content: string | null;
+  listItems: ListItem[];
   chatHistory: IdeaChatMessage[];
   createdAt: string;
   updatedAt: string;
   tasks?: IdeaTask[];
 }
+
+const TYPE_CONFIG = {
+  idea: { label: 'Idea', icon: Lightbulb, color: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' },
+  note: { label: 'Note', icon: StickyNote, color: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' },
+  list: { label: 'List', icon: CheckSquare, color: 'bg-blue-500/20 text-blue-600 dark:text-blue-400' },
+  document: { label: 'Document', icon: FileEdit, color: 'bg-purple-500/20 text-purple-600 dark:text-purple-400' },
+} as const;
 
 const STAGE_CONFIG = {
   spark: { label: 'Spark', icon: Lightbulb, color: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' },
@@ -91,12 +112,22 @@ export default function IdeaDetailPage() {
   const [message, setMessage] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [newListItem, setNewListItem] = useState("");
+  const [editingContent, setEditingContent] = useState<string | null>(null);
+  const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: idea, isLoading, refetch } = useQuery<Idea>({
     queryKey: ['/api/ideas', id],
   });
+
+  useEffect(() => {
+    if (idea && editingContent === null && (idea.type === 'note' || idea.type === 'document')) {
+      setEditingContent(idea.content || '');
+    }
+  }, [idea]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,6 +144,87 @@ export default function IdeaDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
     },
   });
+
+  const updateListItemsMutation = useMutation({
+    mutationFn: async (listItems: ListItem[]) => {
+      const response = await apiRequest("PATCH", `/api/ideas/${id}`, { listItems });
+      if (!response.ok) throw new Error("Failed to update list");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to update list",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateContentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const response = await apiRequest("PATCH", `/api/ideas/${id}`, { content });
+      if (!response.ok) throw new Error("Failed to save content");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+      setHasUnsavedContent(false);
+      toast({
+        title: "Saved",
+        description: "Your content has been saved",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to save",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const addListItem = () => {
+    if (!newListItem.trim() || !idea) return;
+    const currentItems = idea.listItems || [];
+    const newItem: ListItem = {
+      id: crypto.randomUUID(),
+      text: newListItem.trim(),
+      isChecked: false,
+      order: currentItems.length,
+    };
+    updateListItemsMutation.mutate([...currentItems, newItem]);
+    setNewListItem("");
+  };
+
+  const toggleListItem = (itemId: string) => {
+    if (!idea) return;
+    const updatedItems = (idea.listItems || []).map(item =>
+      item.id === itemId ? { ...item, isChecked: !item.isChecked } : item
+    );
+    updateListItemsMutation.mutate(updatedItems);
+  };
+
+  const deleteListItem = (itemId: string) => {
+    if (!idea) return;
+    const updatedItems = (idea.listItems || []).filter(item => item.id !== itemId);
+    updateListItemsMutation.mutate(updatedItems);
+  };
+
+  const handleContentChange = (value: string) => {
+    setEditingContent(value);
+    setHasUnsavedContent(true);
+  };
+
+  const saveContent = () => {
+    if (editingContent !== null) {
+      updateContentMutation.mutate(editingContent);
+    }
+  };
 
   const chatMutation = useMutation({
     mutationFn: async (messageText: string) => {
@@ -287,10 +399,15 @@ export default function IdeaDetailPage() {
     );
   }
 
+  const ideaType = idea.type || 'idea';
+  const typeConfig = TYPE_CONFIG[ideaType as keyof typeof TYPE_CONFIG] || TYPE_CONFIG.idea;
+  const TypeIcon = typeConfig.icon;
   const stageConfig = STAGE_CONFIG[idea.stage as keyof typeof STAGE_CONFIG] || STAGE_CONFIG.spark;
   const StageIcon = stageConfig.icon;
   const tasks = idea.tasks || [];
   const completedTasks = tasks.filter(t => t.isCompleted).length;
+  const listItems = idea.listItems || [];
+  const checkedCount = listItems.filter(item => item.isChecked).length;
 
   return (
     <AppLayout>
@@ -302,37 +419,64 @@ export default function IdeaDetailPage() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-2xl font-bold">{idea.title}</h1>
-              {idea.description && (
-                <p className="text-muted-foreground mt-1">{idea.description}</p>
-              )}
+            <div className="flex items-start gap-3">
+              <div className={cn("p-2 rounded-lg flex-shrink-0", typeConfig.color)}>
+                <TypeIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">{idea.title}</h1>
+                {idea.description && (
+                  <p className="text-muted-foreground mt-1">{idea.description}</p>
+                )}
+                {ideaType === 'list' && listItems.length > 0 && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {checkedCount} of {listItems.length} completed
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           
           <div className="flex items-center gap-2 ml-12 sm:ml-0">
-            <Select 
-              value={idea.stage} 
-              onValueChange={(value) => updateStageMutation.mutate(value)}
-              disabled={updateStageMutation.isPending}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(STAGE_CONFIG).map(([key, config]) => {
-                  const Icon = config.icon;
-                  return (
-                    <SelectItem key={key} value={key}>
-                      <span className="flex items-center gap-2">
-                        <Icon className="w-4 h-4" />
-                        {config.label}
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            {ideaType === 'idea' && (
+              <Select 
+                value={idea.stage} 
+                onValueChange={(value) => updateStageMutation.mutate(value)}
+                disabled={updateStageMutation.isPending}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STAGE_CONFIG).map(([key, config]) => {
+                    const Icon = config.icon;
+                    return (
+                      <SelectItem key={key} value={key}>
+                        <span className="flex items-center gap-2">
+                          <Icon className="w-4 h-4" />
+                          {config.label}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
+            
+            {(ideaType === 'note' || ideaType === 'document') && hasUnsavedContent && (
+              <Button 
+                onClick={saveContent}
+                disabled={updateContentMutation.isPending}
+                className="gap-2"
+              >
+                {updateContentMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save
+              </Button>
+            )}
             
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -361,7 +505,118 @@ export default function IdeaDetailPage() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        {/* LIST TYPE VIEW */}
+        {ideaType === 'list' && (
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CheckSquare className="w-5 h-5 text-blue-500" />
+                Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  value={newListItem}
+                  onChange={(e) => setNewListItem(e.target.value)}
+                  placeholder="Add new item..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newListItem.trim()) {
+                      addListItem();
+                    }
+                  }}
+                />
+                <Button 
+                  onClick={addListItem}
+                  disabled={!newListItem.trim() || updateListItemsMutation.isPending}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {listItems.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No items yet</p>
+                  <p className="text-sm mt-1">Add your first item above</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {listItems
+                    .sort((a, b) => a.order - b.order)
+                    .map((item) => (
+                    <div 
+                      key={item.id}
+                      className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
+                    >
+                      <Checkbox
+                        checked={item.isChecked}
+                        onCheckedChange={() => toggleListItem(item.id)}
+                      />
+                      <span className={cn(
+                        "flex-1",
+                        item.isChecked && "line-through text-muted-foreground"
+                      )}>
+                        {item.text}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => deleteListItem(item.id)}
+                      >
+                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* NOTE/DOCUMENT TYPE VIEW */}
+        {(ideaType === 'note' || ideaType === 'document') && (
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                {ideaType === 'note' ? (
+                  <>
+                    <StickyNote className="w-5 h-5 text-emerald-500" />
+                    Note
+                  </>
+                ) : (
+                  <>
+                    <FileEdit className="w-5 h-5 text-purple-500" />
+                    Document
+                  </>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                ref={contentRef}
+                value={editingContent || ''}
+                onChange={(e) => handleContentChange(e.target.value)}
+                placeholder={ideaType === 'note' 
+                  ? "Write your note here..."
+                  : "Write your document content here..."
+                }
+                className="min-h-[400px] resize-y"
+              />
+              {hasUnsavedContent && (
+                <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                  Unsaved changes
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* IDEA TYPE VIEW - AI Chat and Tasks */}
+        {ideaType === 'idea' && (
+          <div className="grid gap-6 lg:grid-cols-2">
           <Card className="glass-card border-white/20 flex flex-col h-[500px]">
             <CardHeader className="flex-shrink-0">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -575,6 +830,7 @@ export default function IdeaDetailPage() {
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
     </AppLayout>
   );
