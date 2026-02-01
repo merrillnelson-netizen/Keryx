@@ -92,6 +92,12 @@ export default function LandingPage() {
       gradient: "from-amber-500 to-orange-500"
     },
     {
+      icon: Lightbulb,
+      title: "Ideas & Workspace",
+      description: "Capture ideas, notes, lists, and documents with AI brainstorming, task breakdowns, and type-aware assistance.",
+      gradient: "from-yellow-500 to-amber-500"
+    },
+    {
       icon: Shield,
       title: "Privacy Controls",
       description: "User-defined approval workflows for AI actions. You're always in control.",
@@ -177,6 +183,10 @@ export default function LandingPage() {
             animate="visible"
             variants={staggerContainer}
           >
+            <motion.div variants={fadeIn} className="mb-8 flex justify-center">
+              <KeryxLogo size="hero" showText={false} />
+            </motion.div>
+            
             <motion.div variants={fadeIn} className="mb-6">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-sm font-medium text-primary">
                 <Sparkles className="w-4 h-4" />

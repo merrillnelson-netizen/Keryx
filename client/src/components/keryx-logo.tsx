@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import keryxLogoImage from "@/assets/keryx-logo.png";
 
 interface KeryxLogoProps {
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "hero";
   className?: string;
   showText?: boolean;
   textClassName?: string;
@@ -13,6 +13,8 @@ const sizeMap = {
   md: 40,
   lg: 48,
   xl: 64,
+  "2xl": 96,
+  hero: 140,
 };
 
 export function KeryxLogo({ 
