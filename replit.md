@@ -1,7 +1,7 @@
 # Keryx - Replit Configuration
 
 ## Overview
-Keryx (Knowledge, Ecosystem, Retrieval, Yield, eXperience) is an AI-powered mobile-first voice logging and search system. It enables users to record free-form natural language memories via voice or text, which are then processed by OpenAI GPT to extract topic tags and structured metadata. The system offers semantic search using OpenAI embeddings combined with structured filters for powerful hybrid search capabilities. The project aims to deliver a robust, production-ready application with a modern UI/UX and efficient performance, focusing on cognitive search, proactive insights, calendar/email integration, and AI task execution.
+Keryx (Kinetic Enterprise & Resource Yielding X-system) is an AI-powered mobile-first voice logging and search system. It enables users to record free-form natural language memories via voice or text, which are then processed by OpenAI GPT to extract topic tags and structured metadata. The system offers semantic search using OpenAI embeddings combined with structured filters for powerful hybrid search capabilities. The project aims to deliver a robust, production-ready application with a modern UI/UX and efficient performance, focusing on cognitive search, proactive insights, calendar/email integration, and AI task execution.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
