@@ -36,7 +36,7 @@ export interface IStorage {
   updateLogEntry(id: string, userId: string, logEntry: Partial<InsertLogEntry>): Promise<LogEntry | undefined>;
   deleteLogEntry(id: string, userId: string): Promise<boolean>;
   
-  // Hybrid Search (user-scoped)
+  // Hybrid Search (user-scoped) - returns partial entries without embeddingVector for performance
   searchMemories(
     userId: string,
     queryVector: number[],
@@ -45,7 +45,7 @@ export interface IStorage {
     timestampEnd?: Date,
     metadataFilters?: Record<string, any>,
     limit?: number
-  ): Promise<Array<LogEntry & { similarity: number }>>;
+  ): Promise<Array<Partial<LogEntry> & { similarity: number }>>;
 
   // Categories (user-scoped)
   getCategories(userId: string): Promise<Category[]>;
@@ -503,15 +503,21 @@ export class DatabaseStorage implements IStorage {
       const vectorString = `[${queryVector.join(',')}]`;
 
       // Perform hybrid search: vector similarity + filters
+      // Note: embeddingVector is excluded from results for performance (1536 floats per record)
       const result = await db
         .select({
           id: logEntries.id,
           userId: logEntries.userId,
           memoryText: logEntries.memoryText,
           topicTag: logEntries.topicTag,
+          mood: logEntries.mood,
+          moodScore: logEntries.moodScore,
+          detectedPeople: logEntries.detectedPeople,
           metadataJson: logEntries.metadataJson,
-          embeddingVector: logEntries.embeddingVector,
           timestamp: logEntries.timestamp,
+          calendarEventId: logEntries.calendarEventId,
+          calendarEventTitle: logEntries.calendarEventTitle,
+          geoPlaceName: logEntries.geoPlaceName,
           similarity: sql<number>`1 - (${logEntries.embeddingVector} <=> ${vectorString}::vector)`,
         })
         .from(logEntries)
@@ -519,7 +525,7 @@ export class DatabaseStorage implements IStorage {
         .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
         .limit(limit);
 
-      return result as Array<LogEntry & { similarity: number }>;
+      return result as unknown as Array<Partial<LogEntry> & { similarity: number }>;
     } catch (error) {
       console.error('Failed to search memories:', error);
       throw new Error('Database error while searching memories');

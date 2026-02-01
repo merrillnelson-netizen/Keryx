@@ -1861,13 +1861,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { question, days } = validation.data;
       
-      // Get recent memories for analysis
-      const memories = await storage.getLogEntries(user.id, 100);
+      // Get recent memories for analysis (use light version - no embeddings needed)
+      const memories = await storage.getRecentLogEntriesLight(user.id, days, 100);
       
-      // Filter to requested time period
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-      const filteredMemories = memories.filter(m => m.timestamp >= startDate);
+      // No filtering needed - getRecentLogEntriesLight already filters by days
+      const filteredMemories = memories;
       
       if (filteredMemories.length === 0) {
         return res.json({
@@ -1882,15 +1880,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Generate insights
+      // Generate insights - filter and type-guard the light memories
       const insights = await generateThematicInsights(
-        filteredMemories.map(m => ({
-          memoryText: m.memoryText,
-          mood: m.mood || undefined,
-          moodScore: m.moodScore || undefined,
-          timestamp: m.timestamp,
-          topicTag: m.topicTag,
-        })),
+        filteredMemories
+          .filter(m => m.memoryText && m.timestamp && m.topicTag)
+          .map(m => ({
+            memoryText: m.memoryText!,
+            mood: m.mood || undefined,
+            moodScore: m.moodScore || undefined,
+            timestamp: m.timestamp!,
+            topicTag: m.topicTag!,
+          })),
         question
       );
       
@@ -2314,7 +2314,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get recent memories (only last 7 days for discoveries - more relevant)
-      const recentMemories = await storage.getRecentLogEntries(user.id, 7, 30);
+      // Use light version to avoid fetching large embedding vectors
+      const recentMemories = await storage.getRecentLogEntriesLight(user.id, 7, 30);
       
       // Get calendar events (next 14 days for travel/event insights)
       let calendarEvents: Array<{ summary?: string; location?: string; start?: { dateTime?: string; date?: string } }> = [];
@@ -2403,13 +2404,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const discoveries = await getContextualDiscoveries(
-        recentMemories.map((m: LogEntry) => ({
-          memoryText: m.memoryText,
-          topicTag: m.topicTag,
-          detectedPeople: m.detectedPeople || [],
-          locationName: m.geoPlaceName || undefined,
-          timestamp: m.timestamp
-        })),
+        recentMemories
+          .filter(m => m.memoryText && m.timestamp && m.topicTag)
+          .map((m) => ({
+            memoryText: m.memoryText!,
+            topicTag: m.topicTag!,
+            detectedPeople: m.detectedPeople || [],
+            locationName: m.geoPlaceName || undefined,
+            timestamp: m.timestamp!
+          })),
         calendarEvents,
         emails,
         financialData,
@@ -2537,20 +2540,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      const recentMemories = await storage.getRecentLogEntries(user.id, days, 100);
+      // Use light version to avoid fetching large embedding vectors
+      const recentMemories = await storage.getRecentLogEntriesLight(user.id, days, 100);
       
       const alerts = await detectPatternAlerts(
-        recentMemories.map((m: LogEntry) => ({
-          memoryText: m.memoryText,
-          mood: m.mood || undefined,
-          moodScore: m.moodScore || undefined,
-          timestamp: m.timestamp,
-          topicTag: m.topicTag,
-        }))
+        recentMemories
+          .filter(m => m.memoryText && m.timestamp && m.topicTag)
+          .map((m) => ({
+            memoryText: m.memoryText!,
+            mood: m.mood || undefined,
+            moodScore: m.moodScore || undefined,
+            timestamp: m.timestamp!,
+            topicTag: m.topicTag!,
+          }))
       );
 
       // Cache the result (30 minute TTL)
-      const memoriesHash = recentMemories.map(m => m.id).join(',');
+      const memoriesHash = recentMemories.filter(m => m.id).map(m => m.id).join(',');
       await storage.setAiCache(user.id, 'alerts', cacheKey, alerts, memoriesHash, recentMemories.length, 30);
 
       // Optionally send alerts to Telegram
