@@ -77,6 +77,7 @@ export default function People() {
 
   const { data: people = [], isLoading } = useQuery<Person[]>({
     queryKey: ["/api/people"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: mentions = [], isLoading: mentionsLoading } = useQuery<LogEntry[]>({
@@ -94,6 +95,7 @@ export default function People() {
       return json.data || [];
     },
     enabled: !!selectedPerson,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const updatePersonMutation = useMutation({

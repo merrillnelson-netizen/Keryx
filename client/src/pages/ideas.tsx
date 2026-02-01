@@ -97,6 +97,7 @@ export default function IdeasPage() {
 
   const { data: ideas = [], isLoading } = useQuery<Idea[]>({
     queryKey: ['/api/ideas'],
+    staleTime: 1000 * 60 * 2, // 2 minutes - ideas list
   });
 
   const createIdeaMutation = useMutation({

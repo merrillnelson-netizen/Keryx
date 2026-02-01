@@ -50,17 +50,6 @@ export interface DetectedCalendarEvent {
 }
 
 /**
- * Topic-specific metadata schemas for extraction
- * These guide the AI on what fields to extract for each topic
- */
-const TOPIC_SCHEMAS = {
-  Billiards: ["round", "table", "game", "breaker", "racker", "winner"],
-  Groceries: ["store", "items_list", "budget"],
-  Meeting: ["attendees", "action_items", "meeting_topic"],
-  General: [], // No specific fields
-};
-
-/**
  * Extract metadata from raw memory text using AI
  * Identifies topic and extracts structured data
  * 

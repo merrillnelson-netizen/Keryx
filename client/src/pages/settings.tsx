@@ -41,10 +41,12 @@ export default function SettingsPage() {
 
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+    staleTime: 1000 * 60 * 10, // 10 minutes - categories rarely change
   });
 
   // Use combined providers status endpoint for all provider info
@@ -64,6 +66,7 @@ export default function SettingsPage() {
     providerSelectionMode: string;
   }>({
     queryKey: ["/api/providers/status"],
+    staleTime: 1000 * 60 * 5, // 5 minutes - provider status rarely changes
   });
 
   // Poll for backfill job status
@@ -87,10 +90,12 @@ export default function SettingsPage() {
   
   const { data: availableActions = [] } = useQuery<AvailableActionType[]>({
     queryKey: ["/api/actions/available"],
+    staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
   const { data: actionPreferences = [] } = useQuery<AiActionPreference[]>({
     queryKey: ["/api/actions/preferences"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const updateSettingsMutation = useMutation({
@@ -162,6 +167,7 @@ export default function SettingsPage() {
 
   const { data: telegramStatus, isLoading: isTelegramLoading } = useQuery<TelegramStatus>({
     queryKey: ["/api/telegram/status"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const [telegramCode, setTelegramCode] = useState<{ code: string; link: string; expiresAt: string } | null>(null);
@@ -230,6 +236,7 @@ export default function SettingsPage() {
 
   const { data: pushStatus, isLoading: isPushLoading } = useQuery<PushStatus>({
     queryKey: ["/api/push/status"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const [pushPermission, setPushPermission] = useState<NotificationPermission | null>(null);
@@ -349,16 +356,19 @@ export default function SettingsPage() {
 
   const { data: plaidStatus, isLoading: isPlaidLoading } = useQuery<PlaidStatus>({
     queryKey: ["/api/plaid/status"],
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const { data: plaidInstitutions = [], refetch: refetchInstitutions } = useQuery<PlaidInstitution[]>({
     queryKey: ["/api/plaid/institutions"],
     enabled: plaidStatus?.configured && !plaidStatus?.featureDisabled,
+    staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
   const { data: plaidAccounts = [], refetch: refetchAccounts } = useQuery<PlaidAccount[]>({
     queryKey: ["/api/plaid/accounts"],
     enabled: plaidStatus?.configured && !plaidStatus?.featureDisabled,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const [linkToken, setLinkToken] = useState<string | null>(null);

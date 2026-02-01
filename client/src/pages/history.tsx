@@ -329,6 +329,7 @@ export default function History() {
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+    staleTime: 1000 * 60 * 10, // 10 minutes
   });
 
   const deleteMutation = useMutation({

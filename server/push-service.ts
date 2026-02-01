@@ -70,8 +70,9 @@ export async function sendPushNotification(
     requireInteraction: payload.requireInteraction,
   });
 
-  for (const subscription of subscriptions) {
-    try {
+  // Send notifications in parallel for better performance
+  const results = await Promise.allSettled(
+    subscriptions.map(async (subscription) => {
       await webpush.sendNotification(
         {
           endpoint: subscription.endpoint,
@@ -82,21 +83,54 @@ export async function sendPushNotification(
         },
         notificationPayload
       );
+      return subscription;
+    })
+  );
+
+  // Process results and handle failures
+  const successfulSubs: string[] = [];
+  const expiredEndpoints: string[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const subscription = subscriptions[i];
+    
+    if (result.status === 'fulfilled') {
       sent++;
-      
-      // Update last used in background
-      storage.updatePushSubscriptionLastUsed(subscription.id).catch(() => {});
-    } catch (error: unknown) {
+      successfulSubs.push(subscription.id);
+    } else {
       failed++;
-      const err = error as { statusCode?: number; message?: string };
+      const err = result.reason as { statusCode?: number; message?: string };
       
-      // Remove invalid subscriptions (gone or expired)
+      // Collect expired subscriptions for batch deletion
       if (err.statusCode === 404 || err.statusCode === 410) {
-        await storage.deletePushSubscription(subscription.endpoint).catch(() => {});
+        expiredEndpoints.push(subscription.endpoint);
       } else {
         errors.push(err.message || 'Unknown error');
       }
     }
+  }
+
+  // Background: batch update lastUsed and delete expired (non-blocking)
+  if (successfulSubs.length > 0 || expiredEndpoints.length > 0) {
+    setImmediate(async () => {
+      try {
+        // Update lastUsed for successful sends
+        await Promise.all(
+          successfulSubs.map(id => 
+            storage.updatePushSubscriptionLastUsed(id).catch(() => {})
+          )
+        );
+        // Delete expired subscriptions
+        await Promise.all(
+          expiredEndpoints.map(endpoint => 
+            storage.deletePushSubscription(endpoint).catch(() => {})
+          )
+        );
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    });
   }
 
   return { sent, failed, errors };

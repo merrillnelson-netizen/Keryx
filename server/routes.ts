@@ -8,7 +8,7 @@ import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
-import { isCalendarConnected, isGoogleCalendarConnected, getConnectedCalendarProvider, getTodaysEvents, getUpcomingEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent, type CalendarEvent } from "./calendar-service";
+import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpcomingEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
