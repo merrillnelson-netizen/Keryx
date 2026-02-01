@@ -252,7 +252,7 @@ export default function SettingsPage() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.register('/sw.js');
+      const registration = await navigator.serviceWorker.register('/service-worker.js');
       await navigator.serviceWorker.ready;
 
       const vapidResponse = await fetch('/api/push/vapid-key', { credentials: 'include' });
@@ -266,8 +266,10 @@ export default function SettingsPage() {
       const subscriptionJson = subscription.toJSON();
       
       await apiRequest('POST', '/api/push/subscribe', {
-        endpoint: subscriptionJson.endpoint,
-        keys: subscriptionJson.keys,
+        subscription: {
+          endpoint: subscriptionJson.endpoint,
+          keys: subscriptionJson.keys,
+        },
         userAgent: navigator.userAgent
       });
 
@@ -1319,17 +1321,64 @@ export default function SettingsPage() {
                 Get notified about briefings, pattern insights, and financial alerts directly on your device.
               </p>
 
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <div className="flex items-center gap-2">
-                  <BellOff className="w-5 h-5 text-amber-500" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-500">Temporarily Disabled</p>
-                    <p className="text-xs text-muted-foreground">
-                      Push notifications are temporarily disabled while we improve stability. You can still receive updates via Telegram.
-                    </p>
+              {!isPushSupported ? (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <div className="flex items-center gap-2">
+                    <BellOff className="w-5 h-5 text-amber-500" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-500">Not Supported</p>
+                      <p className="text-xs text-muted-foreground">
+                        Push notifications are not supported in this browser. Try Chrome, Firefox, or Edge on desktop/Android.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : isPushLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : pushStatus?.deviceCount && pushStatus.deviceCount > 0 ? (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-green-500" />
+                        <div>
+                          <p className="text-sm font-medium text-green-500">Notifications Enabled</p>
+                          <p className="text-xs text-muted-foreground">
+                            {pushStatus.deviceCount} device{pushStatus.deviceCount > 1 ? 's' : ''} subscribed
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={sendTestNotification}>
+                          Test
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={unsubscribeFromPush}>
+                          Disable
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : pushPermission === 'denied' ? (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <div className="flex items-center gap-2">
+                    <BellOff className="w-5 h-5 text-red-500" />
+                    <div>
+                      <p className="text-sm font-medium text-red-500">Permission Blocked</p>
+                      <p className="text-xs text-muted-foreground">
+                        Notifications are blocked in your browser settings. Please update your site permissions to enable them.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <Button onClick={subscribeToPush} className="w-full">
+                  <Bell className="w-4 h-4 mr-2" />
+                  Enable Push Notifications
+                </Button>
+              )}
 
               <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20">
                 <div className="flex gap-2 text-xs text-muted-foreground">

@@ -17,7 +17,7 @@ import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, 
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
 import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
-// Push notifications disabled - import removed
+import { isPushConfigured, getVapidPublicKey, sendPushNotification, sendPushToAllUserDevices } from "./push-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -4228,29 +4228,102 @@ Return ONLY the JSON array, no other text.`;
   });
 
   /**
-   * PUSH NOTIFICATION ROUTES - DISABLED
-   * Push notifications have been temporarily disabled
+   * PUSH NOTIFICATION ROUTES
+   * Web push notifications for proactive alerts and briefings
    */
 
-  // All push endpoints return disabled status
   app.get("/api/push/vapid-key", requireAuth, (_req, res) => {
-    res.json({ publicKey: null, disabled: true });
+    const publicKey = getVapidPublicKey();
+    res.json({ publicKey, disabled: !isPushConfigured() });
   });
 
-  app.post("/api/push/subscribe", requireAuth, (_req, res) => {
-    res.json({ success: false, disabled: true, message: "Push notifications are temporarily disabled" });
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    if (!isPushConfigured()) {
+      return res.json({ success: false, disabled: true, message: "Push notifications not configured" });
+    }
+
+    const user = req.user as User;
+    const { subscription, userAgent } = req.body;
+
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return sendErrorResponse(res, 400, "Invalid subscription object");
+    }
+
+    try {
+      await storage.createPushSubscription({
+        userId: user.id,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+        userAgent: userAgent || req.headers['user-agent'] || null,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Push subscribe error:', error);
+      return sendErrorResponse(res, 500, "Failed to save subscription");
+    }
   });
 
-  app.post("/api/push/unsubscribe", requireAuth, (_req, res) => {
-    res.json({ success: true, disabled: true });
+  app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
+    const { endpoint } = req.body;
+
+    if (!endpoint) {
+      return sendErrorResponse(res, 400, "Endpoint required");
+    }
+
+    try {
+      await storage.deletePushSubscription(endpoint);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Push unsubscribe error:', error);
+      return sendErrorResponse(res, 500, "Failed to remove subscription");
+    }
   });
 
-  app.get("/api/push/status", requireAuth, (_req, res) => {
-    res.json({ enabled: false, deviceCount: 0, devices: [], disabled: true });
+  app.get("/api/push/status", requireAuth, async (req, res) => {
+    const user = req.user as User;
+
+    try {
+      const subscriptions = await storage.getPushSubscriptions(user.id);
+      res.json({
+        enabled: isPushConfigured(),
+        deviceCount: subscriptions.length,
+        devices: subscriptions.map(s => ({
+          id: s.id,
+          userAgent: s.userAgent,
+          createdAt: s.createdAt,
+          lastUsed: s.lastUsed,
+        })),
+      });
+    } catch (error) {
+      console.error('Push status error:', error);
+      return sendErrorResponse(res, 500, "Failed to get subscription status");
+    }
   });
 
-  app.post("/api/push/test", requireAuth, (_req, res) => {
-    res.json({ success: false, disabled: true, message: "Push notifications are temporarily disabled" });
+  app.post("/api/push/test", requireAuth, async (req, res) => {
+    if (!isPushConfigured()) {
+      return res.json({ success: false, disabled: true, message: "Push notifications not configured" });
+    }
+
+    const user = req.user as User;
+
+    // Send response immediately, then send notification in background
+    res.json({ success: true, message: "Test notification sent" });
+
+    setImmediate(async () => {
+      try {
+        await sendPushToAllUserDevices(user.id, {
+          type: 'test',
+          title: 'Keryx Test Notification',
+          body: 'Push notifications are working! You\'ll receive alerts about briefings, insights, and important reminders.',
+          url: '/settings',
+        });
+      } catch (error) {
+        console.error('Test push notification error:', error);
+      }
+    });
   });
 
   const httpServer = createServer(app);
