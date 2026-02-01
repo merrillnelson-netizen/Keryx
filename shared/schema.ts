@@ -574,19 +574,45 @@ export const IDEA_STAGES = {
   DROPPED: 'dropped',
 } as const;
 
+/**
+ * Idea types enum - defines what kind of item this is
+ * - idea: Full idea incubation with stages, AI chat, task breakdown
+ * - note: Simple text note, no stages
+ * - list: Checkable items (grocery list, packing list, etc.)
+ * - document: Structured content with sections
+ */
+export const ideaTypeEnum = z.enum(['idea', 'note', 'list', 'document']);
+export type IdeaType = z.infer<typeof ideaTypeEnum>;
+
+/**
+ * List item schema for checklist-type ideas
+ */
+export const listItemSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  isChecked: z.boolean().default(false),
+  order: z.number().default(0),
+});
+export type ListItem = z.infer<typeof listItemSchema>;
+
 export const ideas = pgTable("ideas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   title: text("title").notNull(),
   description: text("description"),
-  stage: text("stage").notNull().default('spark'),
+  type: text("type").notNull().default('idea'), // 'idea' | 'note' | 'list' | 'document'
+  stage: text("stage").notNull().default('spark'), // Only used for type='idea'
   chatHistory: jsonb("chat_history").default([]), // Array of { role: 'user'|'assistant', content: string, timestamp: string }
+  content: text("content"), // Rich text content for notes/documents
+  listItems: jsonb("list_items").default([]), // Array of { id, text, isChecked, order } for lists
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("ideas_user_id_idx").on(table.userId),
   stageIdx: index("ideas_stage_idx").on(table.stage),
   userStageIdx: index("ideas_user_stage_idx").on(table.userId, table.stage),
+  typeIdx: index("ideas_type_idx").on(table.type),
+  userTypeIdx: index("ideas_user_type_idx").on(table.userId, table.type),
 }));
 
 export const ideasRelations = relations(ideas, ({ one, many }) => ({
@@ -627,6 +653,9 @@ export const insertIdeaSchema = createInsertSchema(ideas).omit({
   chatHistory: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  type: ideaTypeEnum.optional().default('idea'),
+  listItems: z.array(listItemSchema).optional(),
 });
 
 export const insertIdeaTaskSchema = createInsertSchema(ideaTasks).omit({

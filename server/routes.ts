@@ -3590,13 +3590,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // IDEAS ROUTES - Idea incubator for brainstorming
   // ============================================
 
-  // Get all ideas for user, optionally filtered by stage
+  // Get all ideas for user, optionally filtered by stage and/or type
   app.get("/api/ideas", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
       const stage = req.query.stage as string | undefined;
+      const type = req.query.type as string | undefined;
       
-      const ideas = await storage.getIdeas(user.id, stage);
+      const ideas = await storage.getIdeas(user.id, stage, type);
       res.json(ideas);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to fetch ideas", error);
@@ -3638,7 +3639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update idea (title, description, stage)
+  // Update idea (title, description, stage, type, content, listItems)
   app.patch("/api/ideas/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
@@ -3655,6 +3656,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           IDEA_STAGES.COMPLETED,
           IDEA_STAGES.DROPPED,
         ]).optional(),
+        type: z.enum(['idea', 'note', 'list', 'document']).optional(),
+        content: z.string().nullable().optional(),
+        listItems: z.array(z.object({
+          id: z.string(),
+          text: z.string(),
+          isChecked: z.boolean(),
+          order: z.number(),
+        })).optional(),
       });
       
       const parsed = updateSchema.safeParse(req.body);

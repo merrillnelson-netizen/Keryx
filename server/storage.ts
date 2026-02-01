@@ -95,7 +95,7 @@ export interface IStorage {
   getLatestMemoryTimestamp(userId: string): Promise<Date | null>;
 
   // Ideas (user-scoped)
-  getIdeas(userId: string, stage?: string): Promise<Idea[]>;
+  getIdeas(userId: string, stage?: string, type?: string): Promise<Idea[]>;
   getIdea(id: string, userId: string): Promise<Idea | undefined>;
   createIdea(userId: string, idea: InsertIdea): Promise<Idea>;
   updateIdea(id: string, userId: string, updates: Partial<InsertIdea & { chatHistory: IdeaChatMessage[] }>): Promise<Idea | undefined>;
@@ -1321,19 +1321,19 @@ export class DatabaseStorage implements IStorage {
    * Handle user ideas through various stages of development
    */
 
-  async getIdeas(userId: string, stage?: string): Promise<Idea[]> {
+  async getIdeas(userId: string, stage?: string, type?: string): Promise<Idea[]> {
     try {
+      const conditions = [eq(ideas.userId, userId)];
       if (stage) {
-        return await db
-          .select()
-          .from(ideas)
-          .where(and(eq(ideas.userId, userId), eq(ideas.stage, stage)))
-          .orderBy(desc(ideas.updatedAt));
+        conditions.push(eq(ideas.stage, stage));
+      }
+      if (type) {
+        conditions.push(eq(ideas.type, type));
       }
       return await db
         .select()
         .from(ideas)
-        .where(eq(ideas.userId, userId))
+        .where(and(...conditions))
         .orderBy(desc(ideas.updatedAt));
     } catch (error) {
       console.error('Failed to get ideas:', error);
