@@ -1,50 +1,26 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="keryxGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6366f1" />
-      <stop offset="50%" stop-color="#8b5cf6" />
-      <stop offset="100%" stop-color="#a855f7" />
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="50%" stop-color="#14b8a6" />
+      <stop offset="100%" stop-color="#f59e0b" />
     </linearGradient>
     <linearGradient id="keryxGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#a855f7" />
-      <stop offset="50%" stop-color="#8b5cf6" />
-      <stop offset="100%" stop-color="#6366f1" />
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#14b8a6" />
+      <stop offset="100%" stop-color="#06b6d4" />
     </linearGradient>
   </defs>
   
-  <!-- Left strand - curves to form left side of K -->
-  <path
-    d="M16 6 C6 14, 6 22, 16 30 C26 38, 26 48, 16 58"
-    stroke="url(#keryxGrad1)"
-    stroke-width="4.5"
-    stroke-linecap="round"
-    fill="none"
-  />
+  <rect width="64" height="64" rx="12" fill="#0d1117"/>
   
-  <!-- Right strand - curves to form right side of K -->
-  <path
-    d="M48 6 C58 14, 58 22, 48 30 C38 38, 38 48, 48 58"
-    stroke="url(#keryxGrad2)"
-    stroke-width="4.5"
-    stroke-linecap="round"
-    fill="none"
-  />
+  <text x="32" y="44" font-family="Arial, sans-serif" font-size="36" font-weight="bold" text-anchor="middle" fill="url(#keryxGrad1)">K</text>
   
-  <!-- Center horizontal bar - the crossbar -->
-  <line 
-    x1="16" y1="32" x2="48" y2="32" 
-    stroke="url(#keryxGrad1)" 
-    stroke-width="4" 
-    stroke-linecap="round" 
-  />
+  <path d="M12 8 L52 8" stroke="url(#keryxGrad1)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+  <path d="M12 56 L52 56" stroke="url(#keryxGrad2)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
   
-  <!-- Connecting rungs above center -->
-  <line x1="14" y1="18" x2="50" y2="18" stroke="url(#keryxGrad1)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-  
-  <!-- Connecting rungs below center -->
-  <line x1="14" y1="46" x2="50" y2="46" stroke="url(#keryxGrad2)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-  
-  <!-- Accent dots at crossings -->
-  <circle cx="16" cy="30" r="3" fill="url(#keryxGrad1)" opacity="0.8" />
-  <circle cx="48" cy="30" r="3" fill="url(#keryxGrad2)" opacity="0.8" />
+  <circle cx="12" cy="8" r="2" fill="#06b6d4"/>
+  <circle cx="52" cy="8" r="2" fill="#f59e0b"/>
+  <circle cx="12" cy="56" r="2" fill="#f59e0b"/>
+  <circle cx="52" cy="56" r="2" fill="#06b6d4"/>
 </svg>

@@ -180,7 +180,7 @@ export default function LandingPage() {
             <motion.div variants={fadeIn} className="mb-6">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-sm font-medium text-primary">
                 <Sparkles className="w-4 h-4" />
-                AI-Powered Personal Memory Assistant
+                Kinetic Enterprise & Resource Yielding X-system
               </span>
             </motion.div>
             
