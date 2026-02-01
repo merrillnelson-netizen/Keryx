@@ -474,7 +474,7 @@ export class DatabaseStorage implements IStorage {
     timestampEnd?: Date,
     metadataFilters?: Record<string, any>,
     limit = 10
-  ): Promise<Array<LogEntry & { similarity: number }>> {
+  ): Promise<Array<Partial<LogEntry> & { similarity: number }>> {
     try {
       // Build the WHERE clause conditions - always include userId filter
       const conditions: any[] = [eq(logEntries.userId, userId)];
@@ -525,7 +525,7 @@ export class DatabaseStorage implements IStorage {
         .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
         .limit(limit);
 
-      return result as unknown as Array<Partial<LogEntry> & { similarity: number }>;
+      return result as Array<Partial<LogEntry> & { similarity: number }>;
     } catch (error) {
       console.error('Failed to search memories:', error);
       throw new Error('Database error while searching memories');

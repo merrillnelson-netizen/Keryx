@@ -272,7 +272,7 @@ export async function createPendingAction(
                            detected.actionCategory === 'email' ? '📧' :
                            detected.actionCategory === 'reminder' ? '⏰' : '🤖';
         await sendPushToAllUserDevices(userId, {
-          type: 'action',
+          type: 'action_required',
           title: `${actionEmoji} Action needs approval`,
           body: detected.title.substring(0, 100),
           url: '/actions',
