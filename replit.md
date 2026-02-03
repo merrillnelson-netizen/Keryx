@@ -61,6 +61,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture, device context.
 - **Location History**: Google Timeline import (supports legacy and semantic JSON formats), automatic location capture from memories, frequent place detection with home/work auto-labeling, custom place naming (Gym, Coffee Shop, etc.), location clustering, and location context integrated into AI briefings and insights.
 - **Web Push Notifications**: Enabled via web-push library with VAPID authentication. Sends notifications for briefings, pattern alerts, high-signal VIP mentions, contextual discoveries, and AI action approvals. Uses setImmediate for non-blocking background delivery. Settings page has subscription controls with permission state handling. Service worker at /service-worker.js handles notification clicks with deep linking.
+- **Life Purpose Suggestion**: When AI detects existential/philosophical themes in logged memories (e.g., "what is my purpose," "feeling lost," "meaning of life"), shows a gentle suggestion card linking to companion Life Purpose app (https://life-purpose-merrillnelson.replit.app/) with "from the makers of Keryx" messaging. Detection via lifePurposeTheme flag in extractMetadata().
 
 ## External Dependencies
 
