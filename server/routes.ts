@@ -3961,6 +3961,13 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Idea not found");
       }
       
+      // SECURITY: Verify the task belongs to this idea (prevent cross-idea task manipulation)
+      const existingTasks = await storage.getIdeaTasks(ideaId);
+      const taskBelongsToIdea = existingTasks.some(t => t.id === taskId);
+      if (!taskBelongsToIdea) {
+        return sendErrorResponse(res, 404, "Task not found");
+      }
+      
       const updateSchema = z.object({
         title: z.string().optional(),
         description: z.string().nullable().optional(),
@@ -3994,6 +4001,13 @@ Return ONLY the JSON array, no other text.`;
       const idea = await storage.getIdea(ideaId, user.id);
       if (!idea) {
         return sendErrorResponse(res, 404, "Idea not found");
+      }
+      
+      // SECURITY: Verify the task belongs to this idea (prevent cross-idea task manipulation)
+      const existingTasks = await storage.getIdeaTasks(ideaId);
+      const taskBelongsToIdea = existingTasks.some(t => t.id === taskId);
+      if (!taskBelongsToIdea) {
+        return sendErrorResponse(res, 404, "Task not found");
       }
       
       const deleted = await storage.deleteIdeaTask(taskId);
