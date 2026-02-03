@@ -14,6 +14,7 @@ export interface SavedMemoryData {
   id?: string;
   memoryText: string;
   topicTag: string;
+  lifePurposeTheme?: boolean;
 }
 
 /**
@@ -187,12 +188,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         
         setLastResponse(successMessage);
         
-        // Store saved memory data for calendar event detection
+        // Store saved memory data for calendar event detection and life purpose suggestion
         const memoryData = data?.data || data;
         setLastSavedMemory({
           id: memoryData?.id,
           memoryText: variables,
           topicTag: topicTag,
+          lifePurposeTheme: memoryData?.lifePurposeTheme || false,
         });
 
         setTimeout(() => {

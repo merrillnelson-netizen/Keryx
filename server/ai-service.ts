@@ -34,6 +34,7 @@ export interface ExtractedMetadata {
   moodScore: number;
   detectedPeople: string[];
   aiReasoning?: AIReasoning;
+  lifePurposeTheme?: boolean;
 }
 
 /**
@@ -93,6 +94,15 @@ For food/meal-related entries, use these EXACT field names:
 
 6. REASONING: For each decision, provide a brief explanation of why you made that choice. This helps users understand your logic.
 
+7. LIFE PURPOSE THEME: Detect if the memory touches on existential or philosophical themes about life's purpose, meaning, or direction. Set to true if the person is:
+   - Questioning their life purpose or meaning
+   - Feeling lost about their direction in life
+   - Contemplating what they should do with their life
+   - Expressing uncertainty about their path or calling
+   - Reflecting on deeper questions like "why am I here" or "what's my purpose"
+   - Discussing finding meaning, fulfillment, or their life's work
+   Set to false for general daily activities, tasks, or non-philosophical content.
+
 Respond with JSON in this exact format: 
 {
   "topicTag": "string",
@@ -100,6 +110,7 @@ Respond with JSON in this exact format:
   "mood": "string (one of the mood options)",
   "moodScore": number (-100 to 100),
   "detectedPeople": ["name1", "name2", ...],
+  "lifePurposeTheme": boolean,
   "reasoning": {
     "topic": "Brief explanation of why this topic was chosen",
     "mood": "Brief explanation of the emotional tone detected",
@@ -133,6 +144,7 @@ If no people are mentioned, return empty array for detectedPeople.`,
         mood: result.reasoning.mood || undefined,
         people: result.reasoning.people || undefined,
       } : undefined,
+      lifePurposeTheme: result.lifePurposeTheme === true,
     };
   } catch (error) {
     console.error("Error extracting metadata:", error);

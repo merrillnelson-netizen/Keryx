@@ -509,6 +509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           memoryText: memoryText.substring(0, 100) + (memoryText.length > 100 ? '...' : ''),
           mood: extracted.mood || null,
           moodScore: extracted.moodScore || null,
+          lifePurposeTheme: extracted.lifePurposeTheme || false,
         },
         message: 'Memory saved successfully',
         timestamp: new Date().toISOString(),

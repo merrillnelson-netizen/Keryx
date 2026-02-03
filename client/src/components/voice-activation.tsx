@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Plus, Search, Volume2, Send, Keyboard } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import CalendarEventSuggestion from "./calendar-event-suggestion";
+import LifePurposeSuggestion from "./life-purpose-suggestion";
 import { HintChips } from "./keryx-capabilities-modal";
 
 export default function VoiceActivation() {
@@ -248,6 +249,11 @@ export default function VoiceActivation() {
             onDismiss={clearLastSavedMemory}
             onCreated={clearLastSavedMemory}
           />
+        )}
+
+        {/* Life Purpose Suggestion - shows when memory touches on existential themes */}
+        {lastSavedMemory?.lifePurposeTheme && (
+          <LifePurposeSuggestion onDismiss={clearLastSavedMemory} />
         )}
       </CardContent>
     </div>
