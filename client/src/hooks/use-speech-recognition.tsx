@@ -151,16 +151,12 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       // Read as text first, then parse - more reliable in some environments
       try {
         const responseText = await response.text();
-        console.log('[saveMutation] Response text received, length:', responseText.length);
         
         if (!responseText) {
-          console.warn('[saveMutation] Empty response body, returning default success');
           return { status: 'success', data: { topicTag: 'General' } };
         }
         
-        const jsonData = JSON.parse(responseText);
-        console.log('[saveMutation] Response parsed successfully, status:', jsonData?.status);
-        return jsonData;
+        return JSON.parse(responseText);
       } catch (parseError) {
         console.error('[saveMutation] Failed to parse response:', parseError);
         // Return a minimal success response if parsing fails
@@ -170,7 +166,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     },
     onSuccess: (data, variables) => {
       try {
-        console.log('[saveMutation] onSuccess called, data:', JSON.stringify(data, null, 2));
         queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
 
         isProcessingRef.current = false;
