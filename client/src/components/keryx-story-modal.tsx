@@ -7,8 +7,9 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
-import { Scroll, MessageCircle, Globe } from "lucide-react";
+import { Scroll, MessageCircle, Globe, X } from "lucide-react";
 
 interface KeryxStoryModalProps {
   children: React.ReactNode;
@@ -24,7 +25,16 @@ export function KeryxStoryModal({ children }: KeryxStoryModalProps) {
           {children}
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg glass-card-strong border-white/20">
+      <DialogContent className="sm:max-w-lg glass-card-strong border-white/20 z-[200] max-h-[90vh] overflow-y-auto">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(false)}
+          className="absolute right-4 top-4 p-2 rounded-full hover:bg-white/10 z-10"
+        >
+          <X className="w-5 h-5" />
+          <span className="sr-only">Close</span>
+        </Button>
         <DialogHeader className="text-center pb-4 border-b border-white/10">
           <div className="flex flex-col items-center gap-4">
             <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/20 via-teal-500/20 to-amber-500/20 ring-2 ring-white/10">
