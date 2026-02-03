@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { KeryxLogo } from "@/components/keryx-logo";
+import { KeryxStoryModal } from "@/components/keryx-story-modal";
 
 export default function Sidebar() {
   const [location] = useLocation();
@@ -15,8 +16,12 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-surface shadow-lg border-r border-outline">
       <div className="p-6 border-b border-outline">
-        <KeryxLogo size="md" />
-        <p className="text-xs text-muted-foreground mt-2">Kinetic Enterprise & Resource Yielding X-system</p>
+        <KeryxStoryModal>
+          <div className="text-left">
+            <KeryxLogo size="md" />
+            <p className="text-xs text-muted-foreground mt-2">Kinetic Enterprise & Resource Yielding X-system</p>
+          </div>
+        </KeryxStoryModal>
       </div>
       
       <nav className="mt-6">

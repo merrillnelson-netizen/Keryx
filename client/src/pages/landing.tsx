@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { KeryxLogo } from "@/components/keryx-logo";
+import { KeryxStoryModal } from "@/components/keryx-story-modal";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -152,7 +153,9 @@ export default function LandingPage() {
       {/* Navigation */}
       <nav className="relative z-50 px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <KeryxLogo size="md" />
+          <KeryxStoryModal>
+            <KeryxLogo size="md" />
+          </KeryxStoryModal>
           <div className="flex items-center gap-3">
             <Button 
               variant="ghost" 
@@ -184,7 +187,9 @@ export default function LandingPage() {
             variants={staggerContainer}
           >
             <motion.div variants={fadeIn} className="mb-8 flex justify-center">
-              <KeryxLogo size="hero" showText={false} />
+              <KeryxStoryModal>
+                <KeryxLogo size="hero" showText={false} />
+              </KeryxStoryModal>
             </motion.div>
             
             <motion.div variants={fadeIn} className="mb-6">

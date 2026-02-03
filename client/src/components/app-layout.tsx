@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
 import { KeryxCapabilitiesModal } from "@/components/keryx-capabilities-modal";
+import { KeryxStoryModal } from "@/components/keryx-story-modal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -46,13 +47,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <div className="flex flex-col flex-1 glass-card-strong overflow-hidden">
           {/* Logo & Branding */}
           <div className="p-6 border-b border-white/10">
-            <div className="flex items-center space-x-3">
-              <KeryxLogoIcon size="md" />
-              <div>
-                <h1 className="text-xl font-bold text-foreground">Keryx</h1>
-                <p className="text-[10px] text-muted-foreground leading-tight">Kinetic Enterprise &<br/>Resource Yielding X-system</p>
+            <KeryxStoryModal>
+              <div className="flex items-center space-x-3">
+                <KeryxLogoIcon size="md" />
+                <div className="text-left">
+                  <h1 className="text-xl font-bold text-foreground">Keryx</h1>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Kinetic Enterprise &<br/>Resource Yielding X-system</p>
+                </div>
               </div>
-            </div>
+            </KeryxStoryModal>
           </div>
           
           {/* Navigation */}
@@ -149,13 +152,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <div className="flex flex-col h-full">
                     {/* Mobile Menu Header */}
                     <div className="p-6 border-b border-white/10">
-                      <div className="flex items-center space-x-3">
-                        <KeryxLogoIcon size="md" />
-                        <div>
-                          <h1 className="text-xl font-bold text-foreground">Keryx</h1>
-                          <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
+                      <KeryxStoryModal>
+                        <div className="flex items-center space-x-3">
+                          <KeryxLogoIcon size="md" />
+                          <div className="text-left">
+                            <h1 className="text-xl font-bold text-foreground">Keryx</h1>
+                            <p className="text-xs text-muted-foreground">AI Memory Assistant</p>
+                          </div>
                         </div>
-                      </div>
+                      </KeryxStoryModal>
                     </div>
                     
                     {/* Mobile Navigation */}
