@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Compass, ExternalLink, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,6 +9,14 @@ interface LifePurposeSuggestionProps {
 
 export function LifePurposeSuggestion({ onDismiss }: LifePurposeSuggestionProps) {
   const [dismissed, setDismissed] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -23,6 +31,7 @@ export function LifePurposeSuggestion({ onDismiss }: LifePurposeSuggestionProps)
     <AnimatePresence>
       {!dismissed && (
         <motion.div
+          ref={cardRef}
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -10, scale: 0.95 }}
