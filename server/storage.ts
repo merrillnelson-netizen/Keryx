@@ -1,6 +1,6 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
-  locationHistory, frequentPlaces, pushSubscriptions,
+  locationHistory, frequentPlaces, pushSubscriptions, goals,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -14,7 +14,8 @@ import {
   type IdeaChatMessage,
   type LocationHistory, type InsertLocationHistory,
   type FrequentPlace, type InsertFrequentPlace,
-  type PushSubscription, type InsertPushSubscription
+  type PushSubscription, type InsertPushSubscription,
+  type Goal, type InsertGoal, type GoalMilestone
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -134,6 +135,14 @@ export interface IStorage {
   updatePushSubscriptionLastUsed(id: string): Promise<void>;
   deletePushSubscription(endpoint: string): Promise<boolean>;
   deleteAllPushSubscriptions(userId: string): Promise<number>;
+
+  // Goals (user-scoped)
+  getGoals(userId: string, status?: string): Promise<Goal[]>;
+  getGoal(id: string, userId: string): Promise<Goal | undefined>;
+  createGoal(userId: string, goal: InsertGoal): Promise<Goal>;
+  updateGoal(id: string, userId: string, updates: Partial<InsertGoal & { milestones: GoalMilestone[], aiSummary: string, aiLastAnalyzed: Date, relatedMemoryIds: string[] }>): Promise<Goal | undefined>;
+  deleteGoal(id: string, userId: string): Promise<boolean>;
+  getActiveGoals(userId: string): Promise<Goal[]>;
 }
 
 /**
@@ -1856,6 +1865,90 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to delete all push subscriptions:', error);
       throw new Error('Database error while deleting push subscriptions');
+    }
+  }
+
+  // Goals implementation
+  async getGoals(userId: string, status?: string): Promise<Goal[]> {
+    try {
+      const conditions = [eq(goals.userId, userId)];
+      if (status) {
+        conditions.push(eq(goals.status, status));
+      }
+      return await db
+        .select()
+        .from(goals)
+        .where(and(...conditions))
+        .orderBy(desc(goals.updatedAt));
+    } catch (error) {
+      console.error('Failed to get goals:', error);
+      throw new Error('Database error while fetching goals');
+    }
+  }
+
+  async getGoal(id: string, userId: string): Promise<Goal | undefined> {
+    try {
+      const [goal] = await db
+        .select()
+        .from(goals)
+        .where(and(eq(goals.id, id), eq(goals.userId, userId)));
+      return goal;
+    } catch (error) {
+      console.error('Failed to get goal:', error);
+      throw new Error('Database error while fetching goal');
+    }
+  }
+
+  async createGoal(userId: string, goal: InsertGoal): Promise<Goal> {
+    try {
+      const [created] = await db
+        .insert(goals)
+        .values({ ...goal, userId })
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Failed to create goal:', error);
+      throw new Error('Database error while creating goal');
+    }
+  }
+
+  async updateGoal(id: string, userId: string, updates: Partial<InsertGoal & { milestones: GoalMilestone[], aiSummary: string, aiLastAnalyzed: Date, relatedMemoryIds: string[] }>): Promise<Goal | undefined> {
+    try {
+      const [updated] = await db
+        .update(goals)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to update goal:', error);
+      throw new Error('Database error while updating goal');
+    }
+  }
+
+  async deleteGoal(id: string, userId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(goals)
+        .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete goal:', error);
+      throw new Error('Database error while deleting goal');
+    }
+  }
+
+  async getActiveGoals(userId: string): Promise<Goal[]> {
+    try {
+      return await db
+        .select()
+        .from(goals)
+        .where(and(eq(goals.userId, userId), eq(goals.status, 'active')))
+        .orderBy(desc(goals.updatedAt));
+    } catch (error) {
+      console.error('Failed to get active goals:', error);
+      throw new Error('Database error while fetching active goals');
     }
   }
 }

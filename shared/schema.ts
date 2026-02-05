@@ -816,3 +816,58 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+
+/**
+ * Goals table - tracks user goals with AI-driven progress monitoring
+ * AI analyzes memories to detect progress and provides suggestions
+ */
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text("title").notNull(),
+  description: text("description"),
+  targetDate: timestamp("target_date"), // Optional deadline
+  progressPercent: integer("progress_percent").default(0).notNull(), // 0-100
+  status: text("status").notNull().default('active'), // 'active', 'completed', 'paused', 'abandoned'
+  milestones: jsonb("milestones").default([]), // Array of { id, title, isCompleted, completedAt, order }
+  aiSummary: text("ai_summary"), // AI-generated progress summary
+  aiLastAnalyzed: timestamp("ai_last_analyzed"), // When AI last analyzed progress
+  relatedMemoryIds: text("related_memory_ids").array(), // IDs of memories that contributed to progress
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("goals_user_id_idx").on(table.userId),
+  statusIdx: index("goals_status_idx").on(table.status),
+  userStatusIdx: index("goals_user_status_idx").on(table.userId, table.status),
+  targetDateIdx: index("goals_target_date_idx").on(table.targetDate),
+}));
+
+export const goalsRelations = relations(goals, ({ one }) => ({
+  user: one(users, {
+    fields: [goals.userId],
+    references: [users.id],
+  }),
+}));
+
+// Goal milestone schema for validation
+export const goalMilestoneSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  isCompleted: z.boolean().default(false),
+  completedAt: z.string().optional(),
+  order: z.number(),
+});
+
+export type GoalMilestone = z.infer<typeof goalMilestoneSchema>;
+
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  aiSummary: true,
+  aiLastAnalyzed: true,
+  relatedMemoryIds: true,
+});
+
+export type Goal = typeof goals.$inferSelect;
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
