@@ -28,6 +28,7 @@ import IdeaDetail from "@/pages/idea-detail";
 import Locations from "@/pages/locations";
 import Goals from "@/pages/goals";
 import Reminders from "@/pages/reminders";
+import ShowcasePage from "@/pages/showcase";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -68,6 +69,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
+      <Route path="/showcase" component={ShowcasePage} />
       <Route path="/">
         {() => <HomeRoute />}
       </Route>
