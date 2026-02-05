@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -500,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...(calendarReasoning ? { calendar: calendarReasoning } : {})
       } : calendarReasoning ? { calendar: calendarReasoning } : undefined;
 
-      // Save to database with user ID, mood, detected people, geolocation, and calendar
+      // Save to database with user ID, mood, detected people, geolocation, calendar, and importance
       const logEntry = await storage.createLogEntry({
         userId: user.id,
         memoryText,
@@ -521,6 +521,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         calendarEventAttendees,
         // AI decision log for transparency
         aiReasoning,
+        // AI-assigned importance level (1-10)
+        importance: extracted.importance,
       });
 
       // CRITICAL: Send response IMMEDIATELY after DB save - nothing else can fail the response
@@ -593,29 +595,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * PATCH /api/memories/:id - Update category on existing memory
-   * Allows users to manually change the category of a saved memory
+   * PATCH /api/memories/:id - Update memory fields
+   * Allows users to update category, importance, and text (with re-analysis)
+   * When memoryText changes, triggers AI re-analysis for topic, mood, and importance
    * Requires authentication and ownership verification
    */
-  app.patch("/api/memories/:id", requireAuth, async (req, res) => {
+  app.patch("/api/memories/:id", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { id } = req.params;
-      const { topicTag } = req.body;
+      const { topicTag, importance, memoryText } = req.body;
       const user = req.user as any;
 
       if (!id || typeof id !== 'string') {
         return sendErrorResponse(res, 400, "Memory ID is required");
       }
 
-      if (!topicTag || typeof topicTag !== 'string' || topicTag.trim() === '') {
-        return sendErrorResponse(res, 400, "topicTag is required and must be a non-empty string");
+      // At least one field must be provided
+      if (!topicTag && importance === undefined && !memoryText) {
+        return sendErrorResponse(res, 400, "At least one field (topicTag, importance, or memoryText) is required");
       }
 
-      // Auto-create category if it doesn't exist
-      await storage.createCategoryIfNotExists(user.id, topicTag);
+      // Validate topicTag if provided
+      if (topicTag !== undefined && (typeof topicTag !== 'string' || topicTag.trim() === '')) {
+        return sendErrorResponse(res, 400, "topicTag must be a non-empty string");
+      }
+
+      // Validate importance if provided (1-10)
+      if (importance !== undefined) {
+        const importanceNum = parseInt(importance, 10);
+        if (isNaN(importanceNum) || importanceNum < 1 || importanceNum > 10) {
+          return sendErrorResponse(res, 400, "importance must be a number between 1 and 10");
+        }
+      }
+
+      // Get the existing memory to check for text changes
+      const existingMemory = await storage.getLogEntry(id, user.id);
+      if (!existingMemory) {
+        return sendErrorResponse(res, 404, "Memory not found or you don't have permission to edit it");
+      }
+
+      // Build the update object
+      const updateData: Partial<InsertLogEntry> = {};
+
+      // If text changed, trigger re-analysis
+      if (memoryText && memoryText !== existingMemory.memoryText) {
+        // Re-analyze with AI to update topic, mood, people, and importance
+        const extracted = await extractMetadata(memoryText);
+        const newEmbedding = await generateEmbedding(memoryText);
+        
+        updateData.memoryText = memoryText;
+        updateData.topicTag = topicTag || extracted.topicTag; // Use provided topicTag or AI-extracted
+        updateData.metadataJson = extracted.metadataJson;
+        updateData.embeddingVector = newEmbedding;
+        updateData.mood = extracted.mood;
+        updateData.moodScore = extracted.moodScore;
+        updateData.detectedPeople = extracted.detectedPeople;
+        updateData.aiReasoning = extracted.aiReasoning;
+        // Use user-provided importance if given, otherwise use AI-extracted
+        updateData.importance = importance !== undefined ? parseInt(importance, 10) : extracted.importance;
+
+        // Auto-create category if needed
+        if (updateData.topicTag) {
+          await storage.createCategoryIfNotExists(user.id, updateData.topicTag);
+        }
+      } else {
+        // No text change - just update the provided fields
+        if (topicTag) {
+          updateData.topicTag = topicTag;
+          await storage.createCategoryIfNotExists(user.id, topicTag);
+        }
+        if (importance !== undefined) {
+          updateData.importance = parseInt(importance, 10);
+        }
+      }
 
       // Update the memory (with user ownership verification)
-      const updatedEntry = await storage.updateLogEntry(id, user.id, { topicTag });
+      const updatedEntry = await storage.updateLogEntry(id, user.id, updateData);
 
       if (!updatedEntry) {
         return sendErrorResponse(res, 404, "Memory not found or you don't have permission to edit it");
@@ -624,12 +679,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         status: 'success',
         data: updatedEntry,
-        message: 'Category updated successfully',
+        message: memoryText && memoryText !== existingMemory.memoryText 
+          ? 'Memory updated and re-analyzed successfully' 
+          : 'Memory updated successfully',
+        reanalyzed: memoryText && memoryText !== existingMemory.memoryText,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to update memory category:", error);
-      sendErrorResponse(res, 500, "Failed to update memory category", error);
+      console.error("Failed to update memory:", error);
+      sendErrorResponse(res, 500, "Failed to update memory", error);
     }
   });
 
