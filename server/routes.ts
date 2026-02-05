@@ -2812,12 +2812,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               const metadata = await extractMetadata(entry.memoryText);
               
-              // Build update data with AI reasoning
+              // Build update data with AI reasoning - include topicTag and importance for full re-analysis
               const updateData: any = {
+                topicTag: metadata.topicTag,
                 mood: metadata.mood,
                 moodScore: metadata.moodScore,
                 detectedPeople: metadata.detectedPeople,
+                importance: metadata.importance,
               };
+              
+              // Create category if it doesn't exist
+              if (metadata.topicTag) {
+                await storage.createCategoryIfNotExists(user.id, metadata.topicTag);
+              }
               
               // Include AI reasoning for transparency
               let calendarReasoning: string | undefined;

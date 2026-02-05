@@ -70,13 +70,30 @@ export async function extractMetadata(memoryText: string): Promise<ExtractedMeta
           role: "system",
           content: `You are a metadata extraction expert with emotional intelligence. Analyze the text and extract:
 
-1. TOPIC: Identify the single most relevant topic tag from: Billiards, Groceries, Meeting, General (default to General if unclear)
+1. TOPIC: Identify the single most relevant topic tag from these categories (choose the BEST fit, only use General as last resort):
+   - Work: Job tasks, career, projects, professional activities, workplace matters
+   - Family: Spouse, children, parents, siblings, relatives, family events
+   - Social: Friends, gatherings, parties, social events, community activities
+   - Health: Medical appointments, fitness, exercise, wellness, mental health, symptoms
+   - Financial: Bills, investments, budgets, expenses, money matters, subscriptions
+   - Shopping: Purchases, errands, stores, online orders (excluding groceries)
+   - Groceries: Grocery shopping, food purchases, supermarket runs
+   - Travel: Trips, vacations, commutes, destinations, flights, hotels
+   - Learning: Courses, reading, education, skills, training, studying
+   - Home: Chores, maintenance, repairs, house projects, cleaning
+   - Recreation: Hobbies, games, entertainment, sports (includes Billiards)
+   - Food: Meals, restaurants, cooking, dining out (not grocery shopping)
+   - Meeting: Appointments, scheduled calls, conferences, interviews
+   - Personal: Reflections, goals, self-improvement, journaling, life thoughts
+   - General: Only if none of the above categories fit
 
 2. ENTITIES: Extract specific entities based on the topic:
-   - Billiards: round, table, game, breaker, racker, winner
+   - Recreation: game details, activity, participants, duration
    - Groceries: store, items_list (as array), budget
    - Meeting: attendees (as array), action_items (as array), meeting_topic
-   - General: any relevant structured data you can extract
+   - Work: project, task, colleagues, deadline
+   - Health: symptoms, medications, appointments, exercise_type
+   - Any topic: extract relevant structured data you identify
    
 For food/meal-related entries, use these EXACT field names:
    - meal_type: "breakfast" | "lunch" | "dinner" | "snack"
