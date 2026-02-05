@@ -639,11 +639,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   function isFinancialQuery(query: string): boolean {
     const financialPatterns = [
       /\b(spend|spent|spending|purchase|bought|cost|expense|expenses)\b/i,
-      /\b(balance|account|bank|money|dollar|dollars|\$)\b/i,
+      /\b(balance|account|accounts|bank|money|dollar|dollars|\$)\b/i,
       /\b(transaction|transactions|payment|payments)\b/i,
-      /\b(restaurant|groceries|shopping|bills|subscription)\b/i,
+      /\b(restaurant|groceries|shopping|bills|subscriptions?|recurring)\b/i,
       /\b(how much|total|category|categories|merchant|merchants)\b/i,
-      /\b(financial|finances|budget|budgeting)\b/i,
+      /\b(financial|finances|budget|budgeting|plaid)\b/i,
     ];
     return financialPatterns.some(pattern => pattern.test(query));
   }
@@ -663,9 +663,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return sendErrorResponse(res, 400, "queryText is required");
       }
 
-      // Check if this is a financial query and Plaid is enabled
+      // Check if this is a financial query
       const userSettings = await storage.getSettings(user.id);
-      if (isFinancialQuery(queryText) && isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
+      const isFinancial = isFinancialQuery(queryText);
+      
+      if (isFinancial) {
+        // Check if Plaid is configured and enabled
+        if (!isPlaidFeatureEnabled() || !userSettings?.plaidEnabled) {
+          // Financial query detected but Plaid not enabled - inform user
+          return res.json({
+            status: 'success',
+            isFinancial: true,
+            financialAnswer: "I detected this as a financial question, but you haven't connected a bank account yet. Go to Settings and connect your bank through Plaid to get personalized spending insights and subscription tracking.",
+            data: [],
+            query: {
+              original: queryText,
+              type: 'financial'
+            },
+            count: 0,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
         try {
           // Get recent transactions (30 days) and accounts for financial query
           const [transactions, accounts] = await Promise.all([
@@ -707,10 +726,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
               count: 0,
               timestamp: new Date().toISOString()
             });
+          } else {
+            // Plaid enabled but no transaction data synced yet
+            return res.json({
+              status: 'success',
+              isFinancial: true,
+              financialAnswer: "I don't have any transaction data to analyze yet. Please sync your bank account in Settings - it may take a few minutes for your transactions to appear after connecting.",
+              data: [],
+              query: {
+                original: queryText,
+                type: 'financial'
+              },
+              count: 0,
+              timestamp: new Date().toISOString()
+            });
           }
         } catch (finError) {
-          console.error("Financial query failed, falling back to memory search:", finError);
-          // Fall through to regular memory search
+          console.error("Financial query failed:", finError);
+          // Return clear error for financial queries instead of falling back
+          return res.json({
+            status: 'success',
+            isFinancial: true,
+            financialAnswer: "I had trouble accessing your financial data. Please try again in a moment, or check your bank connection in Settings.",
+            data: [],
+            query: {
+              original: queryText,
+              type: 'financial'
+            },
+            count: 0,
+            timestamp: new Date().toISOString()
+          });
         }
       }
 
