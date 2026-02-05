@@ -275,6 +275,42 @@ function CalendarBadge({ eventTitle, attendees }: { eventTitle?: string | null; 
   );
 }
 
+function ImportanceBadge({ importance }: { importance?: number | null }) {
+  if (!importance || importance === 5) return null; // Only show for non-default values
+  
+  const getImportanceConfig = (level: number) => {
+    if (level >= 8) return { label: "Critical", color: "bg-red-500/20 text-red-400 border-red-500/30", icon: "🔥" };
+    if (level >= 6) return { label: "High", color: "bg-orange-500/20 text-orange-400 border-orange-500/30", icon: "⚡" };
+    if (level <= 2) return { label: "Low", color: "bg-gray-500/20 text-gray-400 border-gray-500/30", icon: "💤" };
+    if (level <= 4) return { label: "Minor", color: "bg-slate-500/20 text-slate-400 border-slate-500/30", icon: "📝" };
+    return null;
+  };
+  
+  const config = getImportanceConfig(importance);
+  if (!config) return null;
+  
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge 
+            variant="outline" 
+            className={cn("cursor-default text-xs", config.color)}
+            data-testid="importance-badge"
+          >
+            <span className="mr-1">{config.icon}</span>
+            {config.label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="font-medium">Importance Level</p>
+          <p className="text-sm">{importance}/10 - {config.label} priority</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function History() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<LogEntry | null>(null);
@@ -519,6 +555,7 @@ export default function History() {
                     <TableHead className="w-[80px] text-foreground font-semibold">Mood</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Location</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Meeting</TableHead>
+                    <TableHead className="w-[80px] text-foreground font-semibold">Priority</TableHead>
                     <TableHead className="min-w-[300px] text-foreground font-semibold">Memory</TableHead>
                     <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
                   </TableRow>
@@ -580,6 +617,9 @@ export default function History() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap" data-testid={`calendar-cell-${entry.id}`}>
                         <CalendarBadge eventTitle={entry.calendarEventTitle} attendees={entry.calendarEventAttendees} />
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap" data-testid={`importance-cell-${entry.id}`}>
+                        <ImportanceBadge importance={entry.importance} />
                       </TableCell>
                       <TableCell className="font-medium text-foreground" data-testid={`memory-cell-${entry.id}`}>
                         {entry.memoryText}
@@ -688,6 +728,7 @@ export default function History() {
                         <PeopleBadge people={entry.detectedPeople} />
                         <LocationBadge lat={entry.geoLat} lng={entry.geoLng} placeName={entry.geoPlaceName} />
                         <CalendarBadge eventTitle={entry.calendarEventTitle} attendees={entry.calendarEventAttendees} />
+                        <ImportanceBadge importance={entry.importance} />
                       </div>
                       <CardTitle className="text-base font-normal text-foreground" data-testid={`memory-text-${entry.id}`}>
                         {entry.memoryText}
