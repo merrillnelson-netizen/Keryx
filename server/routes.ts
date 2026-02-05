@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -399,6 +399,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Handle memory storage with AI-powered metadata extraction
    * All routes require authentication
    */
+
+  /**
+   * POST /api/intent - Detect whether input is a log or query
+   * Uses AI to classify user input for unified input flow
+   * Requires authentication
+   */
+  app.post("/api/intent", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const { text } = req.body;
+      
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        return sendErrorResponse(res, 400, "text is required");
+      }
+
+      const result = await detectIntent(text.trim());
+      
+      res.json({
+        status: 'success',
+        data: result
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to detect intent", error);
+    }
+  });
   
   /**
    * POST /api/memories - Save a new memory with optional manual category

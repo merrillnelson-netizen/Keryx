@@ -186,6 +186,79 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 /**
+ * Intent detection result - determines if input is a log or query
+ */
+export interface DetectedIntent {
+  intent: 'log' | 'query';
+  confidence: number;
+  reasoning: string;
+}
+
+/**
+ * Detect whether user input is intended to log a new memory or query existing ones
+ * Uses gpt-4o-mini for fast classification (typically <500ms)
+ * 
+ * @param inputText - Raw user input (voice or text)
+ * @returns Promise<DetectedIntent> - Classified intent with confidence
+ */
+export async function detectIntent(inputText: string): Promise<DetectedIntent> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an intent classifier for a personal memory/journal system. Classify user input as either:
+
+1. "log" - User wants to RECORD/SAVE a new memory, note, thought, event, or information
+   Examples: "I just had lunch at Chipotle", "Meeting with John went well", "Remind me to call mom", "Had a great workout today", "I feel tired", "Bought groceries for $50"
+
+2. "query" - User wants to SEARCH/RETRIEVE/ASK about existing memories
+   Examples: "What did I eat yesterday?", "When was my last meeting with John?", "How much did I spend on groceries?", "Find my notes about the project", "What have I been doing this week?", "Show me my recent memories"
+
+Key indicators for QUERY:
+- Questions (what, when, where, how, who, did I, have I, etc.)
+- Search terms (find, show, search, look up, tell me about)
+- Past tense inquiries
+- Requests for information retrieval
+
+Key indicators for LOG:
+- Statements about current or just-completed events
+- Recording new information
+- Expressing feelings or thoughts
+- Noting tasks, reminders, observations
+
+Respond with JSON: { "intent": "log" | "query", "confidence": 0.0-1.0, "reasoning": "brief explanation" }`
+        },
+        {
+          role: "user",
+          content: inputText
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 150,
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || '{}');
+    
+    return {
+      intent: result.intent === 'query' ? 'query' : 'log',
+      confidence: typeof result.confidence === 'number' ? result.confidence : 0.8,
+      reasoning: result.reasoning || 'Intent classified based on input structure'
+    };
+  } catch (error) {
+    console.error("Error detecting intent:", error);
+    // Default to log on error - safer to save than to search
+    return {
+      intent: 'log',
+      confidence: 0.5,
+      reasoning: 'Defaulted to log due to classification error'
+    };
+  }
+}
+
+/**
  * Query decomposition result
  */
 export interface DecomposedQuery {
