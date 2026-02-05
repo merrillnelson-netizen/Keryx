@@ -400,7 +400,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] h-[90vh] max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-2xl w-[95vw] h-[calc(100vh-80px)] max-h-[calc(100vh-80px)] flex flex-col p-0 gap-0 overflow-hidden top-[calc(50%+32px)] rounded-xl">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
