@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, GoalPatternAlert } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -4339,6 +4339,44 @@ Return ONLY the JSON array, no other text.`;
       res.json({ suggestions });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to generate milestone suggestions", error);
+    }
+  });
+
+  // GET /api/goals/alerts - Get goal-related pattern alerts
+  app.get("/api/goals/alerts", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goals = await storage.getActiveGoals(user.id);
+      
+      if (goals.length === 0) {
+        return res.json({ alerts: [] });
+      }
+      
+      const recentMemoriesRaw = await storage.getRecentLogEntriesLight(user.id, 14, 50);
+      const recentMemories = recentMemoriesRaw
+        .filter(m => m.memoryText && m.timestamp)
+        .map(m => ({ memoryText: m.memoryText!, timestamp: m.timestamp! }));
+      
+      const alerts = await detectGoalPatternAlerts(
+        goals.map(g => ({
+          title: g.title,
+          description: g.description,
+          progressPercent: g.progressPercent,
+          status: g.status,
+          targetDate: g.targetDate,
+          aiLastAnalyzed: g.aiLastAnalyzed,
+          milestones: (g.milestones as any[] || []).map(m => ({
+            title: m.title,
+            isCompleted: m.isCompleted,
+            completedAt: m.completedAt,
+          })),
+        })),
+        recentMemories
+      );
+      
+      res.json({ alerts });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to detect goal alerts", error);
     }
   });
 

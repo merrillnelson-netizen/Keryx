@@ -1405,3 +1405,98 @@ Please suggest new milestones that complement any existing ones.`
     return [];
   }
 }
+
+export interface GoalPatternAlert {
+  type: "progress" | "stalled" | "milestone" | "at_risk";
+  goalTitle: string;
+  title: string;
+  description: string;
+  actionSuggestion?: string;
+}
+
+/**
+ * Detect goal-related patterns and alerts
+ * Identifies stalled goals, recent achievements, and at-risk targets
+ */
+export async function detectGoalPatternAlerts(
+  goals: Array<{
+    title: string;
+    description?: string | null;
+    progressPercent: number;
+    status: string;
+    targetDate?: Date | null;
+    aiLastAnalyzed?: Date | null;
+    milestones?: Array<{ title: string; isCompleted: boolean; completedAt?: string | null }>;
+  }>,
+  recentMemories: Array<{ memoryText: string; timestamp: Date }>
+): Promise<GoalPatternAlert[]> {
+  const alerts: GoalPatternAlert[] = [];
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  for (const goal of goals) {
+    if (goal.status !== 'active') continue;
+
+    // Check for stalled goals (no analysis in 7+ days and < 80% complete)
+    if (goal.aiLastAnalyzed) {
+      const daysSinceAnalysis = (now.getTime() - new Date(goal.aiLastAnalyzed).getTime()) / dayMs;
+      if (daysSinceAnalysis > 7 && goal.progressPercent < 80) {
+        alerts.push({
+          type: "stalled",
+          goalTitle: goal.title,
+          title: `"${goal.title}" needs attention`,
+          description: `This goal hasn't shown progress in ${Math.floor(daysSinceAnalysis)} days. Consider logging activities related to it.`,
+          actionSuggestion: "Try breaking the next step into a smaller action you can do today.",
+        });
+      }
+    }
+
+    // Check for at-risk targets (target date approaching with low progress)
+    if (goal.targetDate) {
+      const daysUntilTarget = (new Date(goal.targetDate).getTime() - now.getTime()) / dayMs;
+      const expectedProgress = Math.max(0, 100 - (daysUntilTarget / 30) * 100);
+      
+      if (daysUntilTarget > 0 && daysUntilTarget < 14 && goal.progressPercent < expectedProgress - 20) {
+        alerts.push({
+          type: "at_risk",
+          goalTitle: goal.title,
+          title: `"${goal.title}" target approaching`,
+          description: `Target date is in ${Math.floor(daysUntilTarget)} days but progress is at ${goal.progressPercent}%. Consider focusing on this goal.`,
+          actionSuggestion: "Review your milestones and prioritize the most impactful next step.",
+        });
+      }
+    }
+
+    // Check for recent milestone completions (celebrate progress!)
+    if (goal.milestones) {
+      const recentlyCompleted = goal.milestones.filter(m => {
+        if (!m.isCompleted || !m.completedAt) return false;
+        const completedDate = new Date(m.completedAt);
+        return (now.getTime() - completedDate.getTime()) / dayMs < 3;
+      });
+      
+      if (recentlyCompleted.length > 0) {
+        alerts.push({
+          type: "milestone",
+          goalTitle: goal.title,
+          title: `Milestone achieved for "${goal.title}"!`,
+          description: `You recently completed: "${recentlyCompleted[0].title}". Keep up the momentum!`,
+        });
+      }
+    }
+
+    // Check for good progress (approaching completion)
+    if (goal.progressPercent >= 80 && goal.progressPercent < 100) {
+      alerts.push({
+        type: "progress",
+        goalTitle: goal.title,
+        title: `"${goal.title}" almost complete!`,
+        description: `You're at ${goal.progressPercent}% - just a bit more effort to finish this goal!`,
+        actionSuggestion: "Push through to complete it and celebrate your achievement.",
+      });
+    }
+  }
+
+  // Limit to top 3 most relevant alerts
+  return alerts.slice(0, 3);
+}
