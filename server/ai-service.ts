@@ -38,6 +38,7 @@ export interface ExtractedMetadata {
   detectedPeople: string[];
   aiReasoning?: AIReasoning;
   lifePurposeTheme?: boolean;
+  importance?: number; // 1-10 scale, AI-assigned based on content significance
 }
 
 /**
@@ -106,6 +107,15 @@ For food/meal-related entries, use these EXACT field names:
    - Discussing finding meaning, fulfillment, or their life's work
    Set to false for general daily activities, tasks, or non-philosophical content.
 
+8. IMPORTANCE: Rate the significance of this memory on a scale from 1 to 10:
+   - 1-2: Trivial, routine, low-value (e.g., "I had toast for breakfast")
+   - 3-4: Slightly notable but forgettable
+   - 5: Average importance, typical daily activity
+   - 6-7: Noteworthy, contains useful information or decisions
+   - 8-9: Significant, involves important people, decisions, milestones, or emotions
+   - 10: Critical, life-changing events, major decisions, breakthroughs
+   Consider: emotional intensity, future relevance, uniqueness, people involved, decisions made, and potential impact.
+
 Respond with JSON in this exact format: 
 {
   "topicTag": "string",
@@ -114,6 +124,7 @@ Respond with JSON in this exact format:
   "moodScore": number (-100 to 100),
   "detectedPeople": ["name1", "name2", ...],
   "lifePurposeTheme": boolean,
+  "importance": number (1 to 10),
   "reasoning": {
     "topic": "Brief explanation of why this topic was chosen",
     "mood": "Brief explanation of the emotional tone detected",
@@ -148,6 +159,7 @@ If no people are mentioned, return empty array for detectedPeople.`,
         people: result.reasoning.people || undefined,
       } : undefined,
       lifePurposeTheme: result.lifePurposeTheme === true,
+      importance: typeof result.importance === 'number' ? Math.max(1, Math.min(10, result.importance)) : 5,
     };
   } catch (error) {
     console.error("Error extracting metadata:", error);
@@ -158,6 +170,7 @@ If no people are mentioned, return empty array for detectedPeople.`,
       mood: "neutral",
       moodScore: 0,
       detectedPeople: [],
+      importance: 5, // Default to middle importance
     };
   }
 }

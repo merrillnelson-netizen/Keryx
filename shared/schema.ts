@@ -132,6 +132,9 @@ export const logEntries = pgTable("log_entries", {
   calendarEventAttendees: text("calendar_event_attendees").array(), // Attendee names/emails
   // AI Decision Log: transparency about AI reasoning
   aiReasoning: jsonb("ai_reasoning"), // { topic: string, mood: string, people: string, calendar?: string }
+  // Importance level: 1-10 scale, AI-assigned initially, user-adjustable
+  // Higher importance = more weight in AI analysis (briefings, insights, synthesis)
+  importance: integer("importance").default(5), // 1 = lowest, 5 = middle, 10 = highest
 }, (table) => ({
   // Index for user-specific queries (critical for data isolation)
   userIdIdx: index("log_entries_user_id_idx").on(table.userId),
