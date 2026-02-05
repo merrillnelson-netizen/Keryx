@@ -28,7 +28,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions` tables.
+- **Schema**: `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals` tables.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Performance Optimizations
@@ -53,7 +53,8 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Expanded Categories**: 15 topic categories for better memory organization: Work, Family, Social, Health, Financial, Shopping, Groceries, Travel, Learning, Home, Recreation, Food, Meeting, Personal, General. AI is instructed to use General only as a last resort. Users can manually reassign categories via the History page. Categories are auto-created per user when new ones are assigned.
 - **AI Thematic Synthesis**: Dedicated page (/synthesis) for deep pattern analysis with interactive Q&A chat interface. Auto-generates comprehensive analysis on page load, allows follow-up questions about patterns, habits, mood trends, and recommendations. Configurable time period (7 days to 1 year).
 - **Ideas & Workspace**: Versatile workspace (/ideas) supporting multiple types: Ideas (full AI brainstorming with stages), Notes (quick text capture), Lists (checkable items like grocery/packing lists), and Documents (structured content). All types open in full-height modal overlays for a mini-app experience - quick access without page navigation. Type-aware AI assistance provides contextual help - list item suggestions, note summarization, writing feedback for documents, and brainstorming for ideas. Ideas progress through stages: Spark → Exploring → Planning → In Progress → Completed/Dropped. Features include AI chat, task breakdown, and type-specific UIs with tab navigation between content and AI help.
-- **Proactive Features**: AI-generated morning briefings, pattern alerts, active projects, contextual discoveries.
+- **Goals Tracking System**: Dedicated page (/goals) for long-term goal management separate from Ideas. Features AI-powered progress tracking that analyzes recent memories to detect goal-related activities. Goals have status (active/paused/completed/abandoned), 0-100 progress percentage, optional target dates, and JSONB milestones. GoalModal provides 3-tab interface: Details (title, description, target date, status), Milestones (AI-suggested or manual with completion tracking), and Progress (AI analysis summary, related memories, achievements, blockers). AI integration includes: analyzeGoalProgress scans 30-day memories for goal mentions, suggestGoalMilestones generates actionable milestones, and detectGoalPatternAlerts identifies stalled goals, at-risk targets, and recent achievements. Goals are integrated into morning briefings with goalUpdates section providing encouraging status updates.
+- **Proactive Features**: AI-generated morning briefings (with goal updates), pattern alerts, goal pattern alerts (stalled progress, milestone achievements, at-risk targets), active projects, contextual discoveries.
 - **Personal Insights**: AI-generated insights from user's ecosystem (memories, calendars, emails, finances) displayed on Insights page. Categories: people, projects, calendar, financial, wellbeing, highlights. Cached with 30-minute TTL.
 - **Contextual Discoveries**: Uses Tavily AI Search to provide personalized, ad-free content based on user's life insights (upcoming trips, projects, financial patterns). Extracts searchable insights from calendars (next 7 days), emails, recent memories (last 7 days), and Plaid financial data (notable transactions >$100), then performs contextual searches. Features urgency badges (immediate/upcoming/general), location awareness (detects when visiting new city), and minimum relevance thresholds (0.6). Cached with 30-minute TTL. Requires TAVILY_API_KEY configuration.
 - **People Closeness Score**: Priority system (1-10) for people in the People table. Enables High-Signal Alerts when priority 8+ people are mentioned in Tavily discoveries. Priority 10 = VIP (spouse, partner), Priority 9 = Critical (close family, business partners), Priority 8 = High (close friends, key colleagues). High-signal detection uses full-name matching (95% confidence), first+last name matching (75%), and last-name-only matching (50% for unique names).
@@ -115,6 +116,8 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Memory Management**: Proper cleanup of refs, timeouts, and event listeners in React hooks.
 
 ## Recent Changes
+- **February 2026**: Goals Tracking System - added dedicated /goals page with AI-powered progress tracking, milestone management, and integration into morning briefings.
+- **February 2026**: Goal Pattern Alerts - added detectGoalPatternAlerts for stalled progress, at-risk targets, milestone achievements.
 - **February 2026**: Security audit completed - verified all routes protected, fixed direct object reference in idea tasks.
 - **February 2026**: Life Purpose Suggestion auto-scroll enhancement with smooth 400ms delay.
 - **February 2026**: Code cleanup - removed debug console.log statements from speech recognition hook.
