@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -167,22 +168,23 @@ export default function GoalsPage() {
     : 0;
 
   return (
-    <div className="container max-w-4xl mx-auto p-4 pb-24">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Target className="w-6 h-6 text-primary" />
-            Goals
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Track your goals and let AI monitor your progress
-          </p>
+    <AppLayout>
+      <div className="container max-w-4xl mx-auto p-4 pb-24">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Target className="w-6 h-6 text-primary" />
+              Goals
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Track your goals and let AI monitor your progress
+            </p>
+          </div>
+          <Button onClick={() => setIsCreating(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            New Goal
+          </Button>
         </div>
-        <Button onClick={() => setIsCreating(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          New Goal
-        </Button>
-      </div>
 
       {goals.length > 0 && (
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -283,6 +285,7 @@ export default function GoalsPage() {
         onCreateGoal={(data) => createGoalMutation.mutate(data)}
         isCreatePending={createGoalMutation.isPending}
       />
-    </div>
+      </div>
+    </AppLayout>
   );
 }
