@@ -31,6 +31,8 @@ keryx/
 │       │   ├── pending-actions.tsx # AI action approval component
 │       │   ├── contextual-discoveries.tsx # Tavily-powered discoveries
 │       │   ├── personal-insights.tsx # AI insights display
+│       │   ├── idea-modal.tsx   # Full-height modal for Ideas/Notes/Lists/Documents
+│       │   ├── goal-modal.tsx   # Modal for goal creation/editing with milestones
 │       │   └── [other components]
 │       ├── hooks/               # Custom React hooks
 │       │   ├── use-speech-recognition.tsx # Web Speech API wrapper
@@ -51,6 +53,7 @@ keryx/
 │       │   ├── synthesis.tsx    # Thematic synthesis chat
 │       │   ├── ideas.tsx        # Ideas workspace list
 │       │   ├── idea-detail.tsx  # Single idea view
+│       │   ├── goals.tsx        # Goals tracking page with AI progress analysis
 │       │   ├── people.tsx       # People management
 │       │   ├── timeline.tsx     # Calendar timeline view
 │       │   ├── locations.tsx    # Location history
@@ -213,7 +216,43 @@ Dashboard Load / Insights Request
 └─────────────────────┘
 ```
 
-### 4. Authentication Flow
+### 4. Goals Tracking Flow
+```
+Goals Page or Dashboard Load
+        │
+        ▼
+┌─────────────────────┐
+│ goals.tsx           │ (client)
+│ or dashboard.tsx    │
+└────────┬────────────┘
+         │ GET /api/goals or POST /api/goals/:id/analyze-progress
+         ▼
+┌─────────────────────┐
+│ routes.ts           │ (server)
+│ - fetch goals       │
+│ - call AI analysis  │
+└────────┬────────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+┌─────────────────┐ ┌──────────────────────┐
+│analyzeGoalProgress│ │detectGoalPatternAlerts│
+│(ai-service)      │ │(ai-service)           │
+│- scan 30-day     │ │- stalled detection    │
+│  memories        │ │- at-risk targets      │
+│- detect progress │ │- milestone celebration│
+└────────┬─────────┘ └──────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ storage.updateGoal()│
+│ - progressPercent   │
+│ - aiSummary         │
+│ - relatedMemoryIds  │
+└─────────────────────┘
+```
+
+### 5. Authentication Flow
 ```
 Login/Signup Request
         │
@@ -413,6 +452,7 @@ These files MUST be updated together:
 
 | Date | Change | Files Affected |
 |------|--------|----------------|
+| Feb 5, 2026 | Goals Tracking System: dedicated /goals page with AI-powered progress tracking, milestone management, pattern alerts, and morning briefing integration | goals.tsx (new), goal-modal.tsx (new), schema.ts (goals table), storage.ts, routes.ts, ai-service.ts |
 | Feb 5, 2026 | Ideas modal system: all types (Ideas, Notes, Lists, Documents) now open in full-height modals instead of page navigation | idea-modal.tsx (new), ideas.tsx |
 | Feb 5, 2026 | Production cleanup: gated debug logs, fixed type safety (req.user as User), optimized polling (60s vs 5s) | routes.ts, calendar-service.ts, recent-activity.tsx |
 | Feb 5, 2026 | Expanded topic categories from 6 to 15 | ai-service.ts (extractMetadata, decomposeQuery prompts), routes.ts (backfill endpoint) |
