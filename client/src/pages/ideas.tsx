@@ -6,8 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { IdeaModal } from "@/components/idea-modal";
 import { 
   Lightbulb, 
   Plus, 
@@ -103,12 +103,13 @@ const createIdeaFormSchema = insertIdeaSchema.extend({
 type CreateIdeaForm = z.infer<typeof createIdeaFormSchema>;
 
 export default function IdeasPage() {
-  const [, navigate] = useLocation();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<'idea' | 'note' | 'list' | 'document'>('idea');
+  const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
+  const [isIdeaModalOpen, setIsIdeaModalOpen] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<CreateIdeaForm>({
@@ -135,7 +136,8 @@ export default function IdeasPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
       setIsCreateDialogOpen(false);
       form.reset();
-      navigate(`/ideas/${newIdea.id}`);
+      setSelectedIdeaId(newIdea.id);
+      setIsIdeaModalOpen(true);
     },
     onError: () => {
       toast({
@@ -397,7 +399,13 @@ export default function IdeasPage() {
               const checkedCount = listItems.filter(item => item.isChecked).length;
 
               return (
-                <Link key={idea.id} href={`/ideas/${idea.id}`}>
+                <div 
+                  key={idea.id} 
+                  onClick={() => {
+                    setSelectedIdeaId(idea.id);
+                    setIsIdeaModalOpen(true);
+                  }}
+                >
                   <Card className="glass-card border-white/20 hover:border-primary/30 transition-all cursor-pointer group h-full">
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
@@ -469,7 +477,7 @@ export default function IdeasPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </Link>
+                </div>
               );
             })}
           </div>
@@ -515,6 +523,12 @@ export default function IdeasPage() {
           </CardContent>
         </Card>
       </div>
+
+      <IdeaModal
+        ideaId={selectedIdeaId}
+        open={isIdeaModalOpen}
+        onOpenChange={setIsIdeaModalOpen}
+      />
     </AppLayout>
   );
 }
