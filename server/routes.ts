@@ -2008,6 +2008,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Fetch active goals for context
+      const goals = await storage.getGoals(user.id);
+      const activeGoals = goals
+        .filter(g => g.status === 'active')
+        .map(g => ({
+          title: g.title,
+          description: g.description,
+          progressPercent: g.progressPercent,
+          targetDate: g.targetDate?.toISOString() || null,
+          status: g.status,
+        }));
+
       // Generate insights - filter and type-guard the light memories
       const insights = await generateThematicInsights(
         filteredMemories
@@ -2019,7 +2031,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             timestamp: m.timestamp!,
             topicTag: m.topicTag!,
           })),
-        question
+        question,
+        activeGoals.length > 0 ? activeGoals : undefined
       );
       
       res.json({
@@ -2382,8 +2395,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return undefined;
       };
       
-      const [emailContext, calendarEvents, financialSummary, locationContext] = await Promise.all([
-        fetchEmails(), fetchCalendar(), fetchFinancial(), fetchLocationContext()
+      const fetchGoals = async () => {
+        try {
+          const goals = await storage.getGoals(user.id);
+          return goals.filter(g => g.status === 'active').map(g => ({
+            title: g.title,
+            description: g.description,
+            progressPercent: g.progressPercent,
+            targetDate: g.targetDate?.toISOString() || null,
+            status: g.status,
+          }));
+        } catch { return []; }
+      };
+
+      const [emailContext, calendarEvents, financialSummary, locationContext, activeGoals] = await Promise.all([
+        fetchEmails(), fetchCalendar(), fetchFinancial(), fetchLocationContext(), fetchGoals()
       ]);
       
       const newsFeed = await generatePersonalNewsFeed(
@@ -2401,7 +2427,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.username,
         userTimezone,
         knownPeople.length > 0 ? knownPeople : undefined,
-        locationContext
+        locationContext,
+        activeGoals.length > 0 ? activeGoals : undefined
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
@@ -2552,6 +2579,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Location context fetch failed, continue without it
       }
       
+      // Fetch active goals for discoveries context
+      let activeGoals: Array<{ title: string; description: string | null; progressPercent: number; status: string }> = [];
+      try {
+        const goals = await storage.getGoals(user.id);
+        activeGoals = goals.filter(g => g.status === 'active').map(g => ({
+          title: g.title,
+          description: g.description,
+          progressPercent: g.progressPercent,
+          status: g.status,
+        }));
+      } catch { /* Goals fetch failed */ }
+      
       const discoveries = await getContextualDiscoveries(
         recentMemories
           .filter(m => m.memoryText && m.timestamp && m.topicTag)
@@ -2566,7 +2605,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         emails,
         financialData,
         tavilyApiKey,
-        locationContext
+        locationContext,
+        activeGoals.length > 0 ? activeGoals : undefined
       );
       
       // Check for high-signal mentions of VIP people

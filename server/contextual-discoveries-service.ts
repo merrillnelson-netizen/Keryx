@@ -30,7 +30,7 @@ export interface Discovery {
 }
 
 export interface InsightContext {
-  type: 'calendar' | 'email' | 'memory' | 'financial' | 'location';
+  type: 'calendar' | 'email' | 'memory' | 'financial' | 'location' | 'goal';
   summary: string;
   location?: string;
   date?: string;
@@ -85,12 +85,20 @@ interface CurrentLocationContext {
   isAway?: boolean;
 }
 
+interface ExtendedGoal {
+  title: string;
+  description?: string | null;
+  progressPercent: number;
+  status: string;
+}
+
 export async function extractSearchableInsights(
   memories: ExtendedMemory[],
   calendarEvents: ExtendedCalendarEvent[],
   emails: Array<{ subject?: string; snippet?: string; from?: string }>,
   financialData?: ExtendedFinancialData,
-  locationContext?: CurrentLocationContext
+  locationContext?: CurrentLocationContext,
+  activeGoals?: ExtendedGoal[]
 ): Promise<InsightContext[]> {
   const insights: InsightContext[] = [];
   const now = new Date();
@@ -172,6 +180,24 @@ export async function extractSearchableInsights(
     }
   }
 
+  // 5. ACTIVE GOALS: Generate relevant search topics for user's goals
+  if (activeGoals && activeGoals.length > 0) {
+    const activeGoalsList = activeGoals.filter(g => g.status === 'active').slice(0, 2);
+    
+    for (const goal of activeGoalsList) {
+      const goalTopics = generateGoalTopics(goal.title, goal.description || '');
+      if (goalTopics.length > 0) {
+        insights.push({
+          type: 'goal',
+          summary: `Working toward: ${goal.title} (${goal.progressPercent}% complete)`,
+          topics: goalTopics,
+          urgency: goal.progressPercent < 25 ? 'immediate' : 'general',
+          confidence: 0.75
+        });
+      }
+    }
+  }
+
   // Filter insights by confidence and sort by urgency
   return insights
     .filter(i => i.confidence >= 0.7)
@@ -194,6 +220,31 @@ function generateLocationSpecificTopics(location: string, daysUntil: number): st
     // Upcoming: focus on planning
     return [`${city} hidden gems`, `${city} local recommendations`, `${city} must-see attractions`];
   }
+}
+
+function generateGoalTopics(title: string, description: string): string[] {
+  // Generate search topics based on goal title and description
+  const combined = `${title} ${description}`.toLowerCase();
+  const topics: string[] = [];
+  const currentYear = new Date().getFullYear();
+  
+  // Add a specific search based on the goal
+  topics.push(`how to ${title.toLowerCase()} tips ${currentYear}`);
+  
+  // Add related searches based on common goal keywords
+  if (combined.includes('learn') || combined.includes('study')) {
+    topics.push(`best resources to learn ${title.toLowerCase()}`);
+  } else if (combined.includes('weight') || combined.includes('fitness') || combined.includes('health')) {
+    topics.push(`effective strategies for ${title.toLowerCase()}`);
+  } else if (combined.includes('save') || combined.includes('money') || combined.includes('financial')) {
+    topics.push(`${title.toLowerCase()} strategies that work`);
+  } else if (combined.includes('career') || combined.includes('job') || combined.includes('work')) {
+    topics.push(`${title.toLowerCase()} career advice ${currentYear}`);
+  } else {
+    topics.push(`${title.toLowerCase()} success tips`);
+  }
+  
+  return topics.slice(0, 2); // Max 2 topics per goal
 }
 
 async function extractActionableMemoryInsights(memories: ExtendedMemory[]): Promise<InsightContext[]> {
@@ -509,9 +560,10 @@ export async function getContextualDiscoveries(
   emails: Array<{ subject?: string; snippet?: string; from?: string }>,
   financialData?: ExtendedFinancialData,
   tavilyApiKey?: string,
-  locationContext?: CurrentLocationContext
+  locationContext?: CurrentLocationContext,
+  activeGoals?: ExtendedGoal[]
 ): Promise<DiscoveriesResponse> {
-  const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData, locationContext);
+  const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData, locationContext, activeGoals);
   
   if (process.env.NODE_ENV === 'development') {
     console.log(`Extracted ${insights.length} high-quality insights (filtered by confidence >= 0.7)`);

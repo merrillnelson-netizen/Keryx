@@ -423,7 +423,8 @@ export interface ThematicInsight {
  */
 export async function generateThematicInsights(
   memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; importance?: number }>,
-  question?: string
+  question?: string,
+  activeGoals?: GoalContext[]
 ): Promise<ThematicInsight> {
   try {
     // Sort by importance (highest first) to prioritize critical memories
@@ -434,6 +435,14 @@ export async function generateThematicInsights(
       const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
       return `${importanceLabel}[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
     }).join('\n\n');
+
+    // Format goals context if available
+    let goalsContext = '';
+    if (activeGoals && activeGoals.length > 0) {
+      goalsContext = `\n\nACTIVE GOALS (analyze how memories relate to these):\n${activeGoals.map(g => 
+        `- "${g.title}" (${g.progressPercent}% complete)${g.description ? `: ${g.description}` : ''}`
+      ).join('\n')}\n`;
+    }
 
     // Use different system prompts based on whether user asked a specific question
     const systemPrompt = question 
@@ -478,8 +487,8 @@ Respond with JSON in this format:
 }`;
 
     const userPrompt = question 
-      ? `Here are my memories. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}`
-      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}`;
+      ? `Here are my memories. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}${goalsContext}`
+      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}${goalsContext}`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -1041,7 +1050,8 @@ export async function generatePersonalNewsFeed(
   userName?: string,
   userTimezone: string = 'UTC',
   knownPeople?: PersonContext[],
-  locationContext?: string
+  locationContext?: string,
+  activeGoals?: GoalContext[]
 ): Promise<PersonalNewsFeed> {
   try {
     const formatDateInTimezone = (date: Date, tz: string) => {
@@ -1121,6 +1131,14 @@ export async function generatePersonalNewsFeed(
       locationCtx = `\n\nLOCATION PATTERNS (places they frequent):\n${locationContext}`;
     }
 
+    // Format goals context if available
+    let goalsContext = '';
+    if (activeGoals && activeGoals.length > 0) {
+      goalsContext = `\n\nACTIVE GOALS (include progress updates in relevant stories):\n${activeGoals.map(g => 
+        `- "${g.title}" (${g.progressPercent}% complete)${g.description ? `: ${g.description}` : ''}`
+      ).join('\n')}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -1189,7 +1207,7 @@ Respond with JSON:
         },
         {
           role: "user",
-          content: `Generate my personal news feed based on this data from my Keryx ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}\n\nCreate news stories that synthesize insights across these data sources.`
+          content: `Generate my personal news feed based on this data from my Keryx ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nCreate news stories that synthesize insights across these data sources.`
         },
       ],
       response_format: { type: "json_object" },
