@@ -399,18 +399,24 @@ export interface ThematicInsight {
  * @returns Promise<ThematicInsight> - Synthesized insights
  */
 export async function generateThematicInsights(
-  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>,
+  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; importance?: number }>,
   question?: string
 ): Promise<ThematicInsight> {
   try {
-    // Prepare memory summary for context
-    const memorySummary = memories.map((m, i) => 
-      `[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`
-    ).join('\n\n');
+    // Sort by importance (highest first) to prioritize critical memories
+    const sortedMemories = [...memories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
+    
+    // Prepare memory summary for context with importance labels
+    const memorySummary = sortedMemories.map((m, i) => {
+      const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
+      return `${importanceLabel}[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
+    }).join('\n\n');
 
     // Use different system prompts based on whether user asked a specific question
     const systemPrompt = question 
       ? `You are an expert life coach and personal analyst. The user is asking a specific question about their memories. 
+
+IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight to memories marked [CRITICAL] (8-10) and [HIGH] (6-7) - these represent significant life events. Memories marked [LOW] (1-2) are minor/trivial.
 
 FOCUS YOUR ANSWER ON THEIR QUESTION: "${question}"
 
@@ -430,6 +436,8 @@ Respond with JSON in this format:
   "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
 }`
       : `You are an expert life coach and personal analyst. Analyze the user's memories to identify:
+
+IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight to memories marked [CRITICAL] (8-10) and [HIGH] (6-7) - these represent significant life events. Memories marked [LOW] (1-2) are minor/trivial.
 
 1. SUMMARY: A concise overview of what these memories reveal about the user's life/work during this period
 2. PATTERNS: Recurring themes, behaviors, emotional patterns, or concerns
@@ -537,7 +545,7 @@ export interface PersonContext {
 }
 
 export async function generateMorningBriefing(
-  recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[] }>,
+  recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[]; importance?: number }>,
   userName?: string,
   localHour?: number,
   recentEmails?: EmailContext[],
@@ -550,9 +558,13 @@ export async function generateMorningBriefing(
     const hour = localHour ?? new Date().getHours();
     const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
     
-    const memorySummary = recentMemories.map((m, i) => 
-      `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
-    ).join('\n\n');
+    // Sort by importance (highest first) to prioritize critical memories in briefings
+    const sortedMemories = [...recentMemories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
+    
+    const memorySummary = sortedMemories.map((m, i) => {
+      const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
+      return `${importanceLabel}[${m.timestamp.toISOString().split('T')[0]}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
+    }).join('\n\n');
 
     // Extract people and topics from memories for email matching
     const mentionedPeople = new Set<string>();
@@ -613,6 +625,8 @@ export async function generateMorningBriefing(
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
 Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}, create a personalized briefing that:
+
+IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight and attention to memories marked [CRITICAL] (8-10) and [HIGH] (6-7). These represent significant life events, decisions, or concerns. Memories marked [LOW] (1-2) are minor/trivial. Default importance is 5.
 1. GREETING: A warm, personalized greeting mentioning their name if provided
 2. SUMMARY: Brief overview of what's been happening in their life (2-3 sentences)
 3. FOCUS_AREAS: Key things they might want to pay attention to today (based on patterns/pending items)
@@ -974,6 +988,7 @@ export async function generatePersonalNewsFeed(
     timestamp: Date; 
     topicTag: string; 
     detectedPeople?: string[];
+    importance?: number;
   }>,
   upcomingEvents?: CalendarContext[],
   recentEmails?: EmailContext[],
@@ -1003,9 +1018,13 @@ export async function generatePersonalNewsFeed(
       });
     };
 
-    const memorySummary = recentMemories.map((m, i) => 
-      `[${m.timestamp.toISOString().split('T')[0]}] Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`
-    ).join('\n\n');
+    // Sort by importance (highest first) to prioritize critical memories in news feed
+    const sortedMemories = [...recentMemories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
+    
+    const memorySummary = sortedMemories.map((m, i) => {
+      const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
+      return `${importanceLabel}[${m.timestamp.toISOString().split('T')[0]}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
+    }).join('\n\n');
 
     // Get current date/time in user's timezone for accurate "today/tomorrow" references
     const nowInUserTz = new Date().toLocaleString('en-US', { timeZone: userTimezone });
