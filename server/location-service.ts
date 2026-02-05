@@ -360,8 +360,8 @@ export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocatio
     return locations;
   }
 
-  // Log first signal for debugging
-  if (data.rawSignals.length > 0) {
+  // Log first signal for debugging (development only)
+  if (process.env.NODE_ENV === 'development' && data.rawSignals.length > 0) {
     console.log(`[Location Import] First rawSignal sample:`, JSON.stringify(data.rawSignals[0]).substring(0, 500));
   }
 
@@ -423,7 +423,10 @@ export function parseRawSignalsFormat(data: GoogleTimelineObject): ParsedLocatio
     });
   }
 
-  console.log(`[Location Import] Raw signals parsing stats - NoPosition: ${skippedNoPosition}, NoLatLng: ${skippedNoLatLng}, InvalidCoords: ${skippedInvalidCoords}, NoTimestamp: ${skippedNoTimestamp}, Valid: ${locations.length}`);
+  // Debug stats in development only
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[Location Import] Raw signals parsing stats - NoPosition: ${skippedNoPosition}, NoLatLng: ${skippedNoLatLng}, InvalidCoords: ${skippedInvalidCoords}, NoTimestamp: ${skippedNoTimestamp}, Valid: ${locations.length}`);
+  }
 
   return locations;
 }
@@ -432,24 +435,25 @@ export function parseGoogleTakeoutFile(jsonContent: string): ParsedLocation[] {
   try {
     const data = JSON.parse(jsonContent) as GoogleTimelineObject;
     
-    // Log what keys exist in the file for debugging
-    const topLevelKeys = Object.keys(data);
-    console.log(`[Location Import] File contains keys: ${topLevelKeys.join(', ')}`);
-    console.log(`[Location Import] timelineObjects: ${data.timelineObjects?.length ?? 0}`);
-    console.log(`[Location Import] semanticSegments: ${data.semanticSegments?.length ?? 0}`);
-    console.log(`[Location Import] rawSignals: ${data.rawSignals?.length ?? 0}`);
+    // Debug logging in development only
+    if (process.env.NODE_ENV === 'development') {
+      const topLevelKeys = Object.keys(data);
+      console.log(`[Location Import] File contains keys: ${topLevelKeys.join(', ')}`);
+      console.log(`[Location Import] timelineObjects: ${data.timelineObjects?.length ?? 0}`);
+      console.log(`[Location Import] semanticSegments: ${data.semanticSegments?.length ?? 0}`);
+      console.log(`[Location Import] rawSignals: ${data.rawSignals?.length ?? 0}`);
+    }
     
     const legacyLocations = parseLegacyTimelineFormat(data);
-    console.log(`[Location Import] Parsed ${legacyLocations.length} legacy locations`);
-    
     const semanticLocations = parseSemanticLocationFormat(data);
-    console.log(`[Location Import] Parsed ${semanticLocations.length} semantic locations`);
-    
     const rawSignalLocations = parseRawSignalsFormat(data);
-    console.log(`[Location Import] Parsed ${rawSignalLocations.length} raw signal locations`);
+    
+    // Debug logging in development only
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Location Import] Parsed ${legacyLocations.length} legacy, ${semanticLocations.length} semantic, ${rawSignalLocations.length} raw signal locations`);
+    }
     
     const allLocations = [...legacyLocations, ...semanticLocations, ...rawSignalLocations];
-    console.log(`[Location Import] Total locations parsed: ${allLocations.length}`);
     
     allLocations.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
     

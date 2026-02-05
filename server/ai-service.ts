@@ -4,7 +4,10 @@ import OpenAI from "openai";
 // Supports both Replit AI Integration and direct OpenAI API key
 const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const hasIntegration = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-console.log(`[ai-service] OpenAI initialized - using ${hasIntegration ? 'Replit AI Integration' : 'direct API key'}, key present: ${!!apiKey}`);
+// Log initialization only in development
+if (process.env.NODE_ENV === 'development') {
+  console.log(`[ai-service] OpenAI initialized - using ${hasIntegration ? 'Replit AI Integration' : 'direct API key'}, key present: ${!!apiKey}`);
+}
 
 const openai = new OpenAI({ 
   apiKey,

@@ -2,14 +2,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { X, MessageSquare, Clock, Tag, Smile, DollarSign } from "lucide-react";
+import { MessageSquare, Clock, Tag, Smile, DollarSign } from "lucide-react";
 import { AIResponseData, SearchResultMemory } from "@/hooks/use-speech-recognition";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isValid } from "date-fns";
 
 interface ResponseModalProps {
   open: boolean;
   onClose: () => void;
   responseData: AIResponseData | null;
+}
+
+function formatTimeAgo(timestamp?: string): string {
+  if (!timestamp) return "Unknown time";
+  try {
+    const date = new Date(timestamp);
+    if (!isValid(date)) return "Unknown time";
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch {
+    return "Unknown time";
+  }
 }
 
 function getMoodColor(mood?: string): string {
@@ -34,9 +45,7 @@ function getMoodColor(mood?: string): string {
 }
 
 function MemoryCard({ memory, index }: { memory: SearchResultMemory; index: number }) {
-  const timeAgo = memory.timestamp 
-    ? formatDistanceToNow(new Date(memory.timestamp), { addSuffix: true })
-    : "Unknown time";
+  const timeAgo = formatTimeAgo(memory.timestamp);
 
   return (
     <div className="p-4 rounded-lg bg-card/50 border border-border/50 hover:border-primary/30 transition-colors">
