@@ -8,6 +8,7 @@ import { useState, type KeyboardEvent } from "react";
 import CalendarEventSuggestion from "./calendar-event-suggestion";
 import LifePurposeSuggestion from "./life-purpose-suggestion";
 import { HintChips } from "./keryx-capabilities-modal";
+import { ResponseModal } from "./response-modal";
 
 export default function VoiceActivation() {
   const [textInput, setTextInput] = useState("");
@@ -24,6 +25,10 @@ export default function VoiceActivation() {
     isProcessing,
     lastSavedMemory,
     clearLastSavedMemory,
+    responseData,
+    showResponseModal,
+    setShowResponseModal,
+    clearResponseData,
   } = useSpeechRecognition();
 
   const handleUnifiedVoice = () => {
@@ -194,8 +199,8 @@ export default function VoiceActivation() {
           </>
         )}
 
-        {/* Response Display */}
-        {lastResponse && (
+        {/* Response Display - only show inline for log responses (not query/financial) */}
+        {lastResponse && (!responseData || responseData.type === "log") && (
           <div className="mt-6 lg:mt-8 glass-card p-4 lg:p-6 rounded-xl border border-primary/30 animate-slide-in">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
@@ -226,6 +231,16 @@ export default function VoiceActivation() {
           <LifePurposeSuggestion onDismiss={clearLastSavedMemory} />
         )}
       </CardContent>
+
+      {/* Response Modal for query/financial results */}
+      <ResponseModal
+        open={showResponseModal}
+        onClose={() => {
+          setShowResponseModal(false);
+          clearResponseData();
+        }}
+        responseData={responseData}
+      />
     </div>
   );
 }

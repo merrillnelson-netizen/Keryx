@@ -215,6 +215,14 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         
         setLastResponse(successMessage);
         
+        // Set log type response data (for inline display, not modal)
+        setResponseData({
+          type: "log",
+          message: successMessage,
+        });
+        // Don't show modal for log operations - keep inline display
+        setShowResponseModal(false);
+        
         // Store saved memory data for calendar event detection and life purpose suggestion
         const memoryData = data?.data || data;
         setLastSavedMemory({

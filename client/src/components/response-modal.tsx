@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -104,6 +104,11 @@ export function ResponseModal({ open, onClose, responseData }: ResponseModalProp
               )}
             </DialogTitle>
           </div>
+          <DialogDescription className="sr-only">
+            {isFinancial 
+              ? "AI-generated financial analysis based on your query" 
+              : "Search results and source memories for your query"}
+          </DialogDescription>
           {responseData.query && (
             <p className="text-sm text-muted-foreground mt-1">
               Query: "{responseData.query}"
