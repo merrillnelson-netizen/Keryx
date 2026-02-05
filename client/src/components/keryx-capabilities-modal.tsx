@@ -15,7 +15,8 @@ import {
   Lightbulb,
   TrendingUp,
   Newspaper,
-  Compass
+  Compass,
+  Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,20 @@ const capabilities: CapabilityCategory[] = [
     ]
   },
   {
+    id: "goals",
+    name: "Goals",
+    icon: Target,
+    color: "text-orange-500",
+    description: "Track long-term goals with AI-powered progress analysis",
+    examples: [
+      { phrase: "Set a goal to learn Spanish this year", description: "Create a goal with milestones and track progress" },
+      { phrase: "How am I doing on my fitness goal?", description: "AI analyzes your memories to assess progress" },
+      { phrase: "Suggest milestones for my career goal", description: "Get AI-generated actionable steps" },
+      { phrase: "Which of my goals need attention?", description: "Get alerts for stalled or at-risk goals" },
+      { phrase: "Show me my goal achievements this month", description: "Celebrate completed milestones and progress" },
+    ]
+  },
+  {
     id: "synthesis",
     name: "Synthesis",
     icon: TrendingUp,
@@ -195,6 +210,8 @@ const hintExamples = [
   "What patterns do you see in my life?",
   "What's happening in my life right now?",
   "Find content relevant to my projects",
+  "How am I doing on my fitness goal?",
+  "Which goals need my attention?",
 ];
 
 export function useRotatingHints() {
@@ -313,6 +330,7 @@ export function KeryxCapabilitiesModal() {
                       cat.id === "memory" && "bg-amber-500/20",
                       cat.id === "finance" && "bg-emerald-500/20",
                       cat.id === "ideas" && "bg-yellow-500/20",
+                      cat.id === "goals" && "bg-orange-500/20",
                       cat.id === "synthesis" && "bg-indigo-500/20",
                       cat.id === "insights" && "bg-cyan-500/20",
                       cat.id === "discoveries" && "bg-teal-500/20",
