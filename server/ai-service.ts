@@ -547,6 +547,16 @@ export interface MorningBriefing {
   affirmation: string;
   emailHighlights?: string[];
   financialInsights?: string[];
+  goalUpdates?: string[];
+}
+
+export interface GoalContext {
+  title: string;
+  description?: string | null;
+  progressPercent: number;
+  status: string;
+  targetDate?: string | null;
+  milestonesSummary?: string;
 }
 
 /**
@@ -575,7 +585,8 @@ export async function generateMorningBriefing(
   activeProjects?: string[],
   financialSummary?: FinancialSummary,
   knownPeople?: PersonContext[],
-  locationContext?: string
+  locationContext?: string,
+  activeGoals?: GoalContext[]
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -640,6 +651,14 @@ export async function generateMorningBriefing(
       locationCtx = `\n\nLOCATION CONTEXT (places you frequent):\n${locationContext}`;
     }
 
+    // Format goals context if available
+    let goalsContext = '';
+    if (activeGoals && activeGoals.length > 0) {
+      goalsContext = `\n\nACTIVE GOALS (check if recent memories show progress toward these):\n${activeGoals.map(g => 
+        `- "${g.title}" (${g.progressPercent}% complete)${g.targetDate ? ` - Target: ${g.targetDate}` : ''}${g.milestonesSummary ? `\n  Milestones: ${g.milestonesSummary}` : ''}`
+      ).join('\n')}`;
+    }
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -647,7 +666,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}, create a personalized briefing that:
 
 IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight and attention to memories marked [CRITICAL] (8-10) and [HIGH] (6-7). These represent significant life events, decisions, or concerns. Memories marked [LOW] (1-2) are minor/trivial. Default importance is 5.
 1. GREETING: A warm, personalized greeting mentioning their name if provided
@@ -658,6 +677,7 @@ IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MO
 6. AFFIRMATION: An encouraging statement or positive affirmation
 ${recentEmails?.length ? `7. EMAIL_HIGHLIGHTS: 1-3 relevant emails that relate to people or topics from their memories (if any match). Only include emails that genuinely connect to something in their memories - don't force connections.` : ''}
 ${financialSummary ? `8. FINANCIAL_INSIGHTS: 1-2 brief, non-judgmental observations about spending patterns. Focus on facts and any connections to their memories/activities. Keep it supportive, not preachy.` : ''}
+${activeGoals?.length ? `9. GOAL_UPDATES: For each active goal, check if recent memories show any progress. Provide 1-2 encouraging updates about goal progress, noting any memories that contribute to goals. Keep it motivating and actionable.` : ''}
 
 IMPORTANT: When people are mentioned in memories, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship to the user. Use this relationship context to make the briefing feel more personal. For example, if "Kim" is listed as "daughter", refer to her as "your daughter Kim" rather than just "Kim" or "a friend named Kim".
 
@@ -672,14 +692,15 @@ Respond with JSON:
   "moodTrend": "observation about their emotional state",
   "affirmation": "encouraging statement"${recentEmails?.length ? `,
   "emailHighlights": ["Email from X about Y relates to your project...", ...]` : ''}${financialSummary ? `,
-  "financialInsights": ["You spent $X on Y this week...", ...]` : ''}
+  "financialInsights": ["You spent $X on Y this week...", ...]` : ''}${activeGoals?.length ? `,
+  "goalUpdates": ["Your 'Learn Spanish' goal (30%) - You mentioned practicing this week!", ...]` : ''}
 }`
         },
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },
@@ -696,6 +717,7 @@ Respond with JSON:
       affirmation: result.affirmation || "Every day is a new opportunity.",
       emailHighlights: Array.isArray(result.emailHighlights) ? result.emailHighlights : undefined,
       financialInsights: Array.isArray(result.financialInsights) ? result.financialInsights : undefined,
+      goalUpdates: Array.isArray(result.goalUpdates) ? result.goalUpdates : undefined,
     };
   } catch (error) {
     console.error("Error generating morning briefing:", error);

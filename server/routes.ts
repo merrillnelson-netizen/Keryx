@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -2161,8 +2161,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch { /* Location fetch failed */ }
         return undefined;
       };
+
+      // Helper to fetch active goals
+      const fetchActiveGoals = async (): Promise<GoalContext[]> => {
+        try {
+          const goals = await storage.getActiveGoals(user.id);
+          return goals.map(g => {
+            const milestones = g.milestones as any[] || [];
+            const completedCount = milestones.filter(m => m.isCompleted).length;
+            return {
+              title: g.title,
+              description: g.description,
+              progressPercent: g.progressPercent,
+              status: g.status,
+              targetDate: g.targetDate ? g.targetDate.toISOString().split('T')[0] : null,
+              milestonesSummary: milestones.length > 0 ? `${completedCount}/${milestones.length} completed` : undefined,
+            };
+          });
+        } catch { /* Goals fetch failed */ }
+        return [];
+      };
       
-      const [emailResult, financialSummary, locationContext] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext()]);
+      const [emailResult, financialSummary, locationContext, activeGoals] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals()]);
       const emailContext = emailResult.emails;
       const emailSource = emailResult.source;
       
@@ -2181,7 +2201,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activeProjects,
         financialSummary,
         knownPeople.length > 0 ? knownPeople : undefined,
-        locationContext
+        locationContext,
+        activeGoals.length > 0 ? activeGoals : undefined
       );
 
       // Cache the result (30 minute TTL)
@@ -4274,7 +4295,10 @@ Return ONLY the JSON array, no other text.`;
       }
       
       // Get recent memories to analyze for progress
-      const recentMemories = await storage.getRecentLogEntriesLight(user.id, 30, 100);
+      const recentMemoriesRaw = await storage.getRecentLogEntriesLight(user.id, 30, 100);
+      const recentMemories = recentMemoriesRaw
+        .filter(m => m.memoryText)
+        .map(m => ({ id: m.id, memoryText: m.memoryText!, timestamp: m.timestamp, topicTag: m.topicTag }));
       
       // Call AI to analyze progress
       const analysis = await analyzeGoalProgress({
