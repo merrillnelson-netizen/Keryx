@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { 
@@ -87,6 +88,14 @@ function FeatureSection({
 
 export default function ShowcasePage() {
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    document.title = "Keryx Feature Showcase - Everything Keryx Can Do";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Explore all 20+ features of Keryx: voice capture, AI intelligence, semantic search, goal tracking, smart reminders, calendar & email integration, financial insights, and more.");
+    return () => { document.title = "Keryx - AI-Powered Personal Memory Assistant"; };
+  }, []);
+
   const tableOfContents = [
     { id: "story", label: "The Keryx Story" },
     { id: "voice", label: "Voice-First Capture" },
@@ -120,7 +129,7 @@ export default function ShowcasePage() {
       <nav className="sticky top-0 z-50 px-4 sm:px-6 lg:px-8 py-4 bg-background/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="mr-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="mr-2" aria-label="Back to home">
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <KeryxLogo size="sm" />

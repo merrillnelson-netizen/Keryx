@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { 
@@ -36,6 +37,13 @@ const slideInRight = {
 
 export default function LandingPage() {
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    document.title = "Keryx - AI-Powered Life Operating System | Voice Memory Assistant";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Speak naturally. Keryx captures your thoughts, tracks goals, manages reminders, connects calendar and email, and delivers AI-powered insights. Your voice, your entire life, organized.");
+    return () => { document.title = "Keryx - AI-Powered Personal Memory Assistant"; };
+  }, []);
 
   const coreFeatures = [
     {
