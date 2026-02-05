@@ -26,12 +26,14 @@ interface SpeechRecognitionHook {
   isSupported: boolean;
   transcript: string;
   startListening: () => void;
+  startListeningUnified: () => void;
   stopListening: () => void;
   mode: "log" | "query" | null;
   setMode: (mode: "log" | "query" | null) => void;
   lastResponse: string;
   setManualCategory: (category: string | null) => void;
   submitText: (text: string, textMode: "log" | "query") => Promise<void>;
+  submitTextUnified: (text: string) => Promise<void>;
   isProcessing: boolean;
   lastSavedMemory: SavedMemoryData | null;
   clearLastSavedMemory: () => void;
@@ -386,6 +388,43 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   }, [isListening, searchMutation, settings, speak, stopListening]);
 
   /**
+   * Auto-detect intent and execute appropriate command
+   */
+  const handleUnifiedCommand = useCallback(async (command: string) => {
+    if (!command.trim()) return;
+    
+    const trimmedText = command.trim();
+    isProcessingRef.current = true;
+    setLastResponse("Analyzing your input...");
+    
+    try {
+      const response = await apiRequest("POST", "/api/intent", { text: trimmedText });
+      const result = await response.json();
+      
+      if (result.status === 'success' && result.data) {
+        const detectedIntent = result.data.intent as "log" | "query";
+        setMode(detectedIntent);
+        modeRef.current = detectedIntent;
+        
+        if (detectedIntent === "log") {
+          await handleLogCommand(trimmedText);
+        } else {
+          await handleQueryCommand(trimmedText);
+        }
+      } else {
+        setMode("log");
+        modeRef.current = "log";
+        await handleLogCommand(trimmedText);
+      }
+    } catch (error) {
+      console.error("Intent detection failed, defaulting to log:", error);
+      setMode("log");
+      modeRef.current = "log";
+      await handleLogCommand(trimmedText);
+    }
+  }, [handleLogCommand, handleQueryCommand, setMode]);
+
+  /**
    * Process voice command based on current mode
    * Uses modeRef to avoid React closure issues with state
    */
@@ -398,6 +437,12 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         return;
       }
 
+      // Handle unified mode with AI auto-detection
+      if (currentMode === ("unified" as any)) {
+        await handleUnifiedCommand(command);
+        return;
+      }
+
       if (currentMode === "log") {
         await handleLogCommand(command);
       } else if (currentMode === "query") {
@@ -407,7 +452,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
       console.error('Error processing command:', error);
       isProcessingRef.current = false;
     }
-  }, [handleLogCommand, handleQueryCommand]);
+  }, [handleLogCommand, handleQueryCommand, handleUnifiedCommand]);
 
   /**
    * Process transcript when recognition ends
@@ -553,6 +598,60 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     }
   }, [handleLogCommand, handleQueryCommand]);
 
+  /**
+   * Submit text with AI auto-detection of intent (unified input)
+   * Determines whether to log or query based on the content
+   */
+  const submitTextUnified = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    
+    const trimmedText = text.trim();
+    isProcessingRef.current = true;
+    setLastResponse("Analyzing your input...");
+    
+    try {
+      const response = await apiRequest("POST", "/api/intent", { text: trimmedText });
+      const result = await response.json();
+      
+      if (result.status === 'success' && result.data) {
+        const detectedIntent = result.data.intent as "log" | "query";
+        setMode(detectedIntent);
+        
+        if (detectedIntent === "log") {
+          await handleLogCommand(trimmedText);
+        } else {
+          await handleQueryCommand(trimmedText);
+        }
+      } else {
+        // Fallback to log if detection fails
+        setMode("log");
+        await handleLogCommand(trimmedText);
+      }
+    } catch (error) {
+      console.error("Intent detection failed, defaulting to log:", error);
+      // Default to log on error - safer to save than to lose data
+      setMode("log");
+      await handleLogCommand(trimmedText);
+    }
+  }, [handleLogCommand, handleQueryCommand, setMode]);
+
+  /**
+   * Start listening with unified mode - will auto-detect intent from speech
+   */
+  const startListeningUnified = useCallback(() => {
+    setMode("log"); // Temporary mode - will be updated after intent detection
+    modeRef.current = "unified" as any; // Special marker for unified mode
+    startListening();
+  }, [setMode, startListening]);
+
+  /**
+   * Process command with auto-detection when in unified mode
+   */
+  const handleCommandUnified = useCallback(async (command: string) => {
+    if (!command.trim()) return;
+    await submitTextUnified(command.trim());
+  }, [submitTextUnified]);
+
   const clearLastSavedMemory = useCallback(() => {
     setLastSavedMemory(null);
   }, []);
@@ -562,12 +661,14 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     isSupported,
     transcript,
     startListening,
+    startListeningUnified,
     stopListening,
     mode,
     setMode,
     lastResponse,
     setManualCategory,
     submitText,
+    submitTextUnified,
     isProcessing: isProcessingRef.current || saveMutation.isPending || searchMutation.isPending,
     lastSavedMemory,
     clearLastSavedMemory,
