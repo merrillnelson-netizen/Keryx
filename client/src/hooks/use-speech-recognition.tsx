@@ -18,6 +18,30 @@ export interface SavedMemoryData {
 }
 
 /**
+ * Search result memory for displaying in response modal
+ */
+export interface SearchResultMemory {
+  id: number;
+  memoryText: string;
+  topicTag: string;
+  mood?: string;
+  moodScore?: number;
+  timestamp: string;
+  similarity?: number;
+}
+
+/**
+ * AI response data for modal display
+ */
+export interface AIResponseData {
+  type: "log" | "query" | "financial";
+  message: string;
+  query?: string;
+  sourceMemories?: SearchResultMemory[];
+  financialSummary?: string;
+}
+
+/**
  * Interface for the speech recognition hook return values
  * Provides all necessary methods and state for voice interaction
  */
@@ -37,6 +61,10 @@ interface SpeechRecognitionHook {
   isProcessing: boolean;
   lastSavedMemory: SavedMemoryData | null;
   clearLastSavedMemory: () => void;
+  responseData: AIResponseData | null;
+  showResponseModal: boolean;
+  setShowResponseModal: (show: boolean) => void;
+  clearResponseData: () => void;
 }
 
 /**
@@ -60,6 +88,8 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const [lastResponse, setLastResponse] = useState("");
   const [manualCategory, setManualCategory] = useState<string | null>(null);
   const [lastSavedMemory, setLastSavedMemory] = useState<SavedMemoryData | null>(null);
+  const [responseData, setResponseData] = useState<AIResponseData | null>(null);
+  const [showResponseModal, setShowResponseModal] = useState(false);
 
   // Use refs to prevent memory leaks and ensure proper cleanup
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -230,18 +260,36 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      return await response.json();
+      const result = await response.json();
+      return { ...result, originalQuery: queryText };
     },
     onSuccess: (data) => {
       isProcessingRef.current = false;
 
       let responseMessage = "";
+      let newResponseData: AIResponseData;
 
       // Check if this was a financial query response
       if (data.isFinancial && data.financialAnswer) {
         responseMessage = data.financialAnswer;
+        newResponseData = {
+          type: "financial",
+          message: data.financialAnswer,
+          query: data.originalQuery,
+          financialSummary: data.financialSummary,
+          sourceMemories: []
+        };
       } else {
         const results = data.data || [];
+        const sourceMemories: SearchResultMemory[] = results.map((r: any) => ({
+          id: r.id,
+          memoryText: r.memoryText,
+          topicTag: r.topicTag,
+          mood: r.mood,
+          moodScore: r.moodScore,
+          timestamp: r.timestamp,
+          similarity: r.similarity
+        }));
 
         if (results.length === 0) {
           responseMessage = "No matching memories found.";
@@ -251,9 +299,18 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         } else {
           responseMessage = `Found ${results.length} matching memories. The most relevant is: ${results[0].memoryText}`;
         }
+
+        newResponseData = {
+          type: "query",
+          message: responseMessage,
+          query: data.originalQuery,
+          sourceMemories
+        };
       }
 
       setLastResponse(responseMessage);
+      setResponseData(newResponseData);
+      setShowResponseModal(true);
 
       setTimeout(() => {
         if (settings?.voiceResponseEnabled) {
@@ -656,6 +713,11 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     setLastSavedMemory(null);
   }, []);
 
+  const clearResponseData = useCallback(() => {
+    setResponseData(null);
+    setShowResponseModal(false);
+  }, []);
+
   return {
     isListening,
     isSupported,
@@ -672,5 +734,9 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     isProcessing: isProcessingRef.current || saveMutation.isPending || searchMutation.isPending,
     lastSavedMemory,
     clearLastSavedMemory,
+    responseData,
+    showResponseModal,
+    setShowResponseModal,
+    clearResponseData,
   };
 }
