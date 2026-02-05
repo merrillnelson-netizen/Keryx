@@ -1,9 +1,9 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -4178,6 +4178,143 @@ Return ONLY the JSON array, no other text.`;
       res.json({ success: true });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to reorder tasks", error);
+    }
+  });
+
+  // ============================================
+  // GOALS ROUTES - AI-tracked user goals
+  // ============================================
+
+  // Get all goals for the user
+  app.get("/api/goals", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const status = req.query.status as string | undefined;
+      const goals = await storage.getGoals(user.id, status);
+      res.json(goals);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch goals", error);
+    }
+  });
+
+  // Get a specific goal
+  app.get("/api/goals/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goal = await storage.getGoal(req.params.id, user.id);
+      if (!goal) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      res.json(goal);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch goal", error);
+    }
+  });
+
+  // Create a new goal
+  app.post("/api/goals", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const parsed = insertGoalSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid goal data", parsed.error);
+      }
+      const goal = await storage.createGoal(user.id, parsed.data);
+      res.status(201).json(goal);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create goal", error);
+    }
+  });
+
+  // Update a goal
+  app.patch("/api/goals/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goal = await storage.getGoal(req.params.id, user.id);
+      if (!goal) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      
+      // Validate milestones if provided
+      if (req.body.milestones) {
+        const milestonesValid = z.array(goalMilestoneSchema).safeParse(req.body.milestones);
+        if (!milestonesValid.success) {
+          return sendErrorResponse(res, 400, "Invalid milestones format", milestonesValid.error);
+        }
+      }
+      
+      const updated = await storage.updateGoal(req.params.id, user.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update goal", error);
+    }
+  });
+
+  // Delete a goal
+  app.delete("/api/goals/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const deleted = await storage.deleteGoal(req.params.id, user.id);
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete goal", error);
+    }
+  });
+
+  // Analyze goal progress using AI
+  app.post("/api/goals/:id/analyze", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goal = await storage.getGoal(req.params.id, user.id);
+      if (!goal) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      
+      // Get recent memories to analyze for progress
+      const recentMemories = await storage.getRecentLogEntriesLight(user.id, 30, 100);
+      
+      // Call AI to analyze progress
+      const analysis = await analyzeGoalProgress({
+        ...goal,
+        milestones: goal.milestones as any[] || [],
+      }, recentMemories);
+      
+      // Update the goal with AI analysis
+      const updated = await storage.updateGoal(req.params.id, user.id, {
+        progressPercent: analysis.progressPercent,
+        aiSummary: analysis.summary,
+        aiLastAnalyzed: new Date(),
+        relatedMemoryIds: analysis.relatedMemoryIds,
+      });
+      
+      res.json({
+        goal: updated,
+        analysis,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to analyze goal progress", error);
+    }
+  });
+
+  // Get suggested milestones for a goal
+  app.post("/api/goals/:id/suggest-milestones", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goal = await storage.getGoal(req.params.id, user.id);
+      if (!goal) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      
+      const suggestions = await suggestGoalMilestones({
+        ...goal,
+        milestones: goal.milestones as any[] || [],
+      });
+      res.json({ suggestions });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to generate milestone suggestions", error);
     }
   });
 

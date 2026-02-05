@@ -1211,3 +1211,175 @@ Respond with JSON:
     };
   }
 }
+
+/**
+ * Goal progress analysis result
+ */
+export interface GoalProgressAnalysis {
+  progressPercent: number;
+  summary: string;
+  relatedMemoryIds: string[];
+  suggestions: string[];
+  achievements: string[];
+  blockers: string[];
+}
+
+/**
+ * Analyze goal progress by examining user memories
+ */
+export async function analyzeGoalProgress(
+  goal: { id: string; title: string; description: string | null; progressPercent: number; milestones: any[] },
+  recentMemories: Array<{ id?: string; memoryText: string; timestamp?: Date; topicTag?: string }>
+): Promise<GoalProgressAnalysis> {
+  try {
+    const memoriesContext = recentMemories.slice(0, 50).map(m => 
+      `- ${m.memoryText}`
+    ).join('\n');
+
+    const milestonesContext = Array.isArray(goal.milestones) && goal.milestones.length > 0
+      ? goal.milestones.map((m: any) => `- ${m.title} (${m.isCompleted ? 'completed' : 'pending'})`).join('\n')
+      : 'No milestones defined';
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI assistant that analyzes user memories to track progress toward their goals.
+Examine the recent memories and determine:
+1. How much progress has been made toward the goal (0-100%)
+2. Which memories show evidence of progress
+3. What achievements have been made
+4. Any blockers or challenges detected
+5. Suggestions for next steps
+
+Respond in JSON format:
+{
+  "progressPercent": <number 0-100>,
+  "summary": "<2-3 sentence summary of progress>",
+  "relatedMemoryIndices": [<indices of memories that show progress, 0-based>],
+  "achievements": ["<achievement 1>", "<achievement 2>"],
+  "blockers": ["<blocker 1>"],
+  "suggestions": ["<suggestion 1>", "<suggestion 2>"]
+}
+
+Be encouraging but realistic. Only count clear evidence of progress.`
+        },
+        {
+          role: "user",
+          content: `Goal: ${goal.title}
+Description: ${goal.description || 'No description'}
+Current Progress: ${goal.progressPercent}%
+Milestones:
+${milestonesContext}
+
+Recent Memories:
+${memoriesContext || 'No recent memories'}`
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 1000,
+      temperature: 0.3,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error("No response from AI");
+    }
+
+    const result = JSON.parse(content);
+    
+    const relatedMemoryIds = (result.relatedMemoryIndices || [])
+      .filter((i: number) => i >= 0 && i < recentMemories.length && recentMemories[i]?.id)
+      .map((i: number) => recentMemories[i].id as string);
+
+    return {
+      progressPercent: Math.max(0, Math.min(100, result.progressPercent || goal.progressPercent)),
+      summary: result.summary || 'Analysis in progress',
+      relatedMemoryIds,
+      suggestions: result.suggestions || [],
+      achievements: result.achievements || [],
+      blockers: result.blockers || [],
+    };
+  } catch (error) {
+    console.error("Error analyzing goal progress:", error);
+    return {
+      progressPercent: goal.progressPercent,
+      summary: 'Unable to analyze progress at this time',
+      relatedMemoryIds: [],
+      suggestions: [],
+      achievements: [],
+      blockers: [],
+    };
+  }
+}
+
+/**
+ * Suggested milestone structure
+ */
+export interface SuggestedMilestone {
+  title: string;
+  description: string;
+  estimatedEffort: string;
+}
+
+/**
+ * Suggest milestones for a goal
+ */
+export async function suggestGoalMilestones(
+  goal: { title: string; description: string | null; milestones: any[] }
+): Promise<SuggestedMilestone[]> {
+  try {
+    const existingMilestones = Array.isArray(goal.milestones) && goal.milestones.length > 0
+      ? goal.milestones.map((m: any) => m.title).join(', ')
+      : 'None';
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are an AI assistant that helps break down goals into achievable milestones.
+Generate 3-5 concrete, actionable milestones that would help achieve the goal.
+Each milestone should be:
+- Specific and measurable
+- Achievable in a reasonable timeframe
+- Building toward the overall goal
+
+Respond in JSON format:
+{
+  "milestones": [
+    {
+      "title": "<short milestone title>",
+      "description": "<1-2 sentence description>",
+      "estimatedEffort": "<time estimate, e.g., '1 week', '2 days'>"
+    }
+  ]
+}`
+        },
+        {
+          role: "user",
+          content: `Goal: ${goal.title}
+Description: ${goal.description || 'No description provided'}
+Existing Milestones: ${existingMilestones}
+
+Please suggest new milestones that complement any existing ones.`
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 800,
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return [];
+    }
+
+    const result = JSON.parse(content);
+    return result.milestones || [];
+  } catch (error) {
+    console.error("Error suggesting milestones:", error);
+    return [];
+  }
+}
