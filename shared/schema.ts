@@ -862,6 +862,7 @@ export type GoalMilestone = z.infer<typeof goalMilestoneSchema>;
 
 export const insertGoalSchema = createInsertSchema(goals).omit({
   id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
   aiSummary: true,

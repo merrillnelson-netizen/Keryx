@@ -388,7 +388,7 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                   {(hasUnsavedChanges || isCreating) && (
                     <Button 
                       onClick={handleSaveChanges} 
-                      disabled={!editedTitle.trim() || updateGoalMutation.isPending || isCreatePending}
+                      disabled={!editedTitle?.trim() || updateGoalMutation.isPending || isCreatePending}
                       className="w-full gap-2"
                     >
                       {(updateGoalMutation.isPending || isCreatePending) ? (
