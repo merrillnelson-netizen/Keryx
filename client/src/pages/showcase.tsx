@@ -90,10 +90,26 @@ export default function ShowcasePage() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    document.title = "Keryx Feature Showcase - Everything Keryx Can Do";
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", "Explore all 20+ features of Keryx: voice capture, AI intelligence, semantic search, goal tracking, smart reminders, calendar & email integration, financial insights, and more.");
-    return () => { document.title = "Keryx - AI-Powered Personal Memory Assistant"; };
+    const title = "Keryx Feature Showcase - Everything Keryx Can Do";
+    const desc = "Explore all 20+ features of Keryx: voice capture, AI intelligence, semantic search, goal tracking, smart reminders, calendar & email integration, financial insights, and more.";
+    const defaults = {
+      title: "Keryx - AI-Powered Personal Memory Assistant",
+      desc: "Capture life with just your voice. Keryx is an AI-powered personal memory assistant that lets you log, search, and analyze your memories using natural language.",
+    };
+    document.title = title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", desc);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute("content", desc);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", desc);
+    return () => {
+      document.title = defaults.title;
+      document.querySelector('meta[name="description"]')?.setAttribute("content", defaults.desc);
+      document.querySelector('meta[property="og:title"]')?.setAttribute("content", defaults.title);
+      document.querySelector('meta[property="og:description"]')?.setAttribute("content", defaults.desc);
+      document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", defaults.title);
+      document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", defaults.desc);
+    };
   }, []);
 
   const tableOfContents = [

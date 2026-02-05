@@ -39,10 +39,26 @@ export default function LandingPage() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    document.title = "Keryx - AI-Powered Life Operating System | Voice Memory Assistant";
-    const meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", "Speak naturally. Keryx captures your thoughts, tracks goals, manages reminders, connects calendar and email, and delivers AI-powered insights. Your voice, your entire life, organized.");
-    return () => { document.title = "Keryx - AI-Powered Personal Memory Assistant"; };
+    const title = "Keryx - AI-Powered Life Operating System | Voice Memory Assistant";
+    const desc = "Speak naturally. Keryx captures your thoughts, tracks goals, manages reminders, connects calendar and email, and delivers AI-powered insights. Your voice, your entire life, organized.";
+    const defaults = {
+      title: "Keryx - AI-Powered Personal Memory Assistant",
+      desc: "Capture life with just your voice. Keryx is an AI-powered personal memory assistant that lets you log, search, and analyze your memories using natural language.",
+    };
+    document.title = title;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", desc);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[property="og:description"]')?.setAttribute("content", desc);
+    document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", title);
+    document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", desc);
+    return () => {
+      document.title = defaults.title;
+      document.querySelector('meta[name="description"]')?.setAttribute("content", defaults.desc);
+      document.querySelector('meta[property="og:title"]')?.setAttribute("content", defaults.title);
+      document.querySelector('meta[property="og:description"]')?.setAttribute("content", defaults.desc);
+      document.querySelector('meta[name="twitter:title"]')?.setAttribute("content", defaults.title);
+      document.querySelector('meta[name="twitter:description"]')?.setAttribute("content", defaults.desc);
+    };
   }, []);
 
   const coreFeatures = [
