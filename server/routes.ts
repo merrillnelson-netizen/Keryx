@@ -1,4 +1,4 @@
-import type { Express, Response } from "express";
+import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone, type Reminder } from "@shared/schema";
@@ -593,7 +593,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             
             storage.createReminder(user.id, reminderData)
-              .then(() => console.log('Auto-created reminder from memory'))
               .catch(err => console.error('Failed to auto-create reminder:', err));
           }
           
@@ -605,7 +604,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (reminder.triggerLocationName && 
                       geoPlaceName.toLowerCase().includes(reminder.triggerLocationName.toLowerCase())) {
                     await storage.triggerReminder(reminder.id, user.id);
-                    console.log(`Location-based reminder triggered: ${reminder.content}`);
                   }
                 }
               })
@@ -4350,15 +4348,30 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Goal not found");
       }
       
-      // Validate milestones if provided
-      if (req.body.milestones) {
-        const milestonesValid = z.array(goalMilestoneSchema).safeParse(req.body.milestones);
-        if (!milestonesValid.success) {
-          return sendErrorResponse(res, 400, "Invalid milestones format", milestonesValid.error);
-        }
+      const goalUpdateSchema = z.object({
+        title: z.string().min(1).max(500).optional(),
+        description: z.string().max(5000).nullable().optional(),
+        status: z.enum(['active', 'paused', 'completed', 'abandoned']).optional(),
+        progress: z.number().min(0).max(100).optional(),
+        targetDate: z.string().nullable().optional(),
+        milestones: z.array(goalMilestoneSchema).optional(),
+      });
+      
+      const parsed = goalUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid goal update data", parsed.error);
       }
       
-      const updated = await storage.updateGoal(req.params.id, user.id, req.body);
+      const updateData: Record<string, any> = { ...parsed.data };
+      if (updateData.targetDate && typeof updateData.targetDate === 'string') {
+        updateData.targetDate = new Date(updateData.targetDate);
+      }
+      if (updateData.progress !== undefined) {
+        updateData.progressPercent = updateData.progress;
+        delete updateData.progress;
+      }
+      
+      const updated = await storage.updateGoal(req.params.id, user.id, updateData);
       res.json(updated);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update goal", error);
@@ -4536,12 +4549,22 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       
-      const updates = { ...req.body };
+      const updateSchema = z.object({
+        content: z.string().min(1).max(1000).optional(),
+        triggerType: z.enum(['time', 'location']).optional(),
+        triggerTime: z.string().optional(),
+        triggerLocationName: z.string().max(200).optional(),
+        status: z.enum(['pending', 'triggered', 'snoozed', 'completed', 'dismissed']).optional(),
+      });
+      
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid update data", parsed.error);
+      }
+      
+      const updates: Record<string, any> = { ...parsed.data };
       if (updates.triggerTime && typeof updates.triggerTime === 'string') {
         updates.triggerTime = new Date(updates.triggerTime);
-      }
-      if (updates.snoozedUntil && typeof updates.snoozedUntil === 'string') {
-        updates.snoozedUntil = new Date(updates.snoozedUntil);
       }
       
       const updated = await storage.updateReminder(req.params.id, user.id, updates);
@@ -4699,8 +4722,7 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
-  // Import Google Takeout location data
-  app.post("/api/locations/import", requireAuth, async (req, res) => {
+  app.post("/api/locations/import", requireAuth, express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const user = req.user as User;
       const { jsonContent } = req.body;

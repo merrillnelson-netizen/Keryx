@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import passport from "./auth";
@@ -44,10 +45,15 @@ function validateEnvironment() {
 validateEnvironment();
 
 const app = express();
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: false, limit: '100mb' }));
 
-// Trust Replit's reverse proxy for secure cookies in production
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
 app.set('trust proxy', 1);
 
 // Session configuration with PostgreSQL store

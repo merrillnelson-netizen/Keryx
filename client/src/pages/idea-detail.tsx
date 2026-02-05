@@ -121,6 +121,7 @@ export default function IdeaDetailPage() {
 
   const { data: idea, isLoading, refetch } = useQuery<Idea>({
     queryKey: ['/api/ideas', id],
+    staleTime: 1000 * 60 * 2,
   });
 
   useEffect(() => {

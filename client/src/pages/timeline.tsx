@@ -251,6 +251,7 @@ export default function Timeline() {
   
   const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/logs"],
+    staleTime: 1000 * 60 * 2,
   });
 
   const filteredEntries = useMemo(() => {
