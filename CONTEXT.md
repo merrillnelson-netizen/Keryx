@@ -413,6 +413,7 @@ These files MUST be updated together:
 
 | Date | Change | Files Affected |
 |------|--------|----------------|
+| Feb 5, 2026 | Ideas modal system: all types (Ideas, Notes, Lists, Documents) now open in full-height modals instead of page navigation | idea-modal.tsx (new), ideas.tsx |
 | Feb 5, 2026 | Production cleanup: gated debug logs, fixed type safety (req.user as User), optimized polling (60s vs 5s) | routes.ts, calendar-service.ts, recent-activity.tsx |
 | Feb 5, 2026 | Expanded topic categories from 6 to 15 | ai-service.ts (extractMetadata, decomposeQuery prompts), routes.ts (backfill endpoint) |
 | Feb 5, 2026 | Created CONTEXT.md | New file |
