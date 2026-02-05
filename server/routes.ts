@@ -4236,7 +4236,11 @@ Return ONLY the JSON array, no other text.`;
   app.post("/api/goals", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const parsed = insertGoalSchema.safeParse(req.body);
+      const body = { ...req.body };
+      if (body.targetDate && typeof body.targetDate === 'string') {
+        body.targetDate = new Date(body.targetDate);
+      }
+      const parsed = insertGoalSchema.safeParse(body);
       if (!parsed.success) {
         return sendErrorResponse(res, 400, "Invalid goal data", parsed.error);
       }
