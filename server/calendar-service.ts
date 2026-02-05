@@ -212,7 +212,6 @@ async function getGoogleEventsAroundTime(
   } catch (error: any) {
     // Retry once with fresh token on 401 Unauthorized
     if (error?.code === 401 && retryCount === 0) {
-      console.log('[Calendar] Token expired fetching events, refreshing and retrying...');
       clearGoogleCalendarTokenCache();
       return getGoogleEventsAroundTime(timestamp, windowMinutes, 1);
     }
@@ -408,7 +407,6 @@ async function createGoogleCalendarEvent(
   } catch (error: any) {
     // Retry once with fresh token on 401 Unauthorized
     if (error?.code === 401 && retryCount === 0) {
-      console.log('[Calendar] Token expired, refreshing and retrying...');
       clearGoogleCalendarTokenCache();
       return createGoogleCalendarEvent(title, startDateTime, endDateTime, options, 1);
     }
@@ -477,7 +475,6 @@ export async function findDuplicateEvent(
   } catch (error: any) {
     // Retry once with fresh token on 401 Unauthorized
     if (error?.code === 401 && retryCount === 0) {
-      console.log('[Calendar] Token expired checking duplicates, refreshing and retrying...');
       clearGoogleCalendarTokenCache();
       return findDuplicateEvent(title, startDateTime, toleranceMinutes, 1);
     }
@@ -535,7 +532,6 @@ async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEv
   } catch (error: any) {
     // Retry once with fresh token on 401 Unauthorized
     if (error?.code === 401 && retryCount === 0) {
-      console.log('[Calendar] Token expired fetching today events, refreshing and retrying...');
       clearGoogleCalendarTokenCache();
       return getGoogleTodaysEvents(1);
     }
@@ -589,7 +585,6 @@ async function getGoogleUpcomingEvents(days: number = 14, retryCount: number = 0
     }));
   } catch (error: any) {
     if (error?.code === 401 && retryCount === 0) {
-      console.log('[Calendar] Token expired fetching upcoming events, refreshing and retrying...');
       clearGoogleCalendarTokenCache();
       return getGoogleUpcomingEvents(days, 1);
     }

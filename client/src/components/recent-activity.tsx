@@ -18,8 +18,9 @@ export default function RecentActivity() {
       const result = await response.json();
       return result.data || [];
     },
-    refetchInterval: 5000,
+    refetchInterval: 60000,
     refetchOnWindowFocus: true,
+    staleTime: 30000,
   });
 
   const logEntries = (data || []) as LogEntry[];

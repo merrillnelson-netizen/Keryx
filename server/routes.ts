@@ -326,7 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/auth/user", (req, res) => {
     if (req.isAuthenticated() && req.user) {
-      const user = req.user as any;
+      const user = req.user as User;
       res.json({
         status: 'success',
         data: { id: user.id, username: user.username },
@@ -353,7 +353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       
       // Fetch all stats in parallel with efficient COUNT queries
       const [
@@ -442,7 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         geoPlaceName,
         timezone,
       } = req.body;
-      const user = req.user as any;
+      const user = req.user as User;
       
       if (!memoryText || typeof memoryText !== 'string') {
         return sendErrorResponse(res, 400, "memoryText is required");
@@ -604,7 +604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { topicTag, importance, memoryText } = req.body;
-      const user = req.user as any;
+      const user = req.user as User;
 
       if (!id || typeof id !== 'string') {
         return sendErrorResponse(res, 400, "Memory ID is required");
@@ -868,7 +868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/companion/action", requireAuth, aiLimiter, async (req, res) => {
     try {
       const payload = mcpPayloadSchema.parse(req.body);
-      const user = req.user as any;
+      const user = req.user as User;
 
       if (payload.action === 'record') {
         // Handle memory recording with full context
@@ -998,7 +998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/logs", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Cap at 100
       const offset = parseInt(req.query.offset as string) || 0;
       const full = req.query.full === 'true';
@@ -1039,7 +1039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/logs", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { memoryText, topicTag, metadataJson } = req.body;
       
       if (!memoryText || typeof memoryText !== 'string') {
@@ -1086,7 +1086,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as any;
+      const user = req.user as User;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
@@ -1119,7 +1119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as any;
+      const user = req.user as User;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
@@ -1184,7 +1184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/logs/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const user = req.user as any;
+      const user = req.user as User;
       
       if (!id) {
         return sendErrorResponse(res, 400, "Log entry ID is required");
@@ -1220,7 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/settings", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const currentSettings = await storage.getSettings(user.id);
       
       res.json({
@@ -1239,7 +1239,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.put("/api/settings", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       
       // Remove internal fields that shouldn't be updated via this endpoint
       const { 
@@ -1562,7 +1562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If memoryId provided, link the event back to the memory
       if (memoryId) {
-        const user = req.user as any;
+        const user = req.user as User;
         try {
           await storage.updateLogEntry(memoryId, user.id, {
             calendarEventId: createdEvent.id,
@@ -1629,7 +1629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/categories", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const userCategories = await storage.getCategories(user.id);
       
       res.json({
@@ -1648,7 +1648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/categories", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { name } = insertCategorySchema.parse(req.body);
       
       if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -1690,7 +1690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/people", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       
       // Sync mention counts to ensure accuracy
       await storage.syncPeopleMentionCounts(user.id);
@@ -1714,7 +1714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/people/:name/mentions", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { name } = req.params;
       
       if (!name) {
@@ -1741,7 +1741,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.patch("/api/people/:id", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { id } = req.params;
       const updateData = insertPersonSchema.partial().parse(req.body);
       
@@ -1778,7 +1778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.delete("/api/people/:id", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { id } = req.params;
       
       const deleted = await storage.deletePerson(user.id, id);
@@ -1847,7 +1847,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/mood/stats", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const days = parseInt(req.query.days as string) || 30;
       
       const stats = await storage.getMoodStats(user.id, days);
@@ -1870,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/mood/trend", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const days = parseInt(req.query.days as string) || 30;
       
       const trend = await storage.getMoodTrend(user.id, days);
@@ -1893,7 +1893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/topics/frequency", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const days = parseInt(req.query.days as string) || 30;
       
       const frequency = await storage.getTopicFrequency(user.id, days);
@@ -1915,7 +1915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/mood/:mood", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const { mood } = req.params;
       
       if (!mood) {
@@ -1947,7 +1947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/timecapsule", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      const user = req.user as User;
       const memories = await storage.getOnThisDayMemories(user.id);
       
       const today = new Date();
@@ -3495,7 +3495,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (async () => {
         try {
           const syncResult = await plaidService.syncTransactions(user.id, result.itemId);
-          console.log(`Auto-synced ${syncResult.added} transactions for new connection ${result.itemId}`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Auto-synced ${syncResult.added} transactions for new connection ${result.itemId}`);
+          }
         } catch (syncError) {
           console.error("Auto-sync failed (transactions may not be ready yet):", syncError instanceof Error ? syncError.message : syncError);
         }
@@ -4293,7 +4295,9 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 400, "Locations array is required");
       }
       
-      console.log(`[Location Import] Received ${locations.length} pre-parsed locations from client`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Location Import] Received ${locations.length} pre-parsed locations from client`);
+      }
       
       // Dynamic import of location service
       const { clusterLocations, detectFrequentPlaces } = await import('./location-service');
@@ -4314,7 +4318,9 @@ Return ONLY the JSON array, no other text.`;
       
       // Insert in batches
       const insertedCount = await storage.createLocationHistoryBatch(locationsToInsert);
-      console.log(`[Location Import] Inserted ${insertedCount} locations`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Location Import] Inserted ${insertedCount} locations`);
+      }
       
       // Fetch all locations to detect patterns
       const allLocations = await storage.getLocationHistory(user.id, 5000);
