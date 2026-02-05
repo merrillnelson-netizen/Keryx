@@ -3,7 +3,7 @@ import { CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { cn } from "@/lib/utils";
-import { Mic, MicOff, Square, Plus, Search, Volume2, Send, Keyboard } from "lucide-react";
+import { Mic, MicOff, Square, Volume2, Send, Keyboard, Sparkles } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import CalendarEventSuggestion from "./calendar-event-suggestion";
 import LifePurposeSuggestion from "./life-purpose-suggestion";
@@ -16,38 +16,31 @@ export default function VoiceActivation() {
   const { 
     isListening, 
     isSupported, 
-    startListening, 
+    startListeningUnified,
     stopListening,
     mode,
-    setMode,
     lastResponse,
-    submitText,
+    submitTextUnified,
     isProcessing,
     lastSavedMemory,
     clearLastSavedMemory,
   } = useSpeechRecognition();
 
-  const handleLogMode = () => {
-    setMode("log");
-    startListening();
+  const handleUnifiedVoice = () => {
+    startListeningUnified();
   };
 
-  const handleQueryMode = () => {
-    setMode("query");
-    startListening();
-  };
-
-  const handleTextSubmit = async (submitMode: "log" | "query") => {
+  const handleTextSubmit = async () => {
     if (!textInput.trim() || isProcessing) return;
     
-    await submitText(textInput.trim(), submitMode);
+    await submitTextUnified(textInput.trim());
     setTextInput("");
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleTextSubmit("log");
+      handleTextSubmit();
     }
   };
 
@@ -120,7 +113,7 @@ export default function VoiceActivation() {
                   <h3 className="text-xl lg:text-3xl font-bold text-foreground mb-3">
                     {isListening ? (
                       <span className="text-gradient">
-                        {mode === "log" ? "Logging" : "Query"} Mode Active
+                        Listening...
                       </span>
                     ) : (
                       "Voice Command Ready"
@@ -128,19 +121,19 @@ export default function VoiceActivation() {
                   </h3>
                   <p className="text-sm lg:text-base text-muted-foreground max-w-md mx-auto px-2">
                     {isListening 
-                      ? `Listening for ${mode} commands...`
-                      : 'Press a button below to start logging or querying'
+                      ? "Speak naturally - AI will detect if you want to log or search"
+                      : 'Tap to speak - log memories or ask questions naturally'
                     }
                   </p>
                 </div>
 
-                {/* Voice Action Buttons */}
-                <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-4">
+                {/* Unified Voice Button */}
+                <div className="flex justify-center">
                   {isListening ? (
                     <Button 
                       onClick={stopListening}
                       variant="destructive"
-                      className="px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+                      className="px-8 lg:px-12 py-4 lg:py-6 text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
                       size="lg"
                       data-testid="button-stop-listening"
                     >
@@ -148,27 +141,15 @@ export default function VoiceActivation() {
                       <span>Stop Listening</span>
                     </Button>
                   ) : (
-                    <>
-                      <Button 
-                        onClick={handleLogMode}
-                        className="bg-gradient-to-r from-secondary to-secondary/80 hover:from-secondary/90 hover:to-secondary/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
-                        size="lg"
-                        data-testid="button-log-mode"
-                      >
-                        <Plus className="mr-2 w-5 h-5" />
-                        <span>Log Memory</span>
-                      </Button>
-
-                      <Button 
-                        onClick={handleQueryMode}
-                        className="bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
-                        size="lg"
-                        data-testid="button-query-mode"
-                      >
-                        <Search className="mr-2 w-5 h-5" />
-                        <span>Search Memories</span>
-                      </Button>
-                    </>
+                    <Button 
+                      onClick={handleUnifiedVoice}
+                      className="bg-gradient-to-r from-primary via-secondary to-accent hover:from-primary/90 hover:via-secondary/90 hover:to-accent/90 text-white px-8 lg:px-12 py-4 lg:py-6 text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                      size="lg"
+                      data-testid="button-speak"
+                    >
+                      <Sparkles className="mr-2 w-5 h-5" />
+                      <span>Speak to Keryx</span>
+                    </Button>
                   )}
                 </div>
 
@@ -190,32 +171,21 @@ export default function VoiceActivation() {
                 data-testid="textarea-memory-input"
               />
               <p className="text-xs text-muted-foreground mt-2">
-                Press Enter to log a memory, or use the buttons below
+                Press Enter to submit - AI will detect if you want to log or search
               </p>
             </div>
 
-            {/* Text Action Buttons */}
-            <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-4">
+            {/* Unified Text Submit Button */}
+            <div className="flex justify-center">
               <Button 
-                onClick={() => handleTextSubmit("log")}
+                onClick={handleTextSubmit}
                 disabled={!textInput.trim() || isProcessing}
-                className="bg-gradient-to-r from-secondary to-secondary/80 hover:from-secondary/90 hover:to-secondary/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                className="bg-gradient-to-r from-primary via-secondary to-accent hover:from-primary/90 hover:via-secondary/90 hover:to-accent/90 text-white px-8 lg:px-12 py-4 lg:py-6 text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
                 size="lg"
-                data-testid="button-submit-log"
+                data-testid="button-submit"
               >
-                <Send className="mr-2 w-5 h-5" />
-                <span>{isProcessing ? "Saving..." : "Log Memory"}</span>
-              </Button>
-
-              <Button 
-                onClick={() => handleTextSubmit("query")}
-                disabled={!textInput.trim() || isProcessing}
-                className="bg-gradient-to-r from-accent to-accent/80 hover:from-accent/90 hover:to-accent/70 text-white px-6 lg:px-8 py-4 lg:py-6 w-full sm:w-auto text-base lg:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
-                size="lg"
-                data-testid="button-submit-query"
-              >
-                <Search className="mr-2 w-5 h-5" />
-                <span>{isProcessing ? "Searching..." : "Search Memories"}</span>
+                <Sparkles className="mr-2 w-5 h-5" />
+                <span>{isProcessing ? "Processing..." : "Send to Keryx"}</span>
               </Button>
             </div>
 
