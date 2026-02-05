@@ -16,7 +16,8 @@ import {
   TrendingUp,
   Newspaper,
   Compass,
-  Target
+  Target,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -135,6 +136,20 @@ const capabilities: CapabilityCategory[] = [
     ]
   },
   {
+    id: "reminders",
+    name: "Reminders",
+    icon: Bell,
+    color: "text-pink-500",
+    description: "Set time-based and location-based reminders that Keryx tracks for you",
+    examples: [
+      { phrase: "Remind me to call mom tomorrow at 3pm", description: "Creates a time-based reminder with notification" },
+      { phrase: "Remind me to buy milk when I'm at the grocery store", description: "Location-based reminder that triggers when you're there" },
+      { phrase: "Remind me in 2 hours to take a break", description: "Quick time offset for immediate reminders" },
+      { phrase: "Remind me when I'm at the gym to ask about classes", description: "Location-triggered reminder at a specific place" },
+      { phrase: "Set a reminder for next Monday to submit the report", description: "Future date reminder with automatic tracking" },
+    ]
+  },
+  {
     id: "synthesis",
     name: "Synthesis",
     icon: TrendingUp,
@@ -196,7 +211,7 @@ const capabilities: CapabilityCategory[] = [
 const hintExamples = [
   "Schedule a meeting with Sarah tomorrow at 2pm",
   "What was I thinking about last week?",
-  "Remind me to call the dentist Monday at 9am",
+  "Remind me to call mom tomorrow at 3pm",
   "Summarize my unread emails",
   "Remember I met Jake at the coffee shop",
   "How much did I spend this week?",
@@ -204,14 +219,14 @@ const hintExamples = [
   "Block Friday afternoon for focused work",
   "What are my biggest expenses?",
   "Any important emails I should check?",
-  "Where is my money going?",
+  "Remind me when I'm at the gym to ask about classes",
   "Send an email to John about the project",
   "I have an idea for a new app",
   "What patterns do you see in my life?",
   "What's happening in my life right now?",
   "Find content relevant to my projects",
   "How am I doing on my fitness goal?",
-  "Which goals need my attention?",
+  "Remind me in 2 hours to take a break",
 ];
 
 export function useRotatingHints() {
@@ -331,6 +346,7 @@ export function KeryxCapabilitiesModal() {
                       cat.id === "finance" && "bg-emerald-500/20",
                       cat.id === "ideas" && "bg-yellow-500/20",
                       cat.id === "goals" && "bg-orange-500/20",
+                      cat.id === "reminders" && "bg-pink-500/20",
                       cat.id === "synthesis" && "bg-indigo-500/20",
                       cat.id === "insights" && "bg-cyan-500/20",
                       cat.id === "discoveries" && "bg-teal-500/20",
