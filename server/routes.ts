@@ -1,7 +1,7 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone, type Reminder } from "@shared/schema";
 import { z } from "zod";
 import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, GoalPatternAlert } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -576,6 +576,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone })
               .catch(err => console.warn('AI action detection failed:', err));
           }).catch(err => console.warn('Failed to load ai-actions-service:', err));
+          
+          // Auto-create reminder if detected in memory
+          if (extracted.reminderIntent?.detected && extracted.reminderIntent.content) {
+            const reminderData: any = {
+              content: extracted.reminderIntent.content,
+              triggerType: extracted.reminderIntent.triggerType || 'time',
+              sourceMemoryId: logEntry.id,
+            };
+            
+            if (extracted.reminderIntent.triggerType === 'time' && extracted.reminderIntent.triggerTime) {
+              reminderData.triggerTime = new Date(extracted.reminderIntent.triggerTime);
+            }
+            if (extracted.reminderIntent.triggerType === 'location' && extracted.reminderIntent.triggerLocationName) {
+              reminderData.triggerLocationName = extracted.reminderIntent.triggerLocationName;
+            }
+            
+            storage.createReminder(user.id, reminderData)
+              .then(() => console.log('Auto-created reminder from memory'))
+              .catch(err => console.error('Failed to auto-create reminder:', err));
+          }
+          
+          // Check location-based reminders if this memory has location
+          if (geoPlaceName) {
+            storage.getPendingLocationReminders(user.id)
+              .then(async locationReminders => {
+                for (const reminder of locationReminders) {
+                  if (reminder.triggerLocationName && 
+                      geoPlaceName.toLowerCase().includes(reminder.triggerLocationName.toLowerCase())) {
+                    await storage.triggerReminder(reminder.id, user.id);
+                    console.log(`Location-based reminder triggered: ${reminder.content}`);
+                  }
+                }
+              })
+              .catch(err => console.error('Failed to check location reminders:', err));
+          }
         } catch (bgError) {
           console.error('Background processing error (non-fatal):', bgError);
         }
@@ -2195,7 +2230,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return [];
       };
       
-      const [emailResult, financialSummary, locationContext, activeGoals] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals()]);
+      // Helper to fetch active reminders
+      const fetchActiveReminders = async (): Promise<Array<{ content: string; triggerType: string; triggerTime?: string; triggerLocationName?: string }>> => {
+        try {
+          const reminders = await storage.getReminders(user.id, 'pending');
+          return reminders.map(r => ({
+            content: r.content,
+            triggerType: r.triggerType,
+            triggerTime: r.triggerTime ? r.triggerTime.toISOString() : undefined,
+            triggerLocationName: r.triggerLocationName || undefined,
+          }));
+        } catch { /* Reminders fetch failed */ }
+        return [];
+      };
+      
+      const [emailResult, financialSummary, locationContext, activeGoals, activeReminders] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals(), fetchActiveReminders()]);
       const emailContext = emailResult.emails;
       const emailSource = emailResult.source;
       
@@ -2215,7 +2264,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         financialSummary,
         knownPeople.length > 0 ? knownPeople : undefined,
         locationContext,
-        activeGoals.length > 0 ? activeGoals : undefined
+        activeGoals.length > 0 ? activeGoals : undefined,
+        activeReminders.length > 0 ? activeReminders : undefined
       );
 
       // Cache the result (30 minute TTL)
@@ -4421,6 +4471,184 @@ Return ONLY the JSON array, no other text.`;
       res.json({ alerts });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to detect goal alerts", error);
+    }
+  });
+
+  // ============================================
+  // REMINDERS ROUTES
+  // ============================================
+
+  // Get all reminders for user
+  app.get("/api/reminders", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const status = req.query.status as string | undefined;
+      const reminders = await storage.getReminders(user.id, status);
+      res.json(reminders);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch reminders", error);
+    }
+  });
+
+  // Get a specific reminder
+  app.get("/api/reminders/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const reminder = await storage.getReminder(req.params.id, user.id);
+      if (!reminder) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json(reminder);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch reminder", error);
+    }
+  });
+
+  // Create a new reminder
+  app.post("/api/reminders", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const body = { ...req.body };
+      
+      // Convert triggerTime string to Date if provided
+      if (body.triggerTime && typeof body.triggerTime === 'string') {
+        body.triggerTime = new Date(body.triggerTime);
+      }
+      
+      const parsed = insertReminderSchema.safeParse(body);
+      if (!parsed.success) {
+        return sendErrorResponse(res, 400, "Invalid reminder data", parsed.error);
+      }
+      
+      const reminder = await storage.createReminder(user.id, parsed.data);
+      res.status(201).json(reminder);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create reminder", error);
+    }
+  });
+
+  // Update a reminder
+  app.patch("/api/reminders/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const reminder = await storage.getReminder(req.params.id, user.id);
+      if (!reminder) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      
+      const updates = { ...req.body };
+      if (updates.triggerTime && typeof updates.triggerTime === 'string') {
+        updates.triggerTime = new Date(updates.triggerTime);
+      }
+      if (updates.snoozedUntil && typeof updates.snoozedUntil === 'string') {
+        updates.snoozedUntil = new Date(updates.snoozedUntil);
+      }
+      
+      const updated = await storage.updateReminder(req.params.id, user.id, updates);
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update reminder", error);
+    }
+  });
+
+  // Delete a reminder
+  app.delete("/api/reminders/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const deleted = await storage.deleteReminder(req.params.id, user.id);
+      if (!deleted) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete reminder", error);
+    }
+  });
+
+  // Complete a reminder
+  app.post("/api/reminders/:id/complete", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const completed = await storage.completeReminder(req.params.id, user.id);
+      if (!completed) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json(completed);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to complete reminder", error);
+    }
+  });
+
+  // Snooze a reminder
+  app.post("/api/reminders/:id/snooze", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { minutes = 30 } = req.body;
+      const until = new Date(Date.now() + minutes * 60 * 1000);
+      
+      const snoozed = await storage.snoozeReminder(req.params.id, user.id, until);
+      if (!snoozed) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json(snoozed);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to snooze reminder", error);
+    }
+  });
+
+  // Dismiss a reminder
+  app.post("/api/reminders/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const dismissed = await storage.dismissReminder(req.params.id, user.id);
+      if (!dismissed) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json(dismissed);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to dismiss reminder", error);
+    }
+  });
+
+  // Check and trigger due reminders (called on app load/periodic check)
+  app.post("/api/reminders/check-due", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const now = new Date();
+      
+      // Get pending time-based reminders that are due
+      const dueReminders = await storage.getPendingTimeReminders(user.id, now);
+      
+      // Also check snoozed reminders that are past their snooze time
+      const allReminders = await storage.getReminders(user.id, 'snoozed');
+      const snoozedDue = allReminders.filter(r => 
+        r.snoozedUntil && new Date(r.snoozedUntil) <= now
+      );
+      
+      // Trigger all due reminders
+      const triggered: Reminder[] = [];
+      for (const reminder of [...dueReminders, ...snoozedDue]) {
+        const result = await storage.triggerReminder(reminder.id, user.id);
+        if (result) triggered.push(result);
+      }
+      
+      res.json({ 
+        triggered,
+        count: triggered.length 
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to check due reminders", error);
+    }
+  });
+
+  // Get pending location reminders for location matching
+  app.get("/api/reminders/location-pending", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const reminders = await storage.getPendingLocationReminders(user.id);
+      res.json(reminders);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch location reminders", error);
     }
   });
 

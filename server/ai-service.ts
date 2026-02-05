@@ -28,6 +28,17 @@ export interface AIReasoning {
 }
 
 /**
+ * Detected reminder from memory text
+ */
+export interface DetectedReminder {
+  detected: boolean;
+  content?: string;          // What to remind about
+  triggerType?: 'time' | 'location';
+  triggerTime?: string;      // ISO 8601 format for time-based reminders
+  triggerLocationName?: string; // Place name for location-based reminders
+}
+
+/**
  * AI-extracted metadata structure
  */
 export interface ExtractedMetadata {
@@ -39,6 +50,7 @@ export interface ExtractedMetadata {
   aiReasoning?: AIReasoning;
   lifePurposeTheme?: boolean;
   importance?: number; // 1-10 scale, AI-assigned based on content significance
+  reminderIntent?: DetectedReminder; // Detected reminder request
 }
 
 /**
@@ -133,6 +145,22 @@ For food/meal-related entries, use these EXACT field names:
    - 10: Critical, life-changing events, major decisions, breakthroughs
    Consider: emotional intensity, future relevance, uniqueness, people involved, decisions made, and potential impact.
 
+9. REMINDER INTENT: Detect if the user is asking to be reminded about something. Look for phrases like:
+   - "Remind me to..." or "remind me about..."
+   - "Don't let me forget to..."
+   - "Set a reminder for..." or "I need to remember to..."
+   - "Remind me when I'm at..." (location-based)
+   - "Remind me tomorrow/next week/in 2 hours..." (time-based)
+   
+   If a reminder is detected, extract:
+   - content: What to remind about (the action or task)
+   - triggerType: "time" for time-based, "location" for location-based
+   - triggerTime: For time-based, parse to ISO 8601 format. Use current date context intelligently:
+     * "tomorrow at 3pm" → tomorrow's date at 15:00
+     * "in 2 hours" → current time + 2 hours
+     * "next Monday" → the coming Monday
+   - triggerLocationName: For location-based, the place name (e.g., "gym", "grocery store", "office", "home")
+
 Respond with JSON in this exact format: 
 {
   "topicTag": "string",
@@ -146,6 +174,13 @@ Respond with JSON in this exact format:
     "topic": "Brief explanation of why this topic was chosen",
     "mood": "Brief explanation of the emotional tone detected",
     "people": "Brief explanation of people identified (or 'No specific names mentioned')"
+  },
+  "reminderIntent": {
+    "detected": boolean,
+    "content": "string (what to remind about)",
+    "triggerType": "time" | "location",
+    "triggerTime": "ISO 8601 datetime string (for time-based)",
+    "triggerLocationName": "string (for location-based)"
   }
 }
 
@@ -163,6 +198,18 @@ If no people are mentioned, return empty array for detectedPeople.`,
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
+    // Parse reminder intent if detected
+    let reminderIntent: DetectedReminder | undefined;
+    if (result.reminderIntent?.detected) {
+      reminderIntent = {
+        detected: true,
+        content: result.reminderIntent.content,
+        triggerType: result.reminderIntent.triggerType,
+        triggerTime: result.reminderIntent.triggerTime,
+        triggerLocationName: result.reminderIntent.triggerLocationName,
+      };
+    }
+    
     // Validate and normalize the result
     return {
       topicTag: result.topicTag || "General",
@@ -177,6 +224,7 @@ If no people are mentioned, return empty array for detectedPeople.`,
       } : undefined,
       lifePurposeTheme: result.lifePurposeTheme === true,
       importance: typeof result.importance === 'number' ? Math.max(1, Math.min(10, result.importance)) : 5,
+      reminderIntent,
     };
   } catch (error) {
     console.error("Error extracting metadata:", error);
@@ -586,6 +634,13 @@ export interface PersonContext {
   notes?: string | null;
 }
 
+export interface ReminderContext {
+  content: string;
+  triggerType: string;
+  triggerTime?: string;
+  triggerLocationName?: string;
+}
+
 export async function generateMorningBriefing(
   recentMemories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; detectedPeople?: string[]; importance?: number }>,
   userName?: string,
@@ -595,7 +650,8 @@ export async function generateMorningBriefing(
   financialSummary?: FinancialSummary,
   knownPeople?: PersonContext[],
   locationContext?: string,
-  activeGoals?: GoalContext[]
+  activeGoals?: GoalContext[],
+  activeReminders?: ReminderContext[]
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -667,6 +723,19 @@ export async function generateMorningBriefing(
         `- "${g.title}" (${g.progressPercent}% complete)${g.targetDate ? ` - Target: ${g.targetDate}` : ''}${g.milestonesSummary ? `\n  Milestones: ${g.milestonesSummary}` : ''}`
       ).join('\n')}`;
     }
+    
+    // Format reminders context if available
+    let remindersContext = '';
+    if (activeReminders && activeReminders.length > 0) {
+      remindersContext = `\n\nUSER-SET REMINDERS (include these in the REMINDERS section):\n${activeReminders.map(r => {
+        if (r.triggerType === 'time' && r.triggerTime) {
+          return `- [TIME] "${r.content}" - Due: ${r.triggerTime}`;
+        } else if (r.triggerType === 'location' && r.triggerLocationName) {
+          return `- [LOCATION] "${r.content}" - When at: ${r.triggerLocationName}`;
+        }
+        return `- "${r.content}"`;
+      }).join('\n')}`;
+    }
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -675,7 +744,7 @@ export async function generateMorningBriefing(
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
 
-Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}, create a personalized briefing that:
+Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}${activeReminders?.length ? ', and their set reminders' : ''}, create a personalized briefing that:
 
 IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight and attention to memories marked [CRITICAL] (8-10) and [HIGH] (6-7). These represent significant life events, decisions, or concerns. Memories marked [LOW] (1-2) are minor/trivial. Default importance is 5.
 1. GREETING: A warm, personalized greeting mentioning their name if provided
@@ -708,8 +777,8 @@ Respond with JSON:
         {
           role: "user",
           content: recentMemories.length > 0 
-            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}${remindersContext}\n\nGenerate my ${timeOfDay} briefing.`
+            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}${remindersContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
         },
       ],
       response_format: { type: "json_object" },

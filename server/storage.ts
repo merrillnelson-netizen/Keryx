@@ -1,6 +1,6 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
-  locationHistory, frequentPlaces, pushSubscriptions, goals,
+  locationHistory, frequentPlaces, pushSubscriptions, goals, reminders,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -15,7 +15,8 @@ import {
   type LocationHistory, type InsertLocationHistory,
   type FrequentPlace, type InsertFrequentPlace,
   type PushSubscription, type InsertPushSubscription,
-  type Goal, type InsertGoal, type GoalMilestone
+  type Goal, type InsertGoal, type GoalMilestone,
+  type Reminder, type InsertReminder
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -143,6 +144,19 @@ export interface IStorage {
   updateGoal(id: string, userId: string, updates: Partial<InsertGoal & { milestones: GoalMilestone[], aiSummary: string, aiLastAnalyzed: Date, relatedMemoryIds: string[] }>): Promise<Goal | undefined>;
   deleteGoal(id: string, userId: string): Promise<boolean>;
   getActiveGoals(userId: string): Promise<Goal[]>;
+
+  // Reminders (user-scoped)
+  getReminders(userId: string, status?: string): Promise<Reminder[]>;
+  getReminder(id: string, userId: string): Promise<Reminder | undefined>;
+  createReminder(userId: string, reminder: InsertReminder): Promise<Reminder>;
+  updateReminder(id: string, userId: string, updates: Partial<Reminder>): Promise<Reminder | undefined>;
+  deleteReminder(id: string, userId: string): Promise<boolean>;
+  getPendingTimeReminders(userId: string, beforeTime: Date): Promise<Reminder[]>;
+  getPendingLocationReminders(userId: string): Promise<Reminder[]>;
+  triggerReminder(id: string, userId: string): Promise<Reminder | undefined>;
+  completeReminder(id: string, userId: string): Promise<Reminder | undefined>;
+  snoozeReminder(id: string, userId: string, until: Date): Promise<Reminder | undefined>;
+  dismissReminder(id: string, userId: string): Promise<Reminder | undefined>;
 }
 
 /**
@@ -1949,6 +1963,185 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to get active goals:', error);
       throw new Error('Database error while fetching active goals');
+    }
+  }
+
+  // ============================================
+  // REMINDERS METHODS
+  // ============================================
+
+  async getReminders(userId: string, status?: string): Promise<Reminder[]> {
+    try {
+      if (status) {
+        return await db
+          .select()
+          .from(reminders)
+          .where(and(eq(reminders.userId, userId), eq(reminders.status, status)))
+          .orderBy(desc(reminders.createdAt));
+      }
+      return await db
+        .select()
+        .from(reminders)
+        .where(eq(reminders.userId, userId))
+        .orderBy(desc(reminders.createdAt));
+    } catch (error) {
+      console.error('Failed to get reminders:', error);
+      throw new Error('Database error while fetching reminders');
+    }
+  }
+
+  async getReminder(id: string, userId: string): Promise<Reminder | undefined> {
+    try {
+      const [reminder] = await db
+        .select()
+        .from(reminders)
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)));
+      return reminder;
+    } catch (error) {
+      console.error('Failed to get reminder:', error);
+      throw new Error('Database error while fetching reminder');
+    }
+  }
+
+  async createReminder(userId: string, reminder: InsertReminder): Promise<Reminder> {
+    try {
+      const [created] = await db
+        .insert(reminders)
+        .values({ ...reminder, userId })
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Failed to create reminder:', error);
+      throw new Error('Database error while creating reminder');
+    }
+  }
+
+  async updateReminder(id: string, userId: string, updates: Partial<Reminder>): Promise<Reminder | undefined> {
+    try {
+      const [updated] = await db
+        .update(reminders)
+        .set(updates)
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to update reminder:', error);
+      throw new Error('Database error while updating reminder');
+    }
+  }
+
+  async deleteReminder(id: string, userId: string): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(reminders)
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error('Failed to delete reminder:', error);
+      throw new Error('Database error while deleting reminder');
+    }
+  }
+
+  async getPendingTimeReminders(userId: string, beforeTime: Date): Promise<Reminder[]> {
+    try {
+      return await db
+        .select()
+        .from(reminders)
+        .where(and(
+          eq(reminders.userId, userId),
+          eq(reminders.triggerType, 'time'),
+          eq(reminders.status, 'pending'),
+          lte(reminders.triggerTime, beforeTime)
+        ))
+        .orderBy(reminders.triggerTime);
+    } catch (error) {
+      console.error('Failed to get pending time reminders:', error);
+      throw new Error('Database error while fetching pending time reminders');
+    }
+  }
+
+  async getPendingLocationReminders(userId: string): Promise<Reminder[]> {
+    try {
+      return await db
+        .select()
+        .from(reminders)
+        .where(and(
+          eq(reminders.userId, userId),
+          eq(reminders.triggerType, 'location'),
+          eq(reminders.status, 'pending')
+        ))
+        .orderBy(reminders.createdAt);
+    } catch (error) {
+      console.error('Failed to get pending location reminders:', error);
+      throw new Error('Database error while fetching pending location reminders');
+    }
+  }
+
+  async triggerReminder(id: string, userId: string): Promise<Reminder | undefined> {
+    try {
+      const [updated] = await db
+        .update(reminders)
+        .set({ status: 'triggered', triggeredAt: new Date() })
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to trigger reminder:', error);
+      throw new Error('Database error while triggering reminder');
+    }
+  }
+
+  async completeReminder(id: string, userId: string): Promise<Reminder | undefined> {
+    try {
+      const [updated] = await db
+        .update(reminders)
+        .set({ status: 'completed', completedAt: new Date() })
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to complete reminder:', error);
+      throw new Error('Database error while completing reminder');
+    }
+  }
+
+  async snoozeReminder(id: string, userId: string, until: Date): Promise<Reminder | undefined> {
+    try {
+      const [reminder] = await db
+        .select()
+        .from(reminders)
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)));
+      
+      if (!reminder) return undefined;
+      
+      const [updated] = await db
+        .update(reminders)
+        .set({ 
+          status: 'snoozed', 
+          snoozedUntil: until,
+          snoozeCount: (reminder.snoozeCount || 0) + 1
+        })
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to snooze reminder:', error);
+      throw new Error('Database error while snoozing reminder');
+    }
+  }
+
+  async dismissReminder(id: string, userId: string): Promise<Reminder | undefined> {
+    try {
+      const [updated] = await db
+        .update(reminders)
+        .set({ status: 'dismissed' })
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to dismiss reminder:', error);
+      throw new Error('Database error while dismissing reminder');
     }
   }
 }

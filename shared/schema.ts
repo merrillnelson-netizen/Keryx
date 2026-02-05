@@ -872,3 +872,71 @@ export const insertGoalSchema = createInsertSchema(goals).omit({
 
 export type Goal = typeof goals.$inferSelect;
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
+
+/**
+ * Reminders table - stores user reminders with time or location triggers
+ * Supports:
+ * - Time-based: "remind me tomorrow at 3pm"
+ * - Location-based: "remind me when I'm at the gym"
+ * - Relative time: "remind me in 2 hours"
+ */
+export const reminders = pgTable("reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Reminder content
+  content: text("content").notNull(), // What to remind about
+  // Trigger type
+  triggerType: text("trigger_type").notNull(), // 'time' | 'location'
+  // Time-based trigger
+  triggerTime: timestamp("trigger_time"), // When to trigger (for time-based)
+  // Location-based trigger
+  triggerLocationName: text("trigger_location_name"), // Place name to match (e.g., "gym", "grocery store")
+  triggerLocationId: varchar("trigger_location_id").references(() => frequentPlaces.id), // Optional link to frequent place
+  // Status tracking
+  status: text("status").notNull().default('pending'), // 'pending', 'triggered', 'completed', 'snoozed', 'dismissed'
+  // Snooze support
+  snoozedUntil: timestamp("snoozed_until"), // If snoozed, when to remind again
+  snoozeCount: integer("snooze_count").default(0), // Track how many times snoozed
+  // Source tracking
+  sourceMemoryId: varchar("source_memory_id").references(() => logEntries.id), // Memory that created this reminder
+  // Timestamps
+  triggeredAt: timestamp("triggered_at"), // When the reminder was triggered
+  completedAt: timestamp("completed_at"), // When marked complete
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("reminders_user_id_idx").on(table.userId),
+  statusIdx: index("reminders_status_idx").on(table.status),
+  userStatusIdx: index("reminders_user_status_idx").on(table.userId, table.status),
+  triggerTimeIdx: index("reminders_trigger_time_idx").on(table.triggerTime),
+  triggerTypeIdx: index("reminders_trigger_type_idx").on(table.triggerType),
+}));
+
+export const remindersRelations = relations(reminders, ({ one }) => ({
+  user: one(users, {
+    fields: [reminders.userId],
+    references: [users.id],
+  }),
+  sourceMemory: one(logEntries, {
+    fields: [reminders.sourceMemoryId],
+    references: [logEntries.id],
+  }),
+  triggerLocation: one(frequentPlaces, {
+    fields: [reminders.triggerLocationId],
+    references: [frequentPlaces.id],
+  }),
+}));
+
+// Reminder insert schema
+export const insertReminderSchema = createInsertSchema(reminders).omit({
+  id: true,
+  userId: true,
+  status: true,
+  snoozedUntil: true,
+  snoozeCount: true,
+  triggeredAt: true,
+  completedAt: true,
+  createdAt: true,
+});
+
+export type Reminder = typeof reminders.$inferSelect;
+export type InsertReminder = z.infer<typeof insertReminderSchema>;

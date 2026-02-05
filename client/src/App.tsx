@@ -27,6 +27,7 @@ import Ideas from "@/pages/ideas";
 import IdeaDetail from "@/pages/idea-detail";
 import Locations from "@/pages/locations";
 import Goals from "@/pages/goals";
+import Reminders from "@/pages/reminders";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -93,6 +94,9 @@ function Router() {
       </Route>
       <Route path="/goals">
         {() => <ProtectedRoute component={Goals} />}
+      </Route>
+      <Route path="/reminders">
+        {() => <ProtectedRoute component={Reminders} />}
       </Route>
       <Route path="/people">
         {() => <ProtectedRoute component={People} />}
