@@ -41,6 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar, Brain, Loader2 } from "lucide-react";
@@ -281,6 +282,7 @@ export default function History() {
   const [editText, setEditText] = useState("");
   const [editTopic, setEditTopic] = useState("");
   const [editMetadata, setEditMetadata] = useState("");
+  const [editImportance, setEditImportance] = useState(5);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [quickEditCategoryId, setQuickEditCategoryId] = useState<string | null>(null);
   
@@ -358,18 +360,23 @@ export default function History() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<LogEntry> }) => {
-      const response = await apiRequest("PATCH", `/api/logs/${id}`, data);
+    mutationFn: async ({ id, data, useMemoriesEndpoint }: { id: string; data: any; useMemoriesEndpoint?: boolean }) => {
+      // Use /api/memories/:id for full re-analysis when text changes, otherwise /api/logs/:id
+      const endpoint = useMemoriesEndpoint ? `/api/memories/${id}` : `/api/logs/${id}`;
+      const response = await apiRequest("PATCH", endpoint, data);
       if (!response.ok) {
         throw new Error("Failed to update memory");
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs", "paginated"] });
+      const reanalyzed = result?.reanalyzed;
       toast({
         title: "Memory updated",
-        description: "Memory has been successfully updated",
+        description: reanalyzed 
+          ? "Memory has been re-analyzed with updated AI insights" 
+          : "Memory has been successfully updated",
       });
       setEditingEntry(null);
     },
@@ -412,28 +419,24 @@ export default function History() {
     setEditText(entry.memoryText);
     setEditTopic(entry.topicTag || "");
     setEditMetadata(entry.metadataJson ? JSON.stringify(entry.metadataJson, null, 2) : "");
+    setEditImportance(entry.importance ?? 5);
   };
 
   const handleSaveEdit = () => {
     if (editingEntry) {
-      try {
-        // Parse metadata or use empty object (never null - DB constraint)
-        const metadata = editMetadata ? JSON.parse(editMetadata) : {};
-        updateMutation.mutate({
-          id: editingEntry.id,
-          data: {
-            memoryText: editText,
-            topicTag: editTopic || undefined,
-            metadataJson: metadata,
-          },
-        });
-      } catch (error) {
-        toast({
-          title: "Invalid JSON",
-          description: `Please check your metadata format: ${error instanceof Error ? error.message : "Unknown error"}`,
-          variant: "destructive",
-        });
-      }
+      // Determine if memoryText changed (triggers re-analysis)
+      const textChanged = editText !== editingEntry.memoryText;
+      
+      // Use the enhanced /api/memories/:id endpoint for re-analysis when text changes
+      updateMutation.mutate({
+        id: editingEntry.id,
+        data: {
+          memoryText: textChanged ? editText : undefined,
+          topicTag: editTopic || undefined,
+          importance: editImportance,
+        },
+        useMemoriesEndpoint: textChanged, // Flag to use the re-analysis endpoint
+      });
     }
   };
 
@@ -807,17 +810,29 @@ export default function History() {
                 data-testid="input-edit-text"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-metadata">Metadata (JSON)</Label>
-              <Textarea
-                id="edit-metadata"
-                value={editMetadata}
-                onChange={(e) => setEditMetadata(e.target.value)}
-                placeholder='{"key": "value"}'
-                className="min-h-[120px] font-mono text-sm glass-card border-white/20"
-                data-testid="input-edit-metadata"
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-importance">Importance Level</Label>
+                <span className="text-sm font-medium text-primary">{editImportance}/10</span>
+              </div>
+              <Slider
+                id="edit-importance"
+                value={[editImportance]}
+                onValueChange={(value) => setEditImportance(value[0])}
+                min={1}
+                max={10}
+                step={1}
+                className="w-full"
+                data-testid="slider-edit-importance"
               />
-              <p className="text-xs text-muted-foreground">Optional: Edit the AI-extracted metadata in JSON format</p>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Low</span>
+                <span>Medium</span>
+                <span>Critical</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Higher importance memories get more weight in AI analysis and briefings
+              </p>
             </div>
           </div>
           <DialogFooter>
