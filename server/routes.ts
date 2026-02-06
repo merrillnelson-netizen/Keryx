@@ -2718,7 +2718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: 'discovery',
               title: `🚨 ${topAlert.person.name} mentioned`,
               body: alertMessage.body.substring(0, 120),
-              url: topAlert.discovery.url || '/insights',
+              url: '/insights',
               requireInteraction: topAlert.person.priority >= 9,
             });
           } catch (err) {

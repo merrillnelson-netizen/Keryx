@@ -34,20 +34,27 @@ self.addEventListener('notificationclick', function(event) {
 
   const action = event.action;
   const data = event.notification.data || {};
-  let urlToOpen = data.url || '/';
+  let urlToOpen = data.url || '/dashboard';
 
   if (action === 'dismiss' || action === 'later') {
     return;
   }
 
   if (action === 'view' || action === 'review') {
-    urlToOpen = data.url || '/';
+    urlToOpen = data.url || '/dashboard';
+  }
+
+  var isExternal = urlToOpen.startsWith('http://') || urlToOpen.startsWith('https://');
+
+  if (isExternal) {
+    event.waitUntil(clients.openWindow(urlToOpen));
+    return;
   }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
       for (let i = 0; i < clientList.length; i++) {
-        const client = clientList[i];
+        var client = clientList[i];
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(urlToOpen);
           return client.focus();
