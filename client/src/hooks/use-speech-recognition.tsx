@@ -33,12 +33,18 @@ export interface SearchResultMemory {
 /**
  * AI response data for modal display
  */
+export interface FinancialSummary {
+  totalSpent: number;
+  transactionCount: number;
+  topCategories: string[];
+}
+
 export interface AIResponseData {
   type: "log" | "query" | "financial";
   message: string;
   query?: string;
   sourceMemories?: SearchResultMemory[];
-  financialSummary?: string;
+  financialSummary?: FinancialSummary;
 }
 
 /**

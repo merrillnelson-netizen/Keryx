@@ -2,7 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Clock, Tag, Smile, DollarSign } from "lucide-react";
+import { MessageSquare, Clock, Tag, Smile, DollarSign, TrendingUp, Receipt, FolderOpen } from "lucide-react";
 import { AIResponseData, SearchResultMemory } from "@/hooks/use-speech-recognition";
 import { formatDistanceToNow, isValid } from "date-fns";
 
@@ -88,6 +88,51 @@ function MemoryCard({ memory, index }: { memory: SearchResultMemory; index: numb
   );
 }
 
+function FinancialSummaryDisplay({ summary }: { summary: AIResponseData['financialSummary'] }) {
+  if (!summary || typeof summary !== 'object') return null;
+
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
+        <div className="flex items-center justify-center gap-1 mb-1">
+          <TrendingUp className="w-3 h-3 text-green-500" />
+        </div>
+        <p className="text-xs font-semibold text-foreground">
+          ${summary.totalSpent?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
+        </p>
+        <p className="text-[10px] text-muted-foreground">Total Spent</p>
+      </div>
+      <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
+        <div className="flex items-center justify-center gap-1 mb-1">
+          <Receipt className="w-3 h-3 text-blue-500" />
+        </div>
+        <p className="text-xs font-semibold text-foreground">
+          {summary.transactionCount ?? 0}
+        </p>
+        <p className="text-[10px] text-muted-foreground">Transactions</p>
+      </div>
+      <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
+        <div className="flex items-center justify-center gap-1 mb-1">
+          <FolderOpen className="w-3 h-3 text-purple-500" />
+        </div>
+        <p className="text-xs font-semibold text-foreground">
+          {summary.topCategories?.length ?? 0}
+        </p>
+        <p className="text-[10px] text-muted-foreground">Categories</p>
+      </div>
+      {summary.topCategories && summary.topCategories.length > 0 && (
+        <div className="col-span-3 flex flex-wrap gap-1 mt-1">
+          {summary.topCategories.map((cat) => (
+            <Badge key={cat} variant="outline" className="text-[10px]">
+              {cat}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ResponseModal({ open, onClose, responseData }: ResponseModalProps) {
   if (!responseData) return null;
 
@@ -140,9 +185,7 @@ export function ResponseModal({ open, onClose, responseData }: ResponseModalProp
                     {responseData.message}
                   </p>
                   {isFinancial && responseData.financialSummary && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {responseData.financialSummary}
-                    </p>
+                    <FinancialSummaryDisplay summary={responseData.financialSummary} />
                   )}
                 </div>
               </div>
