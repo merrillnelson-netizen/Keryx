@@ -63,6 +63,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture.
 - **Location History**: Google Timeline import, automatic capture, frequent place detection, location clustering.
 - **Web Push Notifications**: For briefings, alerts, and approvals, handled by a service worker.
+- **PWA Support**: Installable as a Progressive Web App with manifest.json, app icons (72-512px), service worker caching, and install prompts on landing page, settings, and global banner. iOS instructions included.
 - **Life Purpose Suggestion**: AI detects existential themes and suggests a companion app.
 
 ### Security Measures
