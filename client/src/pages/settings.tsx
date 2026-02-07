@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -1318,6 +1319,8 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          <PwaInstallPrompt variant="settings" />
 
           <Card className="glass-card border-white/20">
             <CardHeader>

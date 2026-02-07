@@ -11,6 +11,7 @@ import {
 import { motion } from "framer-motion";
 import { KeryxLogo } from "@/components/keryx-logo";
 import { KeryxStoryModal } from "@/components/keryx-story-modal";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -278,7 +279,7 @@ export default function LandingPage() {
               that truly understands you.
             </motion.p>
             
-            <motion.div variants={fadeIn} className="flex flex-col sm:flex-row gap-4 justify-center">
+            <motion.div variants={fadeIn} className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button 
                 size="lg"
                 onClick={() => navigate("/signup")}
@@ -288,6 +289,7 @@ export default function LandingPage() {
                 Start Free
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
+              <PwaInstallPrompt variant="landing" />
               <Button 
                 size="lg"
                 variant="outline"

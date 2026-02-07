@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { apiRequest } from "./lib/queryClient";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { initGA } from "./lib/analytics";
 import { useAnalytics } from "./hooks/use-analytics";
 
@@ -145,6 +146,7 @@ function App() {
               <div className="font-sans bg-background min-h-screen">
                 <Toaster />
                 <Router />
+                <PwaInstallPrompt variant="banner" />
               </div>
             </TooltipProvider>
           </AuthProvider>
