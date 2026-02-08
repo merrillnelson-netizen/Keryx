@@ -898,7 +898,7 @@ export const reminders = pgTable("reminders", {
   snoozedUntil: timestamp("snoozed_until"), // If snoozed, when to remind again
   snoozeCount: integer("snooze_count").default(0), // Track how many times snoozed
   // Source tracking
-  sourceMemoryId: varchar("source_memory_id").references(() => logEntries.id), // Memory that created this reminder
+  sourceMemoryId: varchar("source_memory_id").references(() => logEntries.id, { onDelete: 'set null' }), // Memory that created this reminder
   // Timestamps
   triggeredAt: timestamp("triggered_at"), // When the reminder was triggered
   completedAt: timestamp("completed_at"), // When marked complete
