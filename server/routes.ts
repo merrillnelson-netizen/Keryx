@@ -12,10 +12,10 @@ import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpc
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
-import { detectCalendarEvent, type DetectedCalendarEvent } from "./ai-service";
+import { detectCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
-import { getContextualDiscoveries, type DiscoveriesResponse } from "./contextual-discoveries-service";
+import { getContextualDiscoveries } from "./contextual-discoveries-service";
 import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
 import { isPushConfigured, getVapidPublicKey, sendPushNotification, sendPushToAllUserDevices } from "./push-service";
 
@@ -629,13 +629,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       return; // Ensure function exits cleanly
     } catch (error) {
-      // Log full error details for debugging
-      console.error("Failed to save memory - Full error:", error);
-      if (error instanceof Error) {
-        console.error("Error name:", error.name);
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-      }
       sendErrorResponse(res, 500, "Failed to save memory. Please try again.", error);
     }
   });
@@ -649,7 +642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/memories/:id", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { id } = req.params;
-      const { topicTag, importance, memoryText } = req.body;
+      const { topicTag, importance, memoryText, timezone } = req.body;
       const user = req.user as User;
 
       if (!id || typeof id !== 'string') {
@@ -686,7 +679,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If text changed, trigger re-analysis
       if (memoryText && memoryText !== existingMemory.memoryText) {
         // Re-analyze with AI to update topic, mood, people, and importance
-        const extracted = await extractMetadata(memoryText);
+        const extracted = await extractMetadata(memoryText, timezone);
         const newEmbedding = await generateEmbedding(memoryText);
         
         updateData.memoryText = memoryText;
@@ -918,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (payload.action === 'record') {
         // Handle memory recording with full context
-        const extracted = await extractMetadata(payload.transcript);
+        const extracted = await extractMetadata(payload.transcript, payload.metadata?.timezone);
         const embeddingVector = await generateEmbedding(payload.transcript);
 
         const logEntry = await storage.createLogEntry({
@@ -2932,7 +2925,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           for (let i = 0; i < entriesNeedingBackfill.length; i++) {
             const entry = entriesNeedingBackfill[i];
             try {
-              const metadata = await extractMetadata(entry.memoryText);
+              const metadata = await extractMetadata(entry.memoryText, typeof req.query.timezone === 'string' ? req.query.timezone : undefined);
               
               // Build update data with AI reasoning - include topicTag and importance for full re-analysis
               const updateData: any = {
