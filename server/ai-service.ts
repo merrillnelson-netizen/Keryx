@@ -155,15 +155,15 @@ For food/meal-related entries, use these EXACT field names:
    If a reminder is detected, extract:
    - content: What to remind about (the action or task)
    - triggerType: "time" for time-based, "location" for location-based
-   - triggerTime: For time-based, parse to ISO 8601 format. IMPORTANT CONTEXT:
+   - triggerTime: For time-based, convert to UTC and output in ISO 8601 format with Z suffix. IMPORTANT CONTEXT:
+     * Current date/time in user's timezone (${userTimezone || 'UTC'}): ${userTimezone ? new Date().toLocaleString('en-US', { timeZone: userTimezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/(\d+)\/(\d+)\/(\d+),?\s+(.*)/, '$3-$1-$2T$4') : new Date().toISOString()}
      * Current UTC date/time: ${new Date().toISOString()}
-     * User's timezone: ${userTimezone || 'UTC'}
-     * When the user says a time like "at 1pm" or "at 3pm", they mean in THEIR timezone (${userTimezone || 'UTC'}), NOT UTC.
-     * You MUST output the triggerTime in the user's LOCAL timezone as a naive datetime (no Z suffix, no offset). Example: "2026-02-08T13:00:00" for 1pm local.
-     * "tomorrow at 3pm" → tomorrow's date at 15:00:00 (local time, no Z suffix)
-     * "in 2 hours" → current local time + 2 hours (no Z suffix)
-     * "next Monday" → the coming Monday (no Z suffix)
+     * When the user says "at 3pm", they mean 3pm in ${userTimezone || 'UTC'}.
+     * You must CONVERT the user's local time to UTC and output with Z suffix.
+     * Example: If user is in America/Denver (UTC-7) and says "at 3pm" on 2026-02-08, output "2026-02-08T22:00:00Z" (3pm + 7 hours = 10pm UTC)
+     * "in 2 hours" → current UTC time + 2 hours with Z suffix
      * Always ensure the year is ${new Date().getFullYear()} or later, NEVER use past years
+     * ALWAYS include the Z suffix to indicate UTC
    - triggerLocationName: For location-based, the place name (e.g., "gym", "grocery store", "office", "home")
 
 Respond with JSON in this exact format: 

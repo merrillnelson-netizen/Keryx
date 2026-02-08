@@ -229,30 +229,6 @@ function formatAlertsForTelegram(alerts: Array<{
  * @param app - Express application instance
  * @returns HTTP server instance
  */
-function parseLocalTimeToUTC(localTimeStr: string, timezone?: string): Date | null {
-  try {
-    const cleaned = localTimeStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
-    
-    const naiveDate = new Date(cleaned);
-    if (isNaN(naiveDate.getTime())) return null;
-    
-    if (!timezone) {
-      return naiveDate;
-    }
-    
-    const targetDate = naiveDate;
-    const utcStr = targetDate.toLocaleString('en-US', { timeZone: 'UTC' });
-    const localStr = targetDate.toLocaleString('en-US', { timeZone: timezone });
-    const utcParsed = new Date(utcStr);
-    const localParsed = new Date(localStr);
-    const offsetMs = utcParsed.getTime() - localParsed.getTime();
-    
-    return new Date(targetDate.getTime() + offsetMs);
-  } catch {
-    return null;
-  }
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
   
   /**
@@ -610,9 +586,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
             
             if (extracted.reminderIntent.triggerType === 'time' && extracted.reminderIntent.triggerTime) {
-              const parsedTime = parseLocalTimeToUTC(extracted.reminderIntent.triggerTime, timezone);
+              let triggerTimeStr = extracted.reminderIntent.triggerTime;
+              if (!triggerTimeStr.endsWith('Z') && !triggerTimeStr.match(/[+-]\d{2}:\d{2}$/)) {
+                triggerTimeStr += 'Z';
+              }
+              const parsedTime = new Date(triggerTimeStr);
               
-              if (parsedTime && parsedTime > new Date()) {
+              if (!isNaN(parsedTime.getTime()) && parsedTime > new Date()) {
                 reminderData.triggerTime = parsedTime;
               } else {
                 const fallback = new Date();
