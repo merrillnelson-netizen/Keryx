@@ -229,6 +229,30 @@ function formatAlertsForTelegram(alerts: Array<{
  * @param app - Express application instance
  * @returns HTTP server instance
  */
+function parseLocalTimeToUTC(localTimeStr: string, timezone?: string): Date | null {
+  try {
+    const cleaned = localTimeStr.replace(/Z$/, '');
+    
+    if (!timezone) {
+      return new Date(cleaned + 'Z');
+    }
+    
+    const utcNow = new Date();
+    const utcStr = utcNow.toLocaleString('en-US', { timeZone: 'UTC' });
+    const localStr = utcNow.toLocaleString('en-US', { timeZone: timezone });
+    const utcDate = new Date(utcStr);
+    const localDate = new Date(localStr);
+    const offsetMs = utcDate.getTime() - localDate.getTime();
+    
+    const naiveDate = new Date(cleaned);
+    if (isNaN(naiveDate.getTime())) return null;
+    
+    return new Date(naiveDate.getTime() + offsetMs);
+  } catch {
+    return null;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   
   /**
@@ -459,7 +483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Extract metadata with AI (includes mood and people detection)
-      const extracted = await extractMetadata(memoryText);
+      const extracted = await extractMetadata(memoryText, timezone);
       
       // Use user-provided category or AI extraction
       const topicTag = userProvidedTag || extracted.topicTag;
@@ -586,14 +610,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
             
             if (extracted.reminderIntent.triggerType === 'time' && extracted.reminderIntent.triggerTime) {
-              const parsedTime = new Date(extracted.reminderIntent.triggerTime);
-              if (!isNaN(parsedTime.getTime()) && parsedTime > new Date()) {
+              const parsedTime = parseLocalTimeToUTC(extracted.reminderIntent.triggerTime, timezone);
+              
+              if (parsedTime && parsedTime > new Date()) {
                 reminderData.triggerTime = parsedTime;
               } else {
                 const fallback = new Date();
                 fallback.setMinutes(fallback.getMinutes() + 30);
                 reminderData.triggerTime = fallback;
-                console.warn(`AI returned invalid/past reminder time "${extracted.reminderIntent.triggerTime}", defaulting to 30min from now`);
+                console.warn(`AI returned invalid/past reminder time "${extracted.reminderIntent.triggerTime}" (tz: ${timezone}), defaulting to 30min from now`);
               }
             }
             if (extracted.reminderIntent.triggerType === 'location' && extracted.reminderIntent.triggerLocationName) {

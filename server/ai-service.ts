@@ -73,7 +73,7 @@ export interface DetectedCalendarEvent {
  * @param memoryText - Raw voice-to-text transcription
  * @returns Promise<ExtractedMetadata> - Topic tag and structured metadata
  */
-export async function extractMetadata(memoryText: string): Promise<ExtractedMetadata> {
+export async function extractMetadata(memoryText: string, userTimezone?: string): Promise<ExtractedMetadata> {
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -155,10 +155,14 @@ For food/meal-related entries, use these EXACT field names:
    If a reminder is detected, extract:
    - content: What to remind about (the action or task)
    - triggerType: "time" for time-based, "location" for location-based
-   - triggerTime: For time-based, parse to ISO 8601 format. IMPORTANT: The current date and time is ${new Date().toISOString()} (year ${new Date().getFullYear()}). Use this as your reference point:
-     * "tomorrow at 3pm" → tomorrow's date at 15:00
-     * "in 2 hours" → current time + 2 hours
-     * "next Monday" → the coming Monday
+   - triggerTime: For time-based, parse to ISO 8601 format. IMPORTANT CONTEXT:
+     * Current UTC date/time: ${new Date().toISOString()}
+     * User's timezone: ${userTimezone || 'UTC'}
+     * When the user says a time like "at 1pm" or "at 3pm", they mean in THEIR timezone (${userTimezone || 'UTC'}), NOT UTC.
+     * You MUST output the triggerTime in the user's LOCAL timezone as a naive datetime (no Z suffix, no offset). Example: "2026-02-08T13:00:00" for 1pm local.
+     * "tomorrow at 3pm" → tomorrow's date at 15:00:00 (local time, no Z suffix)
+     * "in 2 hours" → current local time + 2 hours (no Z suffix)
+     * "next Monday" → the coming Monday (no Z suffix)
      * Always ensure the year is ${new Date().getFullYear()} or later, NEVER use past years
    - triggerLocationName: For location-based, the place name (e.g., "gym", "grocery store", "office", "home")
 
