@@ -231,23 +231,23 @@ function formatAlertsForTelegram(alerts: Array<{
  */
 function parseLocalTimeToUTC(localTimeStr: string, timezone?: string): Date | null {
   try {
-    const cleaned = localTimeStr.replace(/Z$/, '');
-    
-    if (!timezone) {
-      return new Date(cleaned + 'Z');
-    }
-    
-    const utcNow = new Date();
-    const utcStr = utcNow.toLocaleString('en-US', { timeZone: 'UTC' });
-    const localStr = utcNow.toLocaleString('en-US', { timeZone: timezone });
-    const utcDate = new Date(utcStr);
-    const localDate = new Date(localStr);
-    const offsetMs = utcDate.getTime() - localDate.getTime();
+    const cleaned = localTimeStr.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
     
     const naiveDate = new Date(cleaned);
     if (isNaN(naiveDate.getTime())) return null;
     
-    return new Date(naiveDate.getTime() + offsetMs);
+    if (!timezone) {
+      return naiveDate;
+    }
+    
+    const targetDate = naiveDate;
+    const utcStr = targetDate.toLocaleString('en-US', { timeZone: 'UTC' });
+    const localStr = targetDate.toLocaleString('en-US', { timeZone: timezone });
+    const utcParsed = new Date(utcStr);
+    const localParsed = new Date(localStr);
+    const offsetMs = utcParsed.getTime() - localParsed.getTime();
+    
+    return new Date(targetDate.getTime() + offsetMs);
   } catch {
     return null;
   }
