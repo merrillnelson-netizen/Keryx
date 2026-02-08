@@ -155,10 +155,11 @@ For food/meal-related entries, use these EXACT field names:
    If a reminder is detected, extract:
    - content: What to remind about (the action or task)
    - triggerType: "time" for time-based, "location" for location-based
-   - triggerTime: For time-based, parse to ISO 8601 format. Use current date context intelligently:
+   - triggerTime: For time-based, parse to ISO 8601 format. IMPORTANT: The current date and time is ${new Date().toISOString()} (year ${new Date().getFullYear()}). Use this as your reference point:
      * "tomorrow at 3pm" → tomorrow's date at 15:00
      * "in 2 hours" → current time + 2 hours
      * "next Monday" → the coming Monday
+     * Always ensure the year is ${new Date().getFullYear()} or later, NEVER use past years
    - triggerLocationName: For location-based, the place name (e.g., "gym", "grocery store", "office", "home")
 
 Respond with JSON in this exact format: 

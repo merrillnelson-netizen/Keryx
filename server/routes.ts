@@ -586,7 +586,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
             
             if (extracted.reminderIntent.triggerType === 'time' && extracted.reminderIntent.triggerTime) {
-              reminderData.triggerTime = new Date(extracted.reminderIntent.triggerTime);
+              const parsedTime = new Date(extracted.reminderIntent.triggerTime);
+              if (!isNaN(parsedTime.getTime()) && parsedTime > new Date()) {
+                reminderData.triggerTime = parsedTime;
+              } else {
+                const fallback = new Date();
+                fallback.setMinutes(fallback.getMinutes() + 30);
+                reminderData.triggerTime = fallback;
+                console.warn(`AI returned invalid/past reminder time "${extracted.reminderIntent.triggerTime}", defaulting to 30min from now`);
+              }
             }
             if (extracted.reminderIntent.triggerType === 'location' && extracted.reminderIntent.triggerLocationName) {
               reminderData.triggerLocationName = extracted.reminderIntent.triggerLocationName;
