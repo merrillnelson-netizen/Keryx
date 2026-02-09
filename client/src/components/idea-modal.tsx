@@ -122,6 +122,8 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
   const [editingContent, setEditingContent] = useState<string | null>(null);
   const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const [activeTab, setActiveTab] = useState<'main' | 'chat'>('main');
+  const [pendingContentEdit, setPendingContentEdit] = useState<string | null>(null);
+  const [pendingListEdit, setPendingListEdit] = useState<Array<{text: string; isChecked: boolean}> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -149,6 +151,8 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       setEditingContent(null);
       setHasUnsavedContent(false);
       setActiveTab('main');
+      setPendingContentEdit(null);
+      setPendingListEdit(null);
     }
   }, [open]);
 
@@ -213,10 +217,16 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       if (!response.ok) throw new Error("Failed to send message");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas', ideaId] });
       queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
       setMessage("");
+      if (data.updatedContent !== undefined) {
+        setPendingContentEdit(data.updatedContent);
+      }
+      if (data.updatedListItems !== undefined) {
+        setPendingListEdit(data.updatedListItems);
+      }
     },
     onError: () => {
       toast({
@@ -805,6 +815,80 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                       <div className="flex justify-start">
                         <div className="bg-muted rounded-lg px-3 py-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
+                        </div>
+                      </div>
+                    )}
+                    {(pendingContentEdit !== null || pendingListEdit !== null) && (
+                      <div className="border border-primary/30 rounded-lg p-3 bg-primary/5 space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                          <Wand2 className="w-4 h-4" />
+                          AI has suggested changes
+                        </div>
+                        {pendingContentEdit !== null && (
+                          <div className="bg-background rounded border p-3 max-h-[200px] overflow-y-auto">
+                            <p className="text-sm whitespace-pre-wrap">{pendingContentEdit}</p>
+                          </div>
+                        )}
+                        {pendingListEdit !== null && (
+                          <div className="bg-background rounded border p-2 max-h-[200px] overflow-y-auto space-y-1">
+                            {pendingListEdit.map((item, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-sm py-1 px-2">
+                                <span className={cn(
+                                  "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0",
+                                  item.isChecked ? "bg-primary border-primary" : "border-muted-foreground/30"
+                                )}>
+                                  {item.isChecked && <CheckCircle2 className="w-3 h-3 text-primary-foreground" />}
+                                </span>
+                                <span className={item.isChecked ? "line-through text-muted-foreground" : ""}>{item.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="gap-1"
+                            onClick={() => {
+                              if (pendingContentEdit !== null) {
+                                updateContentMutation.mutate(pendingContentEdit);
+                                setEditingContent(pendingContentEdit);
+                                setPendingContentEdit(null);
+                              }
+                              if (pendingListEdit !== null) {
+                                const newItems = pendingListEdit.map((item, idx) => ({
+                                  id: crypto.randomUUID(),
+                                  text: item.text,
+                                  isChecked: item.isChecked,
+                                  order: idx,
+                                }));
+                                updateListItemsMutation.mutate(newItems);
+                                setPendingListEdit(null);
+                              }
+                              toast({
+                                title: "Changes applied",
+                                description: "AI edits have been saved",
+                              });
+                            }}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Apply Changes
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => {
+                              setPendingContentEdit(null);
+                              setPendingListEdit(null);
+                              toast({
+                                title: "Changes rejected",
+                                description: "Ask AI to try again if you'd like",
+                              });
+                            }}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            Reject
+                          </Button>
                         </div>
                       </div>
                     )}

@@ -3989,50 +3989,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ideaType = idea.type || 'idea';
       let systemPrompt: string;
       
+      const useStructuredEditing = ideaType === 'list' || ideaType === 'note' || ideaType === 'document';
+
       if (ideaType === 'list') {
         const listItems = (idea.listItems as Array<{id: string; text: string; isChecked: boolean}>) || [];
-        const uncheckedItems = listItems.filter(i => !i.isChecked).map(i => i.text);
-        const checkedItems = listItems.filter(i => i.isChecked).map(i => i.text);
+        const itemsJson = JSON.stringify(listItems.map(i => ({ text: i.text, isChecked: i.isChecked })));
         
         systemPrompt = `You are a helpful assistant for the user's list titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
 
-Current items to do: ${uncheckedItems.length > 0 ? uncheckedItems.join(', ') : 'none'}
-Completed items: ${checkedItems.length > 0 ? checkedItems.join(', ') : 'none'}
+Current list items (JSON): ${itemsJson}
 
-Your role is to:
-- Suggest additional items they might need based on context
-- Help organize or prioritize their list
-- Answer questions about items on the list
-- Suggest alternatives or substitutions
+IMPORTANT: You MUST always respond with valid JSON in this exact format:
+{
+  "message": "Your conversational response to the user",
+  "updatedListItems": null or [{"text": "item text", "isChecked": false}, ...]
+}
 
-Be concise and practical.`;
+Rules:
+- "message" is REQUIRED - your conversational reply explaining what you did or answering their question
+- "updatedListItems" should be the COMPLETE updated list when the user asks you to add, remove, reorder, edit, or modify items. Include ALL items (both existing and new). Preserve isChecked status of existing items.
+- Set "updatedListItems" to null when only answering questions or chatting without making changes
+- When adding items, add them to the existing list. When removing, exclude them. When reordering, change the order.
+- Be concise and practical. Always output valid JSON only, no markdown.`;
       } else if (ideaType === 'note') {
         const content = idea.content || '';
         systemPrompt = `You are a helpful assistant for the user's note titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
 
-Note content: ${content.substring(0, 2000)}${content.length > 2000 ? '...' : ''}
+Current note content:
+---
+${content.substring(0, 4000)}${content.length > 4000 ? '\n...(truncated)' : ''}
+---
 
-Your role is to:
-- Answer questions about the note content
-- Help summarize or clarify the note
-- Suggest improvements or additions
-- Help organize thoughts
+IMPORTANT: You MUST always respond with valid JSON in this exact format:
+{
+  "message": "Your conversational response to the user",
+  "updatedContent": null or "the full updated note content"
+}
 
-Be concise and helpful.`;
+Rules:
+- "message" is REQUIRED - your conversational reply explaining what you did or answering their question
+- "updatedContent" should contain the COMPLETE updated note content when the user asks you to edit, add to, reorganize, rewrite, or modify the note
+- Set "updatedContent" to null when only answering questions or chatting without making changes
+- When editing, return the FULL content (not just the changed parts)
+- Be concise and helpful. Always output valid JSON only, no markdown.`;
       } else if (ideaType === 'document') {
         const content = idea.content || '';
         systemPrompt = `You are a helpful writing assistant for the user's document titled "${idea.title}"${idea.description ? ` (${idea.description})` : ''}.
 
-Document content: ${content.substring(0, 3000)}${content.length > 3000 ? '...' : ''}
+Current document content:
+---
+${content.substring(0, 6000)}${content.length > 6000 ? '\n...(truncated)' : ''}
+---
 
-Your role is to:
-- Help improve the writing
-- Suggest structure and organization
-- Answer questions about the content
-- Help expand or refine sections
-- Provide feedback on clarity and flow
+IMPORTANT: You MUST always respond with valid JSON in this exact format:
+{
+  "message": "Your conversational response to the user",
+  "updatedContent": null or "the full updated document content"
+}
 
-Be constructive and supportive.`;
+Rules:
+- "message" is REQUIRED - your conversational reply explaining what you did or answering their question
+- "updatedContent" should contain the COMPLETE updated document content when the user asks you to edit, rewrite, restructure, expand, or modify the document
+- Set "updatedContent" to null when only answering questions, giving feedback, or chatting without making changes
+- When editing, return the FULL content (not just the changed parts)
+- Be constructive and supportive. Always output valid JSON only, no markdown.`;
       } else {
         systemPrompt = `You are a helpful brainstorming assistant helping the user develop their idea. 
 The idea is titled "${idea.title}"${idea.description ? ` and described as: ${idea.description}` : ''}.
@@ -4061,24 +4081,55 @@ Be encouraging but honest. Keep responses concise and actionable.`;
       const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
-        max_tokens: 1000,
+        max_tokens: useStructuredEditing ? 4000 : 1000,
         temperature: 0.7,
+        ...(useStructuredEditing ? { response_format: { type: 'json_object' as const } } : {}),
       });
       
-      const assistantContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
+      const rawContent = response.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
       
-      // Add assistant response to chat history
+      let displayMessage = rawContent;
+      let updatedContent: string | null = null;
+      let updatedListItems: Array<{text: string; isChecked: boolean}> | null = null;
+      
+      if (useStructuredEditing) {
+        try {
+          const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            displayMessage = parsed.message || rawContent;
+            if (parsed.updatedContent !== undefined && parsed.updatedContent !== null) {
+              updatedContent = parsed.updatedContent;
+            }
+            if (parsed.updatedListItems !== undefined && parsed.updatedListItems !== null && Array.isArray(parsed.updatedListItems)) {
+              updatedListItems = parsed.updatedListItems;
+            }
+          }
+        } catch {
+          displayMessage = rawContent;
+        }
+      }
+      
       const assistantMessage: IdeaChatMessage = {
         role: 'assistant',
-        content: assistantContent,
+        content: displayMessage,
         timestamp: new Date().toISOString(),
       };
       const finalIdea = await storage.addIdeaChatMessage(id, user.id, assistantMessage);
       
-      res.json({
+      const responseData: any = {
         message: assistantMessage,
         idea: finalIdea,
-      });
+      };
+      
+      if (updatedContent !== null) {
+        responseData.updatedContent = updatedContent;
+      }
+      if (updatedListItems !== null) {
+        responseData.updatedListItems = updatedListItems;
+      }
+      
+      res.json(responseData);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to chat about idea", error);
     }
