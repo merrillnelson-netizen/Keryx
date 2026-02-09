@@ -216,13 +216,13 @@ If no action is detected, respond with: { "detected": false }`,
 export async function getActionPolicy(
   userId: string, 
   actionType: string
-): Promise<{ policy: string; conditions?: any }> {
+): Promise<{ policy: string; conditions?: Record<string, unknown> }> {
   try {
     const pref = await storage.getAiActionPreference(userId, actionType);
     if (pref) {
       return { 
         policy: pref.policy, 
-        conditions: pref.autoApproveConditions 
+        conditions: pref.autoApproveConditions as Record<string, unknown> | undefined
       };
     }
     // Default policy: require confirmation for all actions

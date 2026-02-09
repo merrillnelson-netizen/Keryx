@@ -430,7 +430,7 @@ Current date for reference: ${new Date().toISOString()}`,
     const result = JSON.parse(response.choices[0].message.content || "{}");
     
     // Parse timestamp strings to Date objects if present
-    const timestampFilter: any = {};
+    const timestampFilter: { start?: Date; end?: Date } = {};
     if (result.structuredFilters?.timestampFilter?.start) {
       timestampFilter.start = new Date(result.structuredFilters.timestampFilter.start);
     }

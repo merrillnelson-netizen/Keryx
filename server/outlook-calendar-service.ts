@@ -229,7 +229,7 @@ export async function createOutlookCalendarEvent(
       return dateStr;
     };
     
-    const eventData: any = {
+    const eventData: Record<string, unknown> = {
       subject: title,
       start: {
         dateTime: formatLocalDateTime(startDateTime),

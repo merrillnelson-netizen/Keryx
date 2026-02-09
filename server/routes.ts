@@ -1,9 +1,9 @@
 import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type GoalMilestone, type Reminder } from "@shared/schema";
+import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type GoalMilestone, type Reminder } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, GoalPatternAlert } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, GoalPatternAlert, detectCalendarEvent } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -12,7 +12,6 @@ import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpc
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookMailConnected } from "./outlook-mail-service";
-import { detectCalendarEvent } from "./ai-service";
 import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries } from "./contextual-discoveries-service";
@@ -579,8 +578,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Auto-create reminder if detected in memory
           if (extracted.reminderIntent?.detected && extracted.reminderIntent.content) {
-            const reminderData: any = {
-              content: extracted.reminderIntent.content,
+            const reminderData: InsertReminder = {
+              content: extracted.reminderIntent.content!,
               triggerType: extracted.reminderIntent.triggerType || 'time',
               sourceMemoryId: logEntry.id,
             };
