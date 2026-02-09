@@ -236,38 +236,39 @@ export default function ShowcasePage() {
                 </div>
                 <div className="space-y-4 text-muted-foreground leading-relaxed">
                   <p>
-                    Keryx is named after the ancient Greek concept of a <strong className="text-foreground">"keryx"</strong> (pronounced keh-riks), 
-                    meaning <strong className="text-foreground">"herald"</strong> or <strong className="text-foreground">"messenger."</strong> In ancient Greece, 
-                    these messengers were crucial figures — trusted carriers of important news and announcements across cities, 
-                    battlefields, and diplomatic meetings.
+                    <em>Keryx,</em> derived from the ancient Greek term for <strong className="text-foreground">"herald"</strong> or <strong className="text-foreground">"messenger,"</strong> encapsulates 
+                    the timeless essence of communication and connection. In our fast-paced world, where information flows 
+                    at lightning speed, Keryx stands as a modern herald, bridging gaps and fostering relationships among its users.
                   </p>
                   <p>
-                    This role is closely associated with <strong className="text-foreground">Hermes</strong>, the Greek god known for 
-                    his speed, eloquence, and role as the divine messenger. The keryx served as a vital link in society, 
-                    transmitting messages during times of war, diplomacy, or significant civic events.
+                    In ancient Greece, messengers were crucial to society. They were the lifeblood of communication, delivering 
+                    vital news and announcements across city-states. This role is often associated with <strong className="text-foreground">Hermes</strong>, 
+                    the Greek god of speed and eloquence, who symbolizes the significance of swift and clear communication. Just as 
+                    Hermes carried messages across great distances, Keryx facilitates the seamless exchange of ideas and information 
+                    in our interconnected world.
                   </p>
                   <p>
-                    The messenger archetype represents the bridging of gaps between people, ideas, and cultures. Just as the 
-                    ancient keryx connected communities through communication, our Keryx connects the moments of your life — 
-                    capturing thoughts, carrying memories, and delivering insights that help you understand your own story.
+                    Keryx serves as a vital link in today's digital landscape, empowering individuals to communicate effectively 
+                    during critical moments — whether for collaboration, decision-making, or sharing important news. The app 
+                    emphasizes the importance of clarity and timeliness in communication, echoing the legacy of ancient messengers 
+                    whose words could change the course of history.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="glass-card rounded-2xl p-8 border border-white/10">
-                  <h3 className="text-xl font-bold text-foreground mb-4">The Modern Herald</h3>
+                  <h3 className="text-xl font-bold text-foreground mb-4">A Trusted Companion</h3>
                   <div className="space-y-4 text-muted-foreground leading-relaxed">
                     <p>
-                      Today, Keryx carries forward the herald's legacy into the digital age. Where the ancient keryx 
-                      carried spoken messages between cities, our Keryx carries your spoken thoughts into a structured, 
-                      searchable, intelligent system.
+                      Keryx is not just a tool; it is a trusted companion that enhances interactions, ensuring messages 
+                      are conveyed accurately and swiftly. In a world filled with noise and distractions, it cuts through 
+                      the clutter, allowing users to connect more meaningfully.
                     </p>
                     <p>
-                      <strong className="text-foreground">Kinetic Enterprise & Resource Yielding X-system</strong> — 
-                      the full name reflects the dynamic, productive, and forward-thinking nature of the platform. 
-                      It's kinetic because it's always in motion, always listening, always learning. It yields 
-                      resources — insights, connections, patterns — from the raw material of your daily life.
+                      Like the ancient keryx, the Keryx app fosters understanding and collaboration among diverse groups, 
+                      reminding us of the power of shared knowledge and experiences. It embodies the spirit of community, 
+                      where every message sent is a step toward greater connection.
                     </p>
                   </div>
                 </div>
@@ -275,13 +276,13 @@ export default function ShowcasePage() {
                 <div className="glass-card rounded-2xl p-6 border border-primary/20 bg-primary/5">
                   <div className="flex items-center gap-3 mb-3">
                     <Award className="w-6 h-6 text-primary" />
-                    <h4 className="font-semibold text-foreground">The Vision</h4>
+                    <h4 className="font-semibold text-foreground">The Legacy</h4>
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Keryx is designed to be the one app you reach for first — not to scroll, not to consume, but to 
-                    <strong className="text-foreground"> capture the moments that define you</strong>. 
-                    Every voice note, every thought, every idea — organized, understood, and ready to serve you 
-                    when you need it most.
+                    The legacy of Keryx urges us to embrace the art of communication in our everyday lives. In an age 
+                    dominated by technology, Keryx champions the principles of <strong className="text-foreground">clarity, empathy, and connection</strong>, 
+                    ensuring that every message resonates with purpose and intention. Just as the ancient keryx paved the way 
+                    for dialogue and understanding, the Keryx app is here to guide us in our modern journey of communication.
                   </p>
                 </div>
               </div>

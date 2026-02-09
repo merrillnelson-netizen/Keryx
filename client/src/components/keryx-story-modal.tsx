@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
-import { Scroll, MessageCircle, Globe, X } from "lucide-react";
+import { Scroll, MessageCircle, Globe, Users, X } from "lucide-react";
 
 interface KeryxStoryModalProps {
   children: React.ReactNode;
@@ -57,9 +57,10 @@ export function KeryxStoryModal({ children }: KeryxStoryModalProps) {
             <div className="space-y-2">
               <h3 className="font-semibold text-foreground">Ancient Origins</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Keryx is named after the ancient Greek concept of a "keryx," meaning "herald" or "messenger." 
-                In ancient Greece, messengers were crucial for communication, conveying important news and 
-                announcements across cities.
+                <em>Keryx,</em> derived from the ancient Greek term for "herald" or "messenger," encapsulates the 
+                timeless essence of communication and connection. In our fast-paced world, where information flows 
+                at lightning speed, Keryx stands as a modern herald, bridging gaps and fostering relationships 
+                among its users.
               </p>
             </div>
           </div>
@@ -71,9 +72,11 @@ export function KeryxStoryModal({ children }: KeryxStoryModalProps) {
             <div className="space-y-2">
               <h3 className="font-semibold text-foreground">Divine Connection</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This role is often associated with Hermes, the Greek god known for his speed and eloquence, 
-                symbolizing the significance of communication. Keryx served as a vital link in society, 
-                transmitting messages during times of war, diplomacy, or significant events.
+                In ancient Greece, messengers were the lifeblood of communication, delivering vital news and 
+                announcements across city-states. This role is often associated with Hermes, the Greek god of 
+                speed and eloquence, who symbolizes the significance of swift and clear communication. Just as 
+                Hermes carried messages across great distances, Keryx facilitates the seamless exchange of ideas 
+                and information in our interconnected world.
               </p>
             </div>
           </div>
@@ -83,12 +86,27 @@ export function KeryxStoryModal({ children }: KeryxStoryModalProps) {
               <Globe className="w-5 h-5 text-amber-400" />
             </div>
             <div className="space-y-2">
-              <h3 className="font-semibold text-foreground">Modern Legacy</h3>
+              <h3 className="font-semibold text-foreground">A Trusted Companion</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                The messenger represents the bridging of gaps between people, ideas, and cultures, 
-                aligning with our goals of fostering connection and sharing information. The legacy 
-                of Keryx reminds us of the ongoing importance of effective communication in our 
-                interconnected world.
+                Keryx is not just a tool; it is a trusted companion that enhances interactions, ensuring messages 
+                are conveyed accurately and swiftly. In a world filled with noise and distractions, it cuts through 
+                the clutter, allowing users to connect more meaningfully.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-amber-500/20 flex items-center justify-center">
+              <Users className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-semibold text-foreground">Cultural Legacy</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Like the ancient keryx, the Keryx app fosters understanding and collaboration among diverse groups, 
+                reminding us of the power of shared knowledge and experiences. It embodies the spirit of community, 
+                where every message sent is a step toward greater connection. The legacy of Keryx urges us to embrace 
+                the art of communication — championing clarity, empathy, and connection, ensuring that every message 
+                resonates with purpose and intention.
               </p>
             </div>
           </div>
