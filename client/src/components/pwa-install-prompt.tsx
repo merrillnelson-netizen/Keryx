@@ -9,8 +9,25 @@ interface PwaInstallPromptProps {
 
 export function PwaInstallPrompt({ variant = "banner" }: PwaInstallPromptProps) {
   const { canInstall, isInstalled, showIosInstructions, promptInstall } = usePwaInstall();
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    if (variant === "banner") {
+      const stored = localStorage.getItem("pwa-banner-dismissed");
+      if (stored) {
+        const dismissedAt = parseInt(stored, 10);
+        const sevenDays = 7 * 24 * 60 * 60 * 1000;
+        return Date.now() - dismissedAt < sevenDays;
+      }
+    }
+    return false;
+  });
   const [showIosGuide, setShowIosGuide] = useState(false);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    if (variant === "banner") {
+      localStorage.setItem("pwa-banner-dismissed", Date.now().toString());
+    }
+  };
 
   if (isInstalled || dismissed) return null;
 
@@ -124,7 +141,7 @@ export function PwaInstallPrompt({ variant = "banner" }: PwaInstallPromptProps) 
     <div className="fixed bottom-4 left-4 right-4 z-50 sm:left-auto sm:right-4 sm:max-w-sm animate-in slide-in-from-bottom-4 duration-500">
       <div className="bg-popover/95 backdrop-blur-xl border border-border rounded-2xl p-4 shadow-2xl">
         <button
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
         >
           <X className="w-4 h-4" />
