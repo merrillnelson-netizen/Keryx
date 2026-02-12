@@ -115,9 +115,15 @@ function SmsImportSection() {
         throw new Error(result.message || "Import failed");
       }
     } catch (error: any) {
+      let errorMsg = error.message || "Failed to import messages";
+      if (errorMsg.includes('413') || errorMsg.includes('too large') || errorMsg.includes('payload')) {
+        errorMsg = "File is too large. Try exporting a smaller date range from the SMS app.";
+      } else if (errorMsg.includes('timeout') || errorMsg.includes('network') || errorMsg.includes('Failed to fetch')) {
+        errorMsg = "Upload timed out — the file may be too large or your connection dropped. Try a smaller export.";
+      }
       toast({
         title: "Import Failed",
-        description: error.message || "Failed to import messages",
+        description: errorMsg,
         variant: "destructive",
       });
     } finally {
