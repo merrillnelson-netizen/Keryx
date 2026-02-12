@@ -180,11 +180,24 @@ function SmsImportSection() {
           <div className="p-3 rounded-lg bg-muted/30 border border-white/10">
             <p className="text-xs font-medium text-foreground mb-2">How to export your messages:</p>
             <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>Install "SMS Import / Export" from F-Droid or Google Play</li>
+              <li>
+                Install "SMS Import / Export" from{' '}
+                <a
+                  href="https://f-droid.org/en/packages/com.github.tmo1.sms_ie/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:text-primary/80"
+                >
+                  F-Droid (direct download)
+                </a>
+              </li>
               <li>Open the app and grant SMS permissions</li>
-              <li>Tap Export → choose ZIP format</li>
-              <li>Upload the exported file below</li>
+              <li>Tap Export → choose JSON (NDJSON) format</li>
+              <li>Upload the exported .zip or .ndjson file below</li>
             </ol>
+            <p className="text-[10px] text-muted-foreground/70 mt-1">
+              Not on Google Play. F-Droid is a trusted open-source app store for Android. You can also download the APK directly from the link above without installing F-Droid.
+            </p>
           </div>
 
           <div className="flex gap-2">
