@@ -6,6 +6,8 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import passport from "./auth";
 import { pool } from "./db";
+import { storage } from "./storage";
+import { processMessageBatch } from "./message-ai-service";
 
 /**
  * Validate required environment variables on startup
@@ -155,5 +157,33 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    setTimeout(async () => {
+      try {
+        const allUsers = await pool.query('SELECT DISTINCT user_id FROM messages WHERE ai_processed = false');
+        for (const row of allUsers.rows) {
+          const userId = row.user_id;
+          log(`Startup: processing unfinished messages for user ${userId.slice(0, 8)}...`);
+          let retries = 0;
+          while (retries < 3) {
+            const batch = await storage.getUnprocessedMessages(userId, 50);
+            if (batch.length === 0) break;
+            try {
+              await processMessageBatch(userId, batch);
+              retries = 0;
+            } catch {
+              retries++;
+              if (retries < 3) await new Promise(r => setTimeout(r, 5000 * retries));
+            }
+          }
+          await storage.invalidateAiCache(userId);
+        }
+        if (allUsers.rows.length > 0) {
+          log(`Startup: message catch-up complete for ${allUsers.rows.length} user(s)`);
+        }
+      } catch (err) {
+        console.error('Startup message processing catch-up failed:', err);
+      }
+    }, 10000);
   });
 })();

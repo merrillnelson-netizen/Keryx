@@ -5330,11 +5330,21 @@ Return ONLY the JSON array, no other text.`;
       if (result.newMessages > 0) {
         setImmediate(async () => {
           try {
-            const unprocessed = await storage.getUnprocessedMessages(user.id, 200);
-            if (unprocessed.length > 0) {
-              await processMessageBatch(user.id, unprocessed);
-              await storage.invalidateAiCache(user.id);
+            let retries = 0;
+            while (retries < 3) {
+              const unprocessed = await storage.getUnprocessedMessages(user.id, 50);
+              if (unprocessed.length === 0) break;
+              try {
+                await processMessageBatch(user.id, unprocessed);
+                retries = 0;
+              } catch (batchErr) {
+                retries++;
+                if (retries < 3) {
+                  await new Promise(r => setTimeout(r, 5000 * retries));
+                }
+              }
             }
+            await storage.invalidateAiCache(user.id);
           } catch (err) {
             console.error('Background message AI processing failed:', err);
           }
@@ -5432,6 +5442,16 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  app.get("/api/messages/processing-status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const status = await storage.getMessageProcessingStatus(user.id);
+      res.json(status);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch processing status", error);
+    }
+  });
+
   app.post("/api/messages/process-ai", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
@@ -5439,12 +5459,35 @@ Return ONLY the JSON array, no other text.`;
       const unprocessed = await storage.getUnprocessedMessages(user.id, limit);
 
       if (unprocessed.length === 0) {
-        return res.json({ processed: 0, message: "No unprocessed messages" });
+        return res.json({ processed: 0, remaining: 0, message: "No unprocessed messages" });
       }
 
       const processed = await processMessageBatch(user.id, unprocessed);
+      const updatedStatus = await storage.getMessageProcessingStatus(user.id);
 
-      res.json({ processed, total: unprocessed.length });
+      res.json({ processed, remaining: updatedStatus.unprocessed, total: updatedStatus.total });
+
+      if (updatedStatus.unprocessed > 0) {
+        setImmediate(async () => {
+          try {
+            let retries = 0;
+            while (retries < 3) {
+              const batch = await storage.getUnprocessedMessages(user.id, 50);
+              if (batch.length === 0) break;
+              try {
+                await processMessageBatch(user.id, batch);
+                retries = 0;
+              } catch {
+                retries++;
+                if (retries < 3) await new Promise(r => setTimeout(r, 5000 * retries));
+              }
+            }
+            await storage.invalidateAiCache(user.id);
+          } catch (err) {
+            console.error('Background message AI continuation failed:', err);
+          }
+        });
+      }
     } catch (error) {
       console.error('Message AI processing failed:', error);
       sendErrorResponse(res, 500, "Failed to process messages", error);

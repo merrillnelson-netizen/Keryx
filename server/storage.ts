@@ -176,6 +176,7 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
   createMessagesBatch(messages: InsertMessage[]): Promise<number>;
   getUnprocessedMessages(userId: string, limit?: number): Promise<Message[]>;
+  getMessageProcessingStatus(userId: string): Promise<{ total: number; processed: number; unprocessed: number }>;
   markMessagesProcessed(messageIds: string[], updates: Partial<InsertMessage>[]): Promise<void>;
   messageExistsByExternalId(userId: string, externalId: string, source: string): Promise<boolean>;
   searchMessages(userId: string, queryVector: number[], limit?: number): Promise<Array<Message & { similarity: number }>>;
@@ -2265,6 +2266,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(messages.userId, userId), eq(messages.aiProcessed, false)))
       .orderBy(messages.timestamp)
       .limit(limit);
+  }
+
+  async getMessageProcessingStatus(userId: string): Promise<{ total: number; processed: number; unprocessed: number }> {
+    const [result] = await db.select({
+      total: sql<number>`count(*)::int`,
+      processed: sql<number>`count(*) filter (where ${messages.aiProcessed} = true)::int`,
+      unprocessed: sql<number>`count(*) filter (where ${messages.aiProcessed} = false)::int`,
+    }).from(messages).where(eq(messages.userId, userId));
+    return result || { total: 0, processed: 0, unprocessed: 0 };
   }
 
   async markMessagesProcessed(messageIds: string[], updates: Partial<InsertMessage>[]): Promise<void> {

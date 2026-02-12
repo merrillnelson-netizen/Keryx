@@ -50,6 +50,12 @@ interface MessageStats {
   totalMessages: number;
 }
 
+interface ProcessingStatus {
+  total: number;
+  processed: number;
+  unprocessed: number;
+}
+
 function SmsImportSection() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
@@ -65,6 +71,16 @@ function SmsImportSection() {
   const { data: stats } = useQuery<MessageStats>({
     queryKey: ["/api/messages/stats"],
     staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: processingStatus } = useQuery<ProcessingStatus>({
+    queryKey: ["/api/messages/processing-status"],
+    staleTime: 10 * 1000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return (data && data.unprocessed > 0) || isProcessingAi ? 5000 : false;
+    },
+    enabled: (stats?.totalMessages ?? 0) > 0,
   });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,12 +171,16 @@ function SmsImportSection() {
     try {
       const response = await apiRequest("POST", "/api/messages/process-ai?limit=50");
       const result = await response.json();
+      const remaining = result.remaining || 0;
       toast({
-        title: "AI Processing Complete",
-        description: `Processed ${result.processed} messages with AI analysis.`,
+        title: remaining > 0 ? "AI Processing Started" : "AI Processing Complete",
+        description: remaining > 0
+          ? `Processed ${result.processed} messages. ${remaining} remaining — processing continues in background.`
+          : `Processed ${result.processed} messages with AI analysis.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/processing-status"] });
     } catch (error: any) {
       toast({
         title: "Processing Failed",
@@ -187,15 +207,43 @@ function SmsImportSection() {
         </p>
 
         {stats && stats.totalMessages > 0 && (
-          <div className="flex gap-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-            <div className="text-center">
-              <p className="text-lg font-bold text-green-400">{stats.totalConversations}</p>
-              <p className="text-xs text-muted-foreground">Conversations</p>
+          <div className="space-y-3">
+            <div className="flex gap-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="text-center">
+                <p className="text-lg font-bold text-green-400">{stats.totalConversations}</p>
+                <p className="text-xs text-muted-foreground">Conversations</p>
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-bold text-green-400">{stats.totalMessages.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Messages</p>
+              </div>
+              {processingStatus && (
+                <div className="text-center">
+                  <p className="text-lg font-bold text-green-400">
+                    {processingStatus.unprocessed === 0 ? '100%' : `${Math.round((processingStatus.processed / processingStatus.total) * 100)}%`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">AI Analyzed</p>
+                </div>
+              )}
             </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-green-400">{stats.totalMessages.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">Messages</p>
-            </div>
+
+            {processingStatus && processingStatus.unprocessed > 0 && (
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                  <span className="text-xs font-medium text-foreground">
+                    AI Processing: {processingStatus.processed} / {processingStatus.total}
+                  </span>
+                </div>
+                <Progress
+                  value={(processingStatus.processed / processingStatus.total) * 100}
+                  className="h-1.5"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {processingStatus.unprocessed} remaining — runs automatically in background
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -254,19 +302,20 @@ function SmsImportSection() {
               </Button>
             </label>
 
-            {stats && stats.totalMessages > 0 && (
+            {stats && stats.totalMessages > 0 && processingStatus && processingStatus.unprocessed > 0 && (
               <Button
                 variant="outline"
-                size="icon"
                 onClick={handleProcessAi}
                 disabled={isProcessingAi}
-                title="Process messages with AI"
+                title="Reprocess unprocessed messages with AI"
+                className="gap-2"
               >
                 {isProcessingAi ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Bot className="w-4 h-4" />
                 )}
+                <span className="text-xs">Process {processingStatus.unprocessed}</span>
               </Button>
             )}
           </div>

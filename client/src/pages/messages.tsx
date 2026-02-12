@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Brain, Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,15 @@ function ConversationList() {
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
     queryKey: ["/api/messages/stats"],
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: processingStatus } = useQuery<{ total: number; processed: number; unprocessed: number }>({
+    queryKey: ["/api/messages/processing-status"],
+    staleTime: 10 * 1000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data && data.unprocessed > 0 ? 5000 : false;
+    },
   });
 
   const { data: conversationsData, isLoading, error: conversationsError } = useQuery<{
@@ -135,6 +145,27 @@ function ConversationList() {
           </div>
         </div>
       </div>
+
+      {processingStatus && processingStatus.unprocessed > 0 && (
+        <div className="glass-card p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5">
+          <div className="flex items-center gap-3 mb-2">
+            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+            <span className="text-sm font-medium text-foreground">
+              AI Processing Messages
+            </span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {processingStatus.processed} / {processingStatus.total}
+            </span>
+          </div>
+          <Progress
+            value={processingStatus.total > 0 ? (processingStatus.processed / processingStatus.total) * 100 : 0}
+            className="h-2"
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            {processingStatus.unprocessed} messages remaining — analyzing topics, mood, and people
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         {conversations.map((convo) => (
