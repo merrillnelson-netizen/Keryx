@@ -28,7 +28,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: Includes tables for `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals`, `reminders`.
+- **Schema**: Includes tables for `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals`, `reminders`, `messageConversations`, `messages`, `messageImports`.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Performance Optimizations
@@ -65,6 +65,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Web Push Notifications**: For briefings, alerts, and approvals, handled by a service worker.
 - **PWA Support**: Installable as a Progressive Web App with manifest.json, app icons (72-512px), service worker caching, and install prompts on landing page, settings, and global banner. iOS instructions included.
 - **Life Purpose Suggestion**: AI detects existential themes and suggests a companion app.
+- **Text Message Integration**: Import SMS/MMS/RCS messages via SMS Import/Export Android app (NDJSON/ZIP format), AI-powered conversation analysis (topics, mood, importance, people), conversation browsing with chat bubble UI, deduplication across imports, message context feeds into morning briefings. Key files: `server/sms-import-service.ts`, `server/message-ai-service.ts`, `client/src/pages/messages.tsx`.
 
 ### Security Measures
 - **Authentication**: All API routes require session authentication.
