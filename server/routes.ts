@@ -17,6 +17,8 @@ import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries } from "./contextual-discoveries-service";
 import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
 import { isPushConfigured, getVapidPublicKey, sendPushNotification, sendPushToAllUserDevices } from "./push-service";
+import { parseAndImportNDJSON } from "./sms-import-service";
+import { processMessageBatch } from "./message-ai-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -5213,7 +5215,7 @@ Return ONLY the JSON array, no other text.`;
         return res.status(400).json({ message: "No file content provided" });
       }
 
-      const { parseAndImportNDJSON } = await import('./sms-import-service');
+      // parseAndImportNDJSON is statically imported at top of file
       const batchId = `sms-import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       const importRecord = await storage.createMessageImport({
@@ -5332,7 +5334,6 @@ Return ONLY the JSON array, no other text.`;
         return res.json({ processed: 0, message: "No unprocessed messages" });
       }
 
-      const { processMessageBatch } = await import('./message-ai-service');
       const processed = await processMessageBatch(user.id, unprocessed);
 
       res.json({ processed, total: unprocessed.length });
