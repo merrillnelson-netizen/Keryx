@@ -5207,6 +5207,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   app.post("/api/messages/import", requireAuth, express.json({ limit: '100mb' }), async (req, res) => {
+    let importRecord: any = null;
     try {
       const user = req.user as User;
       const { fileContent, fileName } = req.body;
@@ -5215,10 +5216,9 @@ Return ONLY the JSON array, no other text.`;
         return res.status(400).json({ message: "No file content provided" });
       }
 
-      // parseAndImportNDJSON is statically imported at top of file
       const batchId = `sms-import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      const importRecord = await storage.createMessageImport({
+      importRecord = await storage.createMessageImport({
         userId: user.id,
         batchId,
         source: 'sms_import',
@@ -5245,9 +5245,22 @@ Return ONLY the JSON array, no other text.`;
         batchId,
         ...result,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('SMS import failed:', error);
-      sendErrorResponse(res, 500, "Failed to import messages", error);
+      try {
+        const user = req.user as User;
+        if (importRecord && user) {
+          await storage.updateMessageImport(importRecord.id, user.id, {
+            status: 'failed',
+            completedAt: new Date(),
+            errorMessage: error.message || 'Unknown error',
+          });
+        }
+      } catch {}
+      const userMessage = error.message?.includes('format') || error.message?.includes('parse') || error.message?.includes('XML')
+        ? error.message
+        : "Failed to import messages. Check the file format — export as JSON (NDJSON) from the SMS app.";
+      res.status(500).json({ message: userMessage });
     }
   });
 

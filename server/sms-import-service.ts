@@ -56,14 +56,46 @@ export async function parseAndImportNDJSON(
     latestTimestamp: Date | null;
   }>();
 
-  const lines = fileContent.split('\n').filter(line => line.trim().length > 0);
+  let entries: SmsExportEntry[] = [];
+
+  const trimmed = fileContent.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      entries = JSON.parse(trimmed);
+    } catch (e) {
+      console.error('[SMS Import] Failed to parse as JSON array, trying NDJSON:', e);
+      entries = [];
+    }
+  }
+
+  if (entries.length === 0 && !trimmed.startsWith('[')) {
+    const lines = trimmed.split('\n').filter(line => line.trim().length > 0);
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line.trim());
+        if (Array.isArray(parsed)) {
+          entries.push(...parsed);
+        } else {
+          entries.push(parsed);
+        }
+      } catch {
+        result.errors++;
+      }
+    }
+  }
+
+  if (entries.length === 0) {
+    if (trimmed.startsWith('<') || trimmed.startsWith('<?xml')) {
+      throw new Error("XML format detected. Please re-export using JSON (NDJSON) format in the SMS Import / Export app.");
+    }
+    throw new Error("Could not parse the file. Make sure you export as JSON (NDJSON) format from the SMS Import / Export app.");
+  }
 
   let minDate: Date | null = null;
   let maxDate: Date | null = null;
 
-  for (const line of lines) {
+  for (const entry of entries) {
     try {
-      const entry: SmsExportEntry = JSON.parse(line);
       result.totalParsed++;
 
       let body = entry.body || '';
