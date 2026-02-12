@@ -126,9 +126,26 @@ export async function parseAndImportNDJSON(
       }
 
       if (entry.date) {
-        timestamp = new Date(entry.date);
+        const rawDate = typeof entry.date === 'string' ? parseInt(entry.date, 10) : entry.date;
+        if (isNaN(rawDate)) continue;
+        timestamp = new Date(rawDate);
+        if (isNaN(timestamp.getTime())) continue;
         if (timestamp.getFullYear() < 2000) {
-          timestamp = new Date(entry.date * 1000);
+          timestamp = new Date(rawDate * 1000);
+        }
+        if (isNaN(timestamp.getTime()) || timestamp.getFullYear() < 2000 || timestamp.getFullYear() > 2100) {
+          continue;
+        }
+      } else if (entry.date_sent) {
+        const rawDate = typeof entry.date_sent === 'string' ? parseInt(entry.date_sent, 10) : entry.date_sent;
+        if (isNaN(rawDate)) continue;
+        timestamp = new Date(rawDate);
+        if (isNaN(timestamp.getTime())) continue;
+        if (timestamp.getFullYear() < 2000) {
+          timestamp = new Date(rawDate * 1000);
+        }
+        if (isNaN(timestamp.getTime()) || timestamp.getFullYear() < 2000 || timestamp.getFullYear() > 2100) {
+          continue;
         }
       } else {
         continue;
@@ -193,13 +210,16 @@ export async function parseAndImportNDJSON(
   const convEntries = Array.from(conversationMap.values());
   for (const convData of convEntries) {
     try {
+      const safeLastMessageAt = convData.latestTimestamp && !isNaN(convData.latestTimestamp.getTime())
+        ? convData.latestTimestamp
+        : new Date();
       const conversation = await storage.upsertMessageConversation({
         userId,
         contactAddress: convData.contactAddress,
         contactName: convData.contactName,
         platform: convData.platform,
         threadId: convData.threadId,
-        lastMessageAt: convData.latestTimestamp,
+        lastMessageAt: safeLastMessageAt,
         messageCount: 0,
         unprocessedCount: 0,
       });
@@ -238,7 +258,7 @@ export async function parseAndImportNDJSON(
           contactName: convData.contactName,
           platform: convData.platform,
           threadId: convData.threadId,
-          lastMessageAt: convData.latestTimestamp,
+          lastMessageAt: safeLastMessageAt,
           messageCount: inserted,
           unprocessedCount: inserted,
         });
@@ -251,7 +271,7 @@ export async function parseAndImportNDJSON(
     }
   }
 
-  if (minDate && maxDate) {
+  if (minDate && maxDate && !isNaN(minDate.getTime()) && !isNaN(maxDate.getTime())) {
     result.dateRange = {
       start: minDate.toISOString(),
       end: maxDate.toISOString(),
