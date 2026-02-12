@@ -59,17 +59,27 @@ export async function parseAndImportNDJSON(
   let entries: SmsExportEntry[] = [];
 
   const trimmed = fileContent.trim();
+  console.log(`[SMS Import] File length: ${fileContent.length}, first 200 chars: ${trimmed.substring(0, 200)}`);
+
+  if (trimmed.startsWith('<') || trimmed.startsWith('<?xml')) {
+    throw new Error("XML format detected. Please re-export using JSON (NDJSON) format in the SMS Import / Export app.");
+  }
+
   if (trimmed.startsWith('[')) {
     try {
-      entries = JSON.parse(trimmed);
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        entries = parsed;
+        console.log(`[SMS Import] Parsed as JSON array: ${entries.length} entries`);
+      }
     } catch (e) {
       console.error('[SMS Import] Failed to parse as JSON array, trying NDJSON:', e);
-      entries = [];
     }
   }
 
-  if (entries.length === 0 && !trimmed.startsWith('[')) {
+  if (entries.length === 0) {
     const lines = trimmed.split('\n').filter(line => line.trim().length > 0);
+    console.log(`[SMS Import] Trying NDJSON: ${lines.length} lines, first line starts with: ${lines[0]?.substring(0, 100)}`);
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line.trim());
@@ -82,14 +92,14 @@ export async function parseAndImportNDJSON(
         result.errors++;
       }
     }
+    console.log(`[SMS Import] NDJSON parsed: ${entries.length} entries, ${result.errors} errors`);
   }
 
   if (entries.length === 0) {
-    if (trimmed.startsWith('<') || trimmed.startsWith('<?xml')) {
-      throw new Error("XML format detected. Please re-export using JSON (NDJSON) format in the SMS Import / Export app.");
-    }
-    throw new Error("Could not parse the file. Make sure you export as JSON (NDJSON) format from the SMS Import / Export app.");
+    throw new Error(`Could not parse the file (length: ${fileContent.length}, starts with: "${trimmed.substring(0, 50)}"). Make sure you export as JSON (NDJSON) format from the SMS Import / Export app.`);
   }
+
+  console.log(`[SMS Import] Processing ${entries.length} entries, first entry keys: ${Object.keys(entries[0] || {}).join(', ')}`);
 
   let minDate: Date | null = null;
   let maxDate: Date | null = null;

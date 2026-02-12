@@ -82,16 +82,29 @@ function SmsImportSection() {
         const { BlobReader, ZipReader, TextWriter } = await import('@zip.js/zip.js');
         const reader = new ZipReader(new BlobReader(file));
         const entries = await reader.getEntries();
-        const ndjsonEntry = entries.find((entry: any) => entry.filename.endsWith('.ndjson') || entry.filename.endsWith('.json'));
-        if (!ndjsonEntry) {
-          throw new Error("No .ndjson or .json file found in ZIP archive");
+        const dataEntry = entries.find((entry: any) =>
+          !entry.directory && (
+            entry.filename.endsWith('.ndjson') ||
+            entry.filename.endsWith('.json') ||
+            entry.filename.endsWith('.txt')
+          )
+        ) || entries.find((entry: any) => !entry.directory);
+        if (!dataEntry) {
+          throw new Error("No data file found in ZIP archive. Files found: " + entries.map((e: any) => e.filename).join(', '));
         }
-        if ('getData' in ndjsonEntry && typeof ndjsonEntry.getData === 'function') {
-          fileContent = await (ndjsonEntry as any).getData(new TextWriter());
+        if ('getData' in dataEntry && typeof dataEntry.getData === 'function') {
+          fileContent = await (dataEntry as any).getData(new TextWriter());
+        }
+        if (!fileContent) {
+          throw new Error("Could not extract file content from ZIP. File: " + (dataEntry as any).filename);
         }
         await reader.close();
       } else {
         fileContent = await file.text();
+      }
+
+      if (!fileContent || fileContent.trim().length === 0) {
+        throw new Error("File appears to be empty. Please check your export file.");
       }
 
       setImportProgress("Uploading and importing messages...");
@@ -116,6 +129,10 @@ function SmsImportSection() {
       }
     } catch (error: any) {
       let errorMsg = error.message || "Failed to import messages";
+      const jsonMatch = errorMsg.match(/\{.*"message"\s*:\s*"([^"]+)"/);
+      if (jsonMatch) {
+        errorMsg = jsonMatch[1];
+      }
       if (errorMsg.includes('413') || errorMsg.includes('too large') || errorMsg.includes('payload')) {
         errorMsg = "File is too large. Try exporting a smaller date range from the SMS app.";
       } else if (errorMsg.includes('timeout') || errorMsg.includes('network') || errorMsg.includes('Failed to fetch')) {
