@@ -2253,7 +2253,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (recentMsgs.length === 0) return undefined;
           const processed = recentMsgs.filter(m => m.aiProcessed && m.body);
           if (processed.length === 0) return undefined;
-          const convIds = [...new Set(processed.map(m => m.conversationId))];
+          const convIds = Array.from(new Set(processed.map(m => m.conversationId)));
           const convNames = new Map<string, string>();
           for (const cid of convIds) {
             const conv = await storage.getMessageConversation(cid, user.id);
@@ -3654,10 +3654,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // This runs in the background so we can respond immediately
       (async () => {
         try {
-          const syncResult = await plaidService.syncTransactions(user.id, result.itemId);
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`Auto-synced ${syncResult.added} transactions for new connection ${result.itemId}`);
-          }
+          await plaidService.syncTransactions(user.id, result.itemId);
         } catch (syncError) {
           console.error("Auto-sync failed (transactions may not be ready yet):", syncError instanceof Error ? syncError.message : syncError);
         }
@@ -4890,10 +4887,6 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 400, "Locations array is required");
       }
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Location Import] Received ${locations.length} pre-parsed locations from client`);
-      }
-      
       // Dynamic import of location service
       const { clusterLocations, detectFrequentPlaces } = await import('./location-service');
       
@@ -4913,9 +4906,6 @@ Return ONLY the JSON array, no other text.`;
       
       // Insert in batches
       const insertedCount = await storage.createLocationHistoryBatch(locationsToInsert);
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[Location Import] Inserted ${insertedCount} locations`);
-      }
       
       // Fetch all locations to detect patterns
       const allLocations = await storage.getLocationHistory(user.id, 5000);

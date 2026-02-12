@@ -41,9 +41,10 @@ function ConversationList() {
 
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
     queryKey: ["/api/messages/stats"],
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: conversationsData, isLoading } = useQuery<{
+  const { data: conversationsData, isLoading, error: conversationsError } = useQuery<{
     conversations: MessageConversation[];
     total: number;
   }>({
@@ -55,6 +56,7 @@ function ConversationList() {
       if (!res.ok) throw new Error("Failed to fetch conversations");
       return res.json();
     },
+    staleTime: 2 * 60 * 1000,
   });
 
   const conversations = conversationsData?.conversations || [];
@@ -63,11 +65,23 @@ function ConversationList() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className="flex items-center justify-center h-96" role="status">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" aria-hidden="true"></div>
           <p className="mt-4 text-muted-foreground">Loading conversations...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (conversationsError) {
+    return (
+      <div className="glass-card p-12 rounded-2xl text-center" role="alert">
+        <MessageCircle className="w-16 h-16 text-destructive mx-auto mb-4 opacity-50" aria-hidden="true" />
+        <h3 className="text-lg font-medium text-foreground mb-2">Failed to load conversations</h3>
+        <p className="text-muted-foreground">
+          {conversationsError instanceof Error ? conversationsError.message : "An unexpected error occurred."}
+        </p>
       </div>
     );
   }
@@ -196,9 +210,10 @@ function ThreadView() {
       return res.json();
     },
     enabled: !!conversationId,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const { data: messagesData, isLoading } = useQuery<{
+  const { data: messagesData, isLoading, error: messagesError } = useQuery<{
     messages: Message[];
     total: number;
   }>({
@@ -212,6 +227,7 @@ function ThreadView() {
       return res.json();
     },
     enabled: !!conversationId,
+    staleTime: 2 * 60 * 1000,
   });
 
   const messages = messagesData?.messages || [];
@@ -228,8 +244,9 @@ function ThreadView() {
             size="sm"
             className="p-2 hover:bg-white/10"
             onClick={() => setLocation("/messages")}
+            aria-label="Back to conversations"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </Button>
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
             <User className="w-5 h-5 text-white" />
@@ -246,11 +263,19 @@ function ThreadView() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64" role="status">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" aria-hidden="true"></div>
             <p className="mt-4 text-muted-foreground">Loading messages...</p>
           </div>
+        </div>
+      ) : messagesError ? (
+        <div className="glass-card p-8 rounded-2xl text-center" role="alert">
+          <MessageCircle className="w-12 h-12 text-destructive mx-auto mb-3 opacity-50" aria-hidden="true" />
+          <h3 className="text-lg font-medium text-foreground mb-2">Failed to load messages</h3>
+          <p className="text-muted-foreground">
+            {messagesError instanceof Error ? messagesError.message : "An unexpected error occurred."}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">

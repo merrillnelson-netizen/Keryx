@@ -220,7 +220,7 @@ export async function getRecentEmails(maxResults: number = 10): Promise<EmailMes
   } catch (error: any) {
     if (error?.status === 403 || error?.code === 403 || error?.message?.includes('Insufficient Permission')) {
       if (!gmailReadPermissionWarned) {
-        console.log('[Gmail] Read access not available (send-only permissions). Using Outlook Mail for email features.');
+        console.info('[Gmail] Read access not available (send-only permissions). Using Outlook Mail for email features.');
         gmailReadPermissionWarned = true;
       }
       return [];

@@ -383,10 +383,6 @@ export async function searchForDiscoveries(
     
     for (const searchQuery of searchQueries.slice(0, 2)) {
       try {
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`Tavily search: "${searchQuery}" for insight: ${insight.summary.slice(0, 50)}`);
-        }
-        
         const response = await tvly.search(searchQuery, {
           max_results: 2,
           search_depth: "basic",
@@ -564,10 +560,6 @@ export async function getContextualDiscoveries(
   activeGoals?: ExtendedGoal[]
 ): Promise<DiscoveriesResponse> {
   const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData, locationContext, activeGoals);
-  
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`Extracted ${insights.length} high-quality insights (filtered by confidence >= 0.7)`);
-  }
   
   // If no high-quality insights, return empty response (intentional - no filler content)
   if (insights.length === 0) {

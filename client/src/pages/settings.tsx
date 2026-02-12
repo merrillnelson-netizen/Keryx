@@ -86,8 +86,8 @@ function SmsImportSection() {
         if (!ndjsonEntry) {
           throw new Error("No .ndjson or .json file found in ZIP archive");
         }
-        if (ndjsonEntry.getData) {
-          fileContent = await ndjsonEntry.getData(new TextWriter());
+        if ('getData' in ndjsonEntry && typeof ndjsonEntry.getData === 'function') {
+          fileContent = await (ndjsonEntry as any).getData(new TextWriter());
         }
         await reader.close();
       } else {

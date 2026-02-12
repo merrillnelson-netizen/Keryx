@@ -1,7 +1,5 @@
 import { storage } from "./storage";
-import type { InsertMessage, InsertMessageConversation } from "@shared/schema";
-import { Readable } from "stream";
-import { createInterface } from "readline";
+import type { InsertMessage } from "@shared/schema";
 
 interface SmsExportEntry {
   _id?: number;
@@ -152,58 +150,63 @@ export async function parseAndImportNDJSON(
 
   const convEntries = Array.from(conversationMap.values());
   for (const convData of convEntries) {
-    const conversation = await storage.upsertMessageConversation({
-      userId,
-      contactAddress: convData.contactAddress,
-      contactName: convData.contactName,
-      platform: convData.platform,
-      threadId: convData.threadId,
-      lastMessageAt: convData.latestTimestamp,
-      messageCount: 0,
-      unprocessedCount: 0,
-    });
-
-    const existingCheck = new Set<string>();
-    const batchSize = 100;
-    for (let i = 0; i < convData.messages.length; i += batchSize) {
-      const chunk = convData.messages.slice(i, i + batchSize);
-      const externalIds = chunk.map((m: InsertMessage) => m.externalId).filter(Boolean) as string[];
-
-      for (const eid of externalIds) {
-        const exists = await storage.messageExistsByExternalId(userId, eid, 'sms_import');
-        if (exists) existingCheck.add(eid);
-      }
-    }
-
-    const newMessages: InsertMessage[] = [];
-    for (const msg of convData.messages) {
-      if (msg.externalId && existingCheck.has(msg.externalId)) {
-        result.duplicates++;
-      } else {
-        newMessages.push({
-          ...msg,
-          conversationId: conversation.id,
-        });
-      }
-    }
-
-    if (newMessages.length > 0) {
-      const inserted = await storage.createMessagesBatch(newMessages);
-      result.newMessages += inserted;
-
-      await storage.upsertMessageConversation({
+    try {
+      const conversation = await storage.upsertMessageConversation({
         userId,
         contactAddress: convData.contactAddress,
         contactName: convData.contactName,
         platform: convData.platform,
         threadId: convData.threadId,
         lastMessageAt: convData.latestTimestamp,
-        messageCount: inserted,
-        unprocessedCount: inserted,
+        messageCount: 0,
+        unprocessedCount: 0,
       });
-    }
 
-    result.conversations++;
+      const existingCheck = new Set<string>();
+      const batchSize = 100;
+      for (let i = 0; i < convData.messages.length; i += batchSize) {
+        const chunk = convData.messages.slice(i, i + batchSize);
+        const externalIds = chunk.map((m: InsertMessage) => m.externalId).filter(Boolean) as string[];
+
+        for (const eid of externalIds) {
+          const exists = await storage.messageExistsByExternalId(userId, eid, 'sms_import');
+          if (exists) existingCheck.add(eid);
+        }
+      }
+
+      const newMessages: InsertMessage[] = [];
+      for (const msg of convData.messages) {
+        if (msg.externalId && existingCheck.has(msg.externalId)) {
+          result.duplicates++;
+        } else {
+          newMessages.push({
+            ...msg,
+            conversationId: conversation.id,
+          });
+        }
+      }
+
+      if (newMessages.length > 0) {
+        const inserted = await storage.createMessagesBatch(newMessages);
+        result.newMessages += inserted;
+
+        await storage.upsertMessageConversation({
+          userId,
+          contactAddress: convData.contactAddress,
+          contactName: convData.contactName,
+          platform: convData.platform,
+          threadId: convData.threadId,
+          lastMessageAt: convData.latestTimestamp,
+          messageCount: inserted,
+          unprocessedCount: inserted,
+        });
+      }
+
+      result.conversations++;
+    } catch (error) {
+      console.error(`Failed to process conversation for ${convData.contactAddress}:`, error);
+      result.errors += convData.messages.length;
+    }
   }
 
   if (minDate && maxDate) {
