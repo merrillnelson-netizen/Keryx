@@ -2509,19 +2509,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch { return []; }
       };
 
-      const [emailContext, calendarEvents, financialSummary, locationContext, activeGoals] = await Promise.all([
-        fetchEmails(), fetchCalendar(), fetchFinancial(), fetchLocationContext(), fetchGoals()
+      const fetchRecentMessages = async (): Promise<string | undefined> => {
+        try {
+          const recentMsgs = await storage.getRecentMessages(user.id, 7, 100);
+          const processed = recentMsgs.filter(m => m.aiProcessed && m.body);
+          if (processed.length === 0) return undefined;
+          const convIds = Array.from(new Set(processed.map(m => m.conversationId)));
+          const convNames = new Map<string, string>();
+          for (const cid of convIds) {
+            const conv = await storage.getMessageConversation(cid, user.id);
+            if (conv) convNames.set(cid, conv.contactName || conv.contactAddress);
+          }
+          const grouped = new Map<string, typeof processed>();
+          for (const msg of processed) {
+            const existing = grouped.get(msg.conversationId) || [];
+            existing.push(msg);
+            grouped.set(msg.conversationId, existing);
+          }
+          const summaries: string[] = [];
+          const entries = Array.from(grouped.entries());
+          for (const [cid, msgs] of entries) {
+            const contact = convNames.get(cid) || 'Unknown';
+            const topMsgs = msgs.slice(0, 5);
+            const lines = topMsgs.map(m => {
+              const dir = m.direction === 'sent' ? 'User' : contact;
+              return `  ${dir}: "${m.body}"`;
+            }).join('\n');
+            summaries.push(`Conversation with ${contact} (${msgs.length} messages, mood: ${msgs[0].mood || 'neutral'}):\n${lines}`);
+          }
+          return summaries.slice(0, 5).join('\n\n');
+        } catch { return undefined; }
+      };
+
+      const [emailContext, calendarEvents, financialSummary, locationContext, activeGoals, messageContext] = await Promise.all([
+        fetchEmails(), fetchCalendar(), fetchFinancial(), fetchLocationContext(), fetchGoals(), fetchRecentMessages()
       ]);
       
-      const newsFeed = await generatePersonalNewsFeed(
-        recentMemories.map(m => ({
+      const insightMemories = recentMemories.map(m => ({
           memoryText: m.memoryText!,
           mood: m.mood || undefined,
           moodScore: m.moodScore || undefined,
           timestamp: m.timestamp!,
           topicTag: m.topicTag!,
           detectedPeople: m.detectedPeople || undefined,
-        })),
+      }));
+
+      if (messageContext) {
+        insightMemories.push({
+          memoryText: `[TEXT MESSAGE SUMMARY]\n${messageContext}`,
+          mood: undefined,
+          moodScore: undefined,
+          timestamp: new Date(),
+          topicTag: 'Social',
+          detectedPeople: undefined,
+        });
+      }
+
+      const newsFeed = await generatePersonalNewsFeed(
+        insightMemories,
         calendarEvents.length > 0 ? calendarEvents : undefined,
         emailContext.length > 0 ? emailContext : undefined,
         financialSummary,
@@ -2830,11 +2875,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       
-      // Use light version to avoid fetching large embedding vectors
-      const recentMemories = await storage.getRecentLogEntriesLight(user.id, days, 100);
-      
-      const alerts = await detectPatternAlerts(
-        recentMemories
+      const [recentMemories, recentMsgs] = await Promise.all([
+        storage.getRecentLogEntriesLight(user.id, days, 100),
+        storage.getRecentMessages(user.id, days, 100),
+      ]);
+
+      const alertMemories = recentMemories
           .filter(m => m.memoryText && m.timestamp && m.topicTag)
           .map((m) => ({
             memoryText: m.memoryText!,
@@ -2842,8 +2888,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
             moodScore: m.moodScore || undefined,
             timestamp: m.timestamp!,
             topicTag: m.topicTag!,
-          }))
-      );
+          }));
+
+      const processedMsgs = recentMsgs.filter(m => m.aiProcessed && m.body);
+      if (processedMsgs.length > 0) {
+        const convIds = Array.from(new Set(processedMsgs.map(m => m.conversationId)));
+        const convNames = new Map<string, string>();
+        for (const cid of convIds) {
+          try {
+            const conv = await storage.getMessageConversation(cid, user.id);
+            if (conv) convNames.set(cid, conv.contactName || conv.contactAddress);
+          } catch {}
+        }
+        const grouped = new Map<string, typeof processedMsgs>();
+        for (const msg of processedMsgs) {
+          const existing = grouped.get(msg.conversationId) || [];
+          existing.push(msg);
+          grouped.set(msg.conversationId, existing);
+        }
+        const gEntries = Array.from(grouped.entries());
+        for (const [cid, msgs] of gEntries.slice(0, 5)) {
+          const contact = convNames.get(cid) || 'Unknown';
+          const topMsgs = msgs.slice(0, 3);
+          const lines = topMsgs.map(m => {
+            const dir = m.direction === 'sent' ? 'User' : contact;
+            return `${dir}: "${m.body}"`;
+          }).join('\n');
+          alertMemories.push({
+            memoryText: `[Text conversation with ${contact}]\n${lines}`,
+            mood: msgs[0].mood || undefined,
+            moodScore: msgs[0].moodScore || undefined,
+            timestamp: msgs[0].timestamp,
+            topicTag: msgs[0].topicTag || 'Social',
+          });
+        }
+      }
+      
+      const alerts = await detectPatternAlerts(alertMemories);
 
       // Cache the result (30 minute TTL)
       const memoriesHash = recentMemories.filter(m => m.id).map(m => m.id).join(',');
@@ -5245,6 +5326,20 @@ Return ONLY the JSON array, no other text.`;
         batchId,
         ...result,
       });
+
+      if (result.newMessages > 0) {
+        setImmediate(async () => {
+          try {
+            const unprocessed = await storage.getUnprocessedMessages(user.id, 200);
+            if (unprocessed.length > 0) {
+              await processMessageBatch(user.id, unprocessed);
+              await storage.invalidateAiCache(user.id);
+            }
+          } catch (err) {
+            console.error('Background message AI processing failed:', err);
+          }
+        });
+      }
     } catch (error: any) {
       console.error('SMS import failed:', error);
       try {

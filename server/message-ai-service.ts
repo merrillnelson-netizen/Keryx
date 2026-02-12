@@ -74,6 +74,12 @@ export async function processMessageBatch(
 
         await storage.markMessagesProcessed(messageIds, updates);
         processed += msgs.length;
+
+        if (analysis.detectedPeople.length > 0) {
+          Promise.all(
+            analysis.detectedPeople.map(name => storage.upsertPerson(userId, name))
+          ).catch(() => {});
+        }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error(`Failed to process message group for conversation ${convId}:`, error);
