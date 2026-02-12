@@ -2247,19 +2247,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return [];
       };
       
-      const [emailResult, financialSummary, locationContext, activeGoals, activeReminders] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals(), fetchActiveReminders()]);
+      const fetchRecentMessages = async (): Promise<string | undefined> => {
+        try {
+          const recentMsgs = await storage.getRecentMessages(user.id, 3, 100);
+          if (recentMsgs.length === 0) return undefined;
+          const processed = recentMsgs.filter(m => m.aiProcessed && m.body);
+          if (processed.length === 0) return undefined;
+          const convIds = [...new Set(processed.map(m => m.conversationId))];
+          const convNames = new Map<string, string>();
+          for (const cid of convIds) {
+            const conv = await storage.getMessageConversation(cid, user.id);
+            if (conv) convNames.set(cid, conv.contactName || conv.contactAddress);
+          }
+          const grouped = new Map<string, typeof processed>();
+          for (const msg of processed) {
+            const existing = grouped.get(msg.conversationId) || [];
+            existing.push(msg);
+            grouped.set(msg.conversationId, existing);
+          }
+          const summaries: string[] = [];
+          const entries = Array.from(grouped.entries());
+          for (const [cid, msgs] of entries) {
+            const contact = convNames.get(cid) || 'Unknown';
+            const topMsgs = msgs.slice(0, 5);
+            const lines = topMsgs.map(m => {
+              const dir = m.direction === 'sent' ? 'User' : contact;
+              return `  ${dir}: "${m.body}"`;
+            }).join('\n');
+            summaries.push(`Conversation with ${contact} (${msgs.length} messages, mood: ${msgs[0].mood || 'neutral'}):\n${lines}`);
+          }
+          return summaries.slice(0, 5).join('\n\n');
+        } catch { return undefined; }
+      };
+
+      const [emailResult, financialSummary, locationContext, activeGoals, activeReminders, messageContext] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals(), fetchActiveReminders(), fetchRecentMessages()]);
       const emailContext = emailResult.emails;
       const emailSource = emailResult.source;
       
+      const briefingMemories = recentMemories.map(m => ({
+        memoryText: m.memoryText!,
+        mood: m.mood || undefined,
+        moodScore: m.moodScore || undefined,
+        timestamp: m.timestamp!,
+        topicTag: m.topicTag!,
+        detectedPeople: m.detectedPeople || undefined,
+      }));
+
+      if (messageContext) {
+        briefingMemories.push({
+          memoryText: `[TEXT MESSAGE SUMMARY]\n${messageContext}`,
+          mood: undefined,
+          moodScore: undefined,
+          timestamp: new Date(),
+          topicTag: 'Social',
+          detectedPeople: undefined,
+        });
+      }
+
       const briefing = await generateMorningBriefing(
-        recentMemories.map(m => ({
-          memoryText: m.memoryText!,
-          mood: m.mood || undefined,
-          moodScore: m.moodScore || undefined,
-          timestamp: m.timestamp!,
-          topicTag: m.topicTag!,
-          detectedPeople: m.detectedPeople || undefined,
-        })),
+        briefingMemories,
         user.username,
         localHour,
         emailContext.length > 0 ? emailContext : undefined,
@@ -5162,6 +5208,148 @@ Return ONLY the JSON array, no other text.`;
         console.error('Test push notification error:', error);
       }
     });
+  });
+
+  // ============================================
+  // MESSAGE IMPORT & BROWSING ROUTES
+  // ============================================
+
+  app.post("/api/messages/import", requireAuth, express.json({ limit: '100mb' }), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { fileContent, fileName } = req.body;
+
+      if (!fileContent || typeof fileContent !== 'string') {
+        return res.status(400).json({ message: "No file content provided" });
+      }
+
+      const { parseAndImportNDJSON } = await import('./sms-import-service');
+      const batchId = `sms-import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      const importRecord = await storage.createMessageImport({
+        userId: user.id,
+        batchId,
+        source: 'sms_import',
+        fileName: fileName || 'messages.ndjson',
+        status: 'processing',
+      });
+
+      const result = await parseAndImportNDJSON(user.id, fileContent, batchId, fileName);
+
+      await storage.updateMessageImport(importRecord.id, user.id, {
+        totalMessages: result.totalParsed,
+        newMessages: result.newMessages,
+        duplicateMessages: result.duplicates,
+        status: result.errors > result.totalParsed / 2 ? 'completed_with_errors' : 'completed',
+        completedAt: new Date(),
+        errorMessage: result.errors > 0 ? `${result.errors} entries failed to parse` : null,
+      });
+
+      await storage.invalidateAiCache(user.id);
+
+      res.json({
+        success: true,
+        importId: importRecord.id,
+        batchId,
+        ...result,
+      });
+    } catch (error) {
+      console.error('SMS import failed:', error);
+      sendErrorResponse(res, 500, "Failed to import messages", error);
+    }
+  });
+
+  app.get("/api/messages/imports", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const imports = await storage.getMessageImports(user.id);
+      res.json(imports);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch import history", error);
+    }
+  });
+
+  app.get("/api/messages/conversations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const [conversations, total] = await Promise.all([
+        storage.getMessageConversations(user.id, limit, offset),
+        storage.getMessageConversationsCount(user.id),
+      ]);
+      res.json({ conversations, total, limit, offset });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch conversations", error);
+    }
+  });
+
+  app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const conversation = await storage.getMessageConversation(req.params.id, user.id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      res.json(conversation);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch conversation", error);
+    }
+  });
+
+  app.get("/api/messages/conversations/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const conversationId = req.params.id;
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const conversation = await storage.getMessageConversation(conversationId, user.id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+
+      const [msgs, total] = await Promise.all([
+        storage.getMessages(user.id, conversationId, limit, offset),
+        storage.getMessagesCount(user.id, conversationId),
+      ]);
+      res.json({ messages: msgs, total, limit, offset });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch messages", error);
+    }
+  });
+
+  app.get("/api/messages/stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const [totalConversations, totalMessages] = await Promise.all([
+        storage.getMessageConversationsCount(user.id),
+        storage.getMessagesCount(user.id),
+      ]);
+      res.json({ totalConversations, totalMessages });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch message stats", error);
+    }
+  });
+
+  app.post("/api/messages/process-ai", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const unprocessed = await storage.getUnprocessedMessages(user.id, limit);
+
+      if (unprocessed.length === 0) {
+        return res.json({ processed: 0, message: "No unprocessed messages" });
+      }
+
+      const { processMessageBatch } = await import('./message-ai-service');
+      const processed = await processMessageBatch(user.id, unprocessed);
+
+      res.json({ processed, total: unprocessed.length });
+    } catch (error) {
+      console.error('Message AI processing failed:', error);
+      sendErrorResponse(res, 500, "Failed to process messages", error);
+    }
   });
 
   const httpServer = createServer(app);

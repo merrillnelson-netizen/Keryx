@@ -1,6 +1,7 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
   locationHistory, frequentPlaces, pushSubscriptions, goals, reminders,
+  messageConversations, messages, messageImports,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -16,7 +17,10 @@ import {
   type FrequentPlace, type InsertFrequentPlace,
   type PushSubscription, type InsertPushSubscription,
   type Goal, type InsertGoal, type GoalMilestone,
-  type Reminder, type InsertReminder
+  type Reminder, type InsertReminder,
+  type MessageConversation, type InsertMessageConversation,
+  type Message, type InsertMessage,
+  type MessageImport, type InsertMessageImport
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
@@ -157,6 +161,29 @@ export interface IStorage {
   completeReminder(id: string, userId: string): Promise<Reminder | undefined>;
   snoozeReminder(id: string, userId: string, until: Date): Promise<Reminder | undefined>;
   dismissReminder(id: string, userId: string): Promise<Reminder | undefined>;
+
+  // Message Conversations (user-scoped)
+  getMessageConversations(userId: string, limit?: number, offset?: number): Promise<MessageConversation[]>;
+  getMessageConversation(id: string, userId: string): Promise<MessageConversation | undefined>;
+  getMessageConversationByContact(userId: string, contactAddress: string, platform: string): Promise<MessageConversation | undefined>;
+  upsertMessageConversation(conversation: InsertMessageConversation): Promise<MessageConversation>;
+  getMessageConversationsCount(userId: string): Promise<number>;
+
+  // Messages (user-scoped)
+  getMessages(userId: string, conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getMessagesCount(userId: string, conversationId?: string): Promise<number>;
+  getRecentMessages(userId: string, daysBack: number, limit?: number): Promise<Message[]>;
+  createMessage(message: InsertMessage): Promise<Message>;
+  createMessagesBatch(messages: InsertMessage[]): Promise<number>;
+  getUnprocessedMessages(userId: string, limit?: number): Promise<Message[]>;
+  markMessagesProcessed(messageIds: string[], updates: Partial<InsertMessage>[]): Promise<void>;
+  messageExistsByExternalId(userId: string, externalId: string, source: string): Promise<boolean>;
+  searchMessages(userId: string, queryVector: number[], limit?: number): Promise<Array<Message & { similarity: number }>>;
+
+  // Message Imports (user-scoped)
+  getMessageImports(userId: string): Promise<MessageImport[]>;
+  createMessageImport(importRecord: InsertMessageImport): Promise<MessageImport>;
+  updateMessageImport(id: string, userId: string, updates: Partial<MessageImport>): Promise<MessageImport | undefined>;
 }
 
 /**
@@ -2143,6 +2170,147 @@ export class DatabaseStorage implements IStorage {
       console.error('Failed to dismiss reminder:', error);
       throw new Error('Database error while dismissing reminder');
     }
+  }
+
+  async getMessageConversations(userId: string, limit = 50, offset = 0): Promise<MessageConversation[]> {
+    return db.select().from(messageConversations)
+      .where(eq(messageConversations.userId, userId))
+      .orderBy(desc(messageConversations.lastMessageAt))
+      .limit(limit).offset(offset);
+  }
+
+  async getMessageConversation(id: string, userId: string): Promise<MessageConversation | undefined> {
+    const [conv] = await db.select().from(messageConversations)
+      .where(and(eq(messageConversations.id, id), eq(messageConversations.userId, userId)));
+    return conv;
+  }
+
+  async getMessageConversationByContact(userId: string, contactAddress: string, platform: string): Promise<MessageConversation | undefined> {
+    const [conv] = await db.select().from(messageConversations)
+      .where(and(
+        eq(messageConversations.userId, userId),
+        eq(messageConversations.contactAddress, contactAddress),
+        eq(messageConversations.platform, platform)
+      ));
+    return conv;
+  }
+
+  async upsertMessageConversation(conversation: InsertMessageConversation): Promise<MessageConversation> {
+    const [result] = await db.insert(messageConversations)
+      .values(conversation)
+      .onConflictDoUpdate({
+        target: [messageConversations.userId, messageConversations.contactAddress, messageConversations.platform],
+        set: {
+          contactName: conversation.contactName || sql`${messageConversations.contactName}`,
+          lastMessageAt: conversation.lastMessageAt || sql`${messageConversations.lastMessageAt}`,
+          messageCount: sql`COALESCE(${messageConversations.messageCount}, 0) + COALESCE(${conversation.messageCount || 0}, 0)`,
+          unprocessedCount: sql`COALESCE(${messageConversations.unprocessedCount}, 0) + COALESCE(${conversation.unprocessedCount || 0}, 0)`,
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async getMessageConversationsCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(messageConversations)
+      .where(eq(messageConversations.userId, userId));
+    return result?.count || 0;
+  }
+
+  async getMessages(userId: string, conversationId: string, limit = 100, offset = 0): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(and(eq(messages.userId, userId), eq(messages.conversationId, conversationId)))
+      .orderBy(desc(messages.timestamp))
+      .limit(limit).offset(offset);
+  }
+
+  async getMessagesCount(userId: string, conversationId?: string): Promise<number> {
+    const conditions = [eq(messages.userId, userId)];
+    if (conversationId) conditions.push(eq(messages.conversationId, conversationId));
+    const [result] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(and(...conditions));
+    return result?.count || 0;
+  }
+
+  async getRecentMessages(userId: string, daysBack: number, limit = 200): Promise<Message[]> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysBack);
+    return db.select().from(messages)
+      .where(and(eq(messages.userId, userId), gte(messages.timestamp, cutoff)))
+      .orderBy(desc(messages.timestamp))
+      .limit(limit);
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [result] = await db.insert(messages).values(message).returning();
+    return result;
+  }
+
+  async createMessagesBatch(messageBatch: InsertMessage[]): Promise<number> {
+    if (messageBatch.length === 0) return 0;
+    const batchSize = 500;
+    let inserted = 0;
+    for (let i = 0; i < messageBatch.length; i += batchSize) {
+      const chunk = messageBatch.slice(i, i + batchSize);
+      const result = await db.insert(messages).values(chunk).onConflictDoNothing().returning();
+      inserted += result.length;
+    }
+    return inserted;
+  }
+
+  async getUnprocessedMessages(userId: string, limit = 50): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(and(eq(messages.userId, userId), eq(messages.aiProcessed, false)))
+      .orderBy(messages.timestamp)
+      .limit(limit);
+  }
+
+  async markMessagesProcessed(messageIds: string[], updates: Partial<InsertMessage>[]): Promise<void> {
+    for (let i = 0; i < messageIds.length; i++) {
+      await db.update(messages)
+        .set({ ...updates[i], aiProcessed: true })
+        .where(eq(messages.id, messageIds[i]));
+    }
+  }
+
+  async messageExistsByExternalId(userId: string, externalId: string, source: string): Promise<boolean> {
+    const [result] = await db.select({ id: messages.id }).from(messages)
+      .where(and(eq(messages.userId, userId), eq(messages.externalId, externalId), eq(messages.source, source)))
+      .limit(1);
+    return !!result;
+  }
+
+  async searchMessages(userId: string, queryVector: number[], limit = 20): Promise<Array<Message & { similarity: number }>> {
+    const vectorStr = `[${queryVector.join(',')}]`;
+    const results = await db.execute(sql`
+      SELECT *, 1 - (embedding_vector <=> ${vectorStr}::vector) as similarity
+      FROM messages
+      WHERE user_id = ${userId} AND embedding_vector IS NOT NULL
+      ORDER BY embedding_vector <=> ${vectorStr}::vector
+      LIMIT ${limit}
+    `);
+    return results.rows as any;
+  }
+
+  async getMessageImports(userId: string): Promise<MessageImport[]> {
+    return db.select().from(messageImports)
+      .where(eq(messageImports.userId, userId))
+      .orderBy(desc(messageImports.importedAt));
+  }
+
+  async createMessageImport(importRecord: InsertMessageImport): Promise<MessageImport> {
+    const [result] = await db.insert(messageImports).values(importRecord).returning();
+    return result;
+  }
+
+  async updateMessageImport(id: string, userId: string, updates: Partial<MessageImport>): Promise<MessageImport | undefined> {
+    const [result] = await db.update(messageImports)
+      .set(updates)
+      .where(and(eq(messageImports.id, id), eq(messageImports.userId, userId)))
+      .returning();
+    return result;
   }
 }
 

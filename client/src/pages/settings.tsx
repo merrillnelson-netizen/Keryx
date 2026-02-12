@@ -30,6 +30,240 @@ interface BackfillStatus {
   toProcess?: number;
 }
 
+interface MessageImportRecord {
+  id: string;
+  batchId: string;
+  source: string;
+  fileName: string | null;
+  totalMessages: number | null;
+  newMessages: number | null;
+  duplicateMessages: number | null;
+  aiProcessedCount: number | null;
+  status: string;
+  errorMessage: string | null;
+  importedAt: string;
+  completedAt: string | null;
+}
+
+interface MessageStats {
+  totalConversations: number;
+  totalMessages: number;
+}
+
+function SmsImportSection() {
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
+  const [isProcessingAi, setIsProcessingAi] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: imports = [] } = useQuery<MessageImportRecord[]>({
+    queryKey: ["/api/messages/imports"],
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: stats } = useQuery<MessageStats>({
+    queryKey: ["/api/messages/stats"],
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress("Reading file...");
+
+    try {
+      let fileContent = '';
+
+      if (file.name.endsWith('.zip')) {
+        setImportProgress("Extracting ZIP file...");
+        const { BlobReader, ZipReader, TextWriter } = await import('@zip.js/zip.js');
+        const reader = new ZipReader(new BlobReader(file));
+        const entries = await reader.getEntries();
+        const ndjsonEntry = entries.find((entry: any) => entry.filename.endsWith('.ndjson') || entry.filename.endsWith('.json'));
+        if (!ndjsonEntry) {
+          throw new Error("No .ndjson or .json file found in ZIP archive");
+        }
+        if (ndjsonEntry.getData) {
+          fileContent = await ndjsonEntry.getData(new TextWriter());
+        }
+        await reader.close();
+      } else {
+        fileContent = await file.text();
+      }
+
+      setImportProgress("Uploading and importing messages...");
+
+      const response = await apiRequest("POST", "/api/messages/import", {
+        fileContent,
+        fileName: file.name,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: "Import Complete",
+          description: `${result.newMessages} new messages imported from ${result.conversations} conversations. ${result.duplicates} duplicates skipped.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/imports"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      } else {
+        throw new Error(result.message || "Import failed");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Import Failed",
+        description: error.message || "Failed to import messages",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+      setImportProgress("");
+      e.target.value = '';
+    }
+  };
+
+  const handleProcessAi = async () => {
+    setIsProcessingAi(true);
+    try {
+      const response = await apiRequest("POST", "/api/messages/process-ai?limit=50");
+      const result = await response.json();
+      toast({
+        title: "AI Processing Complete",
+        description: `Processed ${result.processed} messages with AI analysis.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+    } catch (error: any) {
+      toast({
+        title: "Processing Failed",
+        description: error.message || "Failed to process messages",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingAi(false);
+    }
+  };
+
+  return (
+    <Card className="glass-card border-white/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Smartphone className="w-5 h-5 text-green-500" />
+          Text Message Import
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Import your text messages from the <span className="font-medium text-foreground">SMS Import / Export</span> Android app. 
+          Keryx will analyze your conversations for insights, people tracking, and AI briefings.
+        </p>
+
+        {stats && stats.totalMessages > 0 && (
+          <div className="flex gap-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="text-center">
+              <p className="text-lg font-bold text-green-400">{stats.totalConversations}</p>
+              <p className="text-xs text-muted-foreground">Conversations</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-green-400">{stats.totalMessages.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Messages</p>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="p-3 rounded-lg bg-muted/30 border border-white/10">
+            <p className="text-xs font-medium text-foreground mb-2">How to export your messages:</p>
+            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Install "SMS Import / Export" from F-Droid or Google Play</li>
+              <li>Open the app and grant SMS permissions</li>
+              <li>Tap Export → choose ZIP format</li>
+              <li>Upload the exported file below</li>
+            </ol>
+          </div>
+
+          <div className="flex gap-2">
+            <label className="flex-1">
+              <input
+                type="file"
+                accept=".zip,.ndjson,.json"
+                onChange={handleFileUpload}
+                disabled={isImporting}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                className="w-full cursor-pointer"
+                disabled={isImporting}
+                asChild
+              >
+                <span>
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {importProgress || "Importing..."}
+                    </>
+                  ) : (
+                    <>
+                      <Database className="w-4 h-4 mr-2" />
+                      Upload Messages File
+                    </>
+                  )}
+                </span>
+              </Button>
+            </label>
+
+            {stats && stats.totalMessages > 0 && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleProcessAi}
+                disabled={isProcessingAi}
+                title="Process messages with AI"
+              >
+                {isProcessingAi ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Bot className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {imports.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Import History</p>
+            {imports.slice(0, 3).map((imp) => (
+              <div key={imp.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/20 text-xs">
+                <div>
+                  <p className="font-medium text-foreground">{imp.fileName || 'messages.ndjson'}</p>
+                  <p className="text-muted-foreground">
+                    {imp.newMessages || 0} new, {imp.duplicateMessages || 0} skipped
+                  </p>
+                </div>
+                <div className="text-right">
+                  <Badge variant={imp.status === 'completed' ? 'default' : imp.status === 'processing' ? 'secondary' : 'destructive'} className="text-[10px]">
+                    {imp.status}
+                  </Badge>
+                  <p className="text-muted-foreground mt-0.5">
+                    {new Date(imp.importedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
   const [hasShownCompletion, setHasShownCompletion] = useState(false);
@@ -1132,6 +1366,8 @@ export default function SettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          <SmsImportSection />
 
           <Card className="glass-card border-white/20">
             <CardHeader>

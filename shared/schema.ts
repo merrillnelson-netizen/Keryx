@@ -940,3 +940,130 @@ export const insertReminderSchema = createInsertSchema(reminders).omit({
 
 export type Reminder = typeof reminders.$inferSelect;
 export type InsertReminder = z.infer<typeof insertReminderSchema>;
+
+/**
+ * Message Conversations table - groups messages by contact/thread
+ * Source-agnostic: works with SMS Import/Export, Beeper Matrix, or future sources
+ */
+export const messageConversations = pgTable("message_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  contactAddress: text("contact_address").notNull(),
+  contactName: text("contact_name"),
+  platform: text("platform").notNull().default('sms'),
+  threadId: text("thread_id"),
+  lastMessageAt: timestamp("last_message_at"),
+  messageCount: integer("message_count").default(0),
+  unprocessedCount: integer("unprocessed_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("msg_conv_user_id_idx").on(table.userId),
+  userContactIdx: uniqueIndex("msg_conv_user_contact_platform_idx").on(table.userId, table.contactAddress, table.platform),
+  lastMessageIdx: index("msg_conv_last_message_idx").on(table.lastMessageAt),
+}));
+
+export const messageConversationsRelations = relations(messageConversations, ({ one, many }) => ({
+  user: one(users, {
+    fields: [messageConversations.userId],
+    references: [users.id],
+  }),
+  messages: many(messages),
+}));
+
+/**
+ * Messages table - individual messages within conversations
+ * Stores both SMS export data and Beeper Matrix data
+ */
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  conversationId: varchar("conversation_id").notNull().references(() => messageConversations.id, { onDelete: 'cascade' }),
+  externalId: text("external_id"),
+  source: text("source").notNull().default('sms_import'),
+  direction: text("direction").notNull(),
+  senderAddress: text("sender_address"),
+  senderName: text("sender_name"),
+  body: text("body"),
+  messageType: text("message_type").notNull().default('sms'),
+  timestamp: timestamp("timestamp").notNull(),
+  topicTag: text("topic_tag"),
+  detectedPeople: text("detected_people").array(),
+  mood: text("mood"),
+  moodScore: real("mood_score"),
+  importance: integer("importance").default(5),
+  aiProcessed: boolean("ai_processed").default(false),
+  embeddingVector: vector("embedding_vector", { dimensions: 1536 }),
+  importBatchId: text("import_batch_id"),
+  rawMetadata: jsonb("raw_metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("messages_user_id_idx").on(table.userId),
+  conversationIdx: index("messages_conversation_id_idx").on(table.conversationId),
+  timestampIdx: index("messages_timestamp_idx").on(table.timestamp),
+  externalIdIdx: index("messages_external_id_idx").on(table.externalId),
+  importBatchIdx: index("messages_import_batch_idx").on(table.importBatchId),
+  aiProcessedIdx: index("messages_ai_processed_idx").on(table.aiProcessed),
+  userTimestampIdx: index("messages_user_timestamp_idx").on(table.userId, table.timestamp),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  user: one(users, {
+    fields: [messages.userId],
+    references: [users.id],
+  }),
+  conversation: one(messageConversations, {
+    fields: [messages.conversationId],
+    references: [messageConversations.id],
+  }),
+}));
+
+/**
+ * Message Import History table - tracks import batches for deduplication and management
+ */
+export const messageImports = pgTable("message_imports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  batchId: text("batch_id").notNull(),
+  source: text("source").notNull().default('sms_import'),
+  fileName: text("file_name"),
+  totalMessages: integer("total_messages").default(0),
+  newMessages: integer("new_messages").default(0),
+  duplicateMessages: integer("duplicate_messages").default(0),
+  aiProcessedCount: integer("ai_processed_count").default(0),
+  status: text("status").notNull().default('processing'),
+  errorMessage: text("error_message"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  userIdIdx: index("msg_imports_user_id_idx").on(table.userId),
+  batchIdIdx: index("msg_imports_batch_id_idx").on(table.batchId),
+}));
+
+export const messageImportsRelations = relations(messageImports, ({ one }) => ({
+  user: one(users, {
+    fields: [messageImports.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertMessageConversationSchema = createInsertSchema(messageConversations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMessageImportSchema = createInsertSchema(messageImports).omit({
+  id: true,
+  importedAt: true,
+});
+
+export type MessageConversation = typeof messageConversations.$inferSelect;
+export type InsertMessageConversation = z.infer<typeof insertMessageConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type MessageImport = typeof messageImports.$inferSelect;
+export type InsertMessageImport = z.infer<typeof insertMessageImportSchema>;

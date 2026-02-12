@@ -30,6 +30,7 @@ import Locations from "@/pages/locations";
 import Goals from "@/pages/goals";
 import Reminders from "@/pages/reminders";
 import ShowcasePage from "@/pages/showcase";
+import Messages from "@/pages/messages";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -112,6 +113,12 @@ function Router() {
       </Route>
       <Route path="/locations">
         {() => <ProtectedRoute component={Locations} />}
+      </Route>
+      <Route path="/messages">
+        {() => <ProtectedRoute component={Messages} />}
+      </Route>
+      <Route path="/messages/:conversationId">
+        {() => <ProtectedRoute component={Messages} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
