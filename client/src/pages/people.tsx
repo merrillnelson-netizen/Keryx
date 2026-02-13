@@ -73,8 +73,7 @@ export default function People() {
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
   const [aiQuery, setAiQuery] = useState("");
   const [aiResult, setAiResult] = useState<{
-    sortField: string | null;
-    sortDirection: 'asc' | 'desc';
+    sortFields: Array<{ field: string; direction: 'asc' | 'desc' }>;
     filterIds: string[] | null;
     message: string;
   } | null>(null);
@@ -218,39 +217,26 @@ export default function People() {
         result = result.filter(p => idSet.has(p.id));
       }
       
-      if (aiResult.sortField) {
-        result.sort((a, b) => {
-          let valA: any, valB: any;
-          switch (aiResult.sortField) {
-            case 'name':
-              valA = a.name.toLowerCase();
-              valB = b.name.toLowerCase();
-              break;
-            case 'relationship':
-              valA = (a.relationship || '').toLowerCase();
-              valB = (b.relationship || '').toLowerCase();
-              break;
-            case 'priority':
-              valA = a.priority || 0;
-              valB = b.priority || 0;
-              break;
-            case 'mentionCount':
-              valA = a.mentionCount || 0;
-              valB = b.mentionCount || 0;
-              break;
-            case 'lastMentioned':
-              valA = a.lastMentioned ? new Date(a.lastMentioned).getTime() : 0;
-              valB = b.lastMentioned ? new Date(b.lastMentioned).getTime() : 0;
-              break;
-            case 'firstMentioned':
-              valA = a.firstMentioned ? new Date(a.firstMentioned).getTime() : 0;
-              valB = b.firstMentioned ? new Date(b.firstMentioned).getTime() : 0;
-              break;
-            default:
-              return 0;
+      if (aiResult.sortFields && aiResult.sortFields.length > 0) {
+        const getSortValue = (person: Person, field: string): any => {
+          switch (field) {
+            case 'name': return person.name.toLowerCase();
+            case 'relationship': return (person.relationship || '').toLowerCase();
+            case 'priority': return person.priority || 0;
+            case 'mentionCount': return person.mentionCount || 0;
+            case 'lastMentioned': return person.lastMentioned ? new Date(person.lastMentioned).getTime() : 0;
+            case 'firstMentioned': return person.firstMentioned ? new Date(person.firstMentioned).getTime() : 0;
+            default: return 0;
           }
-          if (valA < valB) return aiResult.sortDirection === 'asc' ? -1 : 1;
-          if (valA > valB) return aiResult.sortDirection === 'asc' ? 1 : -1;
+        };
+
+        result.sort((a, b) => {
+          for (const { field, direction } of aiResult.sortFields) {
+            const valA = getSortValue(a, field);
+            const valB = getSortValue(b, field);
+            if (valA < valB) return direction === 'asc' ? -1 : 1;
+            if (valA > valB) return direction === 'asc' ? 1 : -1;
+          }
           return 0;
         });
       }

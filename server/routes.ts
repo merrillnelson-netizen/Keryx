@@ -1924,10 +1924,9 @@ Available fields for sorting: name, relationship, priority (closeness score 1-10
 Available relationships: friend, family, colleague, client, acquaintance, partner, mentor, other, unset
 
 Given the user's natural language query, return a JSON object with:
-- "sortField": one of [name, relationship, priority, mentionCount, lastMentioned, firstMentioned] or null if no sort needed
-- "sortDirection": "asc" or "desc"
+- "sortFields": an array of sort criteria, each with { "field": string, "direction": "asc" | "desc" }. Use multiple entries for multi-field sorts (e.g., group by relationship then sort by closeness). Order matters: first entry is primary sort, second is tiebreaker, etc. Use an empty array [] if no sort needed.
 - "filterIds": array of matching person IDs if filtering/searching, or null if showing all (just sorting)
-- "message": a brief friendly description of what you did (e.g., "Showing family members, sorted by closeness")
+- "message": a brief friendly description of what you did (e.g., "Grouped by relationship, then sorted by closeness within each group")
 
 IMPORTANT RULES:
 - For search queries (finding specific people), return only matching IDs in filterIds
@@ -1938,6 +1937,8 @@ IMPORTANT RULES:
 - "most mentioned" = highest mentionCount (desc)
 - "recently mentioned" = lastMentioned desc
 - "neglected" or "haven't talked to" = lastMentioned asc or low mentionCount
+- "group by relationship" = sort by relationship first, then by the next criterion
+- Multi-field sorts: e.g., "sort by relationship then closeness" → sortFields: [{"field":"relationship","direction":"asc"},{"field":"priority","direction":"desc"}]
 - If the query is ambiguous, do your best interpretation
 - Always provide a helpful message explaining the result
 
@@ -1958,12 +1959,27 @@ Respond with JSON only.`
       } catch {
         return res.json({
           status: 'success',
-          data: { sortField: 'name', sortDirection: 'asc' as const, filterIds: null, message: 'Could not interpret query. Showing all people alphabetically.' }
+          data: { sortFields: [{ field: 'name', direction: 'asc' as const }], filterIds: null, message: 'Could not interpret query. Showing all people alphabetically.' }
         });
       }
 
-      const sortField = VALID_SORT_FIELDS.includes(result.sortField) ? result.sortField : null;
-      const sortDirection = result.sortDirection === 'desc' ? 'desc' as const : 'asc' as const;
+      const sortFields: Array<{ field: string; direction: 'asc' | 'desc' }> = [];
+      if (Array.isArray(result.sortFields)) {
+        for (const sf of result.sortFields) {
+          if (sf && typeof sf.field === 'string' && VALID_SORT_FIELDS.includes(sf.field as any)) {
+            sortFields.push({
+              field: sf.field,
+              direction: sf.direction === 'desc' ? 'desc' : 'asc',
+            });
+          }
+        }
+      } else if (result.sortField && VALID_SORT_FIELDS.includes(result.sortField)) {
+        sortFields.push({
+          field: result.sortField,
+          direction: result.sortDirection === 'desc' ? 'desc' : 'asc',
+        });
+      }
+
       const filterIds = Array.isArray(result.filterIds)
         ? result.filterIds.filter((id: string) => typeof id === 'string' && validPeopleIds.has(id))
         : null;
@@ -1971,8 +1987,7 @@ Respond with JSON only.`
       res.json({
         status: 'success',
         data: {
-          sortField,
-          sortDirection,
+          sortFields,
           filterIds: filterIds && filterIds.length > 0 ? filterIds : (Array.isArray(result.filterIds) ? [] : null),
           message: typeof result.message === 'string' ? result.message.slice(0, 200) : 'Search complete',
         }
