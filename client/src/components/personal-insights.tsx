@@ -31,6 +31,16 @@ interface PersonalNewsStory {
   icon?: string;
 }
 
+interface DataSourceStatus {
+  memories: { checked: boolean; count: number };
+  calendar: { checked: boolean; count: number };
+  email: { checked: boolean; count: number };
+  financial: { checked: boolean; available: boolean };
+  location: { checked: boolean; available: boolean };
+  goals: { checked: boolean; count: number };
+  messages: { checked: boolean; available: boolean };
+}
+
 interface NewsFeedResponse {
   status: string;
   data: {
@@ -49,6 +59,7 @@ interface NewsFeedResponse {
     emails: number;
     financial: boolean;
   };
+  dataSourceStatus?: DataSourceStatus;
   cached: boolean;
   generatedAt: string;
 }
@@ -197,10 +208,20 @@ export default function PersonalInsights() {
 
   const stories = data?.data?.stories || [];
   const dataSources = data?.dataSources;
+  const sourceStatus = data?.dataSourceStatus;
   
   const breakingStories = stories.filter(s => s.priority === 'breaking');
   const featuredStories = stories.filter(s => s.priority === 'featured');
   const standardStories = stories.filter(s => s.priority === 'standard');
+
+  const totalSourcesChecked = sourceStatus ? 
+    (sourceStatus.memories.count > 0 ? 1 : 0) +
+    (sourceStatus.calendar.count > 0 ? 1 : 0) +
+    (sourceStatus.email.count > 0 ? 1 : 0) +
+    (sourceStatus.financial.available ? 1 : 0) +
+    (sourceStatus.location.available ? 1 : 0) +
+    (sourceStatus.goals.count > 0 ? 1 : 0) +
+    (sourceStatus.messages.available ? 1 : 0) : 0;
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/news-feed"] });
@@ -255,10 +276,56 @@ export default function PersonalInsights() {
         ) : stories.length === 0 ? (
           <div className="text-center py-12">
             <Newspaper className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No news yet</h3>
-            <p className="text-muted-foreground max-w-sm mx-auto">
-              Start logging memories, connect your calendar and email to see personalized news stories about your life.
+            <h3 className="text-lg font-medium text-foreground mb-2">No insights yet</h3>
+            <p className="text-muted-foreground max-w-sm mx-auto mb-4">
+              {totalSourcesChecked === 0
+                ? "Start logging memories, connect your calendar and email to see personalized insights about your life."
+                : `Checked ${totalSourcesChecked} data source${totalSourcesChecked > 1 ? 's' : ''} but couldn't generate insights. Try adding more memories or connecting additional services.`}
             </p>
+            {sourceStatus && (
+              <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+                {sourceStatus.memories.count > 0 && (
+                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
+                    {sourceStatus.memories.count} memories
+                  </Badge>
+                )}
+                {sourceStatus.calendar.count > 0 && (
+                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
+                    {sourceStatus.calendar.count} events
+                  </Badge>
+                )}
+                {sourceStatus.email.count > 0 && (
+                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
+                    {sourceStatus.email.count} emails
+                  </Badge>
+                )}
+                {sourceStatus.memories.count === 0 && (
+                  <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                    No memories
+                  </Badge>
+                )}
+                {sourceStatus.calendar.count === 0 && (
+                  <Badge variant="outline" className="text-xs bg-muted/20 text-muted-foreground border-muted/30">
+                    No calendar
+                  </Badge>
+                )}
+                {sourceStatus.email.count === 0 && (
+                  <Badge variant="outline" className="text-xs bg-muted/20 text-muted-foreground border-muted/30">
+                    No email
+                  </Badge>
+                )}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isFetching}
+              className="border-white/20 hover:bg-white/10"
+            >
+              <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
+              Try Again
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -288,27 +355,45 @@ export default function PersonalInsights() {
           </div>
         )}
         
-        {dataSources && (
-          <div className="flex items-center justify-center gap-4 pt-4 text-xs text-muted-foreground border-t border-white/10">
-            {dataSources.memories > 0 && (
-              <span>{dataSources.memories} memories</span>
+        {(dataSources || sourceStatus) && stories.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-4 text-xs text-muted-foreground border-t border-white/10">
+            {(dataSources?.memories ?? sourceStatus?.memories?.count ?? 0) > 0 && (
+              <span>{dataSources?.memories ?? sourceStatus?.memories?.count} memories</span>
             )}
-            {dataSources.calendars > 0 && (
+            {(dataSources?.calendars ?? sourceStatus?.calendar?.count ?? 0) > 0 && (
               <>
                 <span>•</span>
-                <span>{dataSources.calendars} events</span>
+                <span>{dataSources?.calendars ?? sourceStatus?.calendar?.count} events</span>
               </>
             )}
-            {dataSources.emails > 0 && (
+            {(dataSources?.emails ?? sourceStatus?.email?.count ?? 0) > 0 && (
               <>
                 <span>•</span>
-                <span>{dataSources.emails} emails</span>
+                <span>{dataSources?.emails ?? sourceStatus?.email?.count} emails</span>
               </>
             )}
-            {dataSources.financial && (
+            {(dataSources?.financial || sourceStatus?.financial?.available) && (
               <>
                 <span>•</span>
                 <span>Financial data</span>
+              </>
+            )}
+            {sourceStatus?.location?.available && (
+              <>
+                <span>•</span>
+                <span>Location data</span>
+              </>
+            )}
+            {sourceStatus?.messages?.available && (
+              <>
+                <span>•</span>
+                <span>Messages</span>
+              </>
+            )}
+            {data?.cached && (
+              <>
+                <span>•</span>
+                <span className="text-yellow-500/70">Cached</span>
               </>
             )}
           </div>

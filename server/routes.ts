@@ -2177,11 +2177,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (mapped.length > 0) return { emails: mapped, source: 'outlook' };
             }
           }
-        } catch { /* Email fetch failed */ }
+        } catch (err) { console.warn('Briefing: email fetch failed:', err instanceof Error ? err.message : err); }
         return { emails: [], source: null };
       };
       
-      // Helper to fetch financial
       const fetchFinancial = async (): Promise<{ totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
         if (!shouldFetchFinancial) return undefined;
         try {
@@ -2194,11 +2193,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               topMerchants: rawSummary.topMerchants
             };
           }
-        } catch { /* Financial fetch failed */ }
+        } catch (err) { console.warn('Briefing: financial fetch failed:', err instanceof Error ? err.message : err); }
         return undefined;
       };
       
-      // Helper to fetch location context
       const fetchLocationContext = async (): Promise<string | undefined> => {
         try {
           const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
@@ -2211,11 +2209,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const patterns = buildLocationContext(frequentPlaces, recentLocations, totalCount);
             return formatLocationContextForAI(patterns);
           }
-        } catch { /* Location fetch failed */ }
+        } catch (err) { console.warn('Briefing: location fetch failed:', err instanceof Error ? err.message : err); }
         return undefined;
       };
 
-      // Helper to fetch active goals
       const fetchActiveGoals = async (): Promise<GoalContext[]> => {
         try {
           const goals = await storage.getActiveGoals(user.id);
@@ -2231,11 +2228,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               milestonesSummary: milestones.length > 0 ? `${completedCount}/${milestones.length} completed` : undefined,
             };
           });
-        } catch { /* Goals fetch failed */ }
+        } catch (err) { console.warn('Briefing: goals fetch failed:', err instanceof Error ? err.message : err); }
         return [];
       };
       
-      // Helper to fetch active reminders
       const fetchActiveReminders = async (): Promise<Array<{ content: string; triggerType: string; triggerTime?: string; triggerLocationName?: string }>> => {
         try {
           const reminders = await storage.getReminders(user.id, 'pending');
@@ -2245,7 +2241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             triggerTime: r.triggerTime ? r.triggerTime.toISOString() : undefined,
             triggerLocationName: r.triggerLocationName || undefined,
           }));
-        } catch { /* Reminders fetch failed */ }
+        } catch (err) { console.warn('Briefing: reminders fetch failed:', err instanceof Error ? err.message : err); }
         return [];
       };
       
@@ -2279,7 +2275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             summaries.push(`Conversation with ${contact} (${msgs.length} messages, mood: ${msgs[0].mood || 'neutral'}):\n${lines}`);
           }
           return summaries.slice(0, 5).join('\n\n');
-        } catch { return undefined; }
+        } catch (err) { console.warn('Briefing: messages fetch failed:', err instanceof Error ? err.message : err); return undefined; }
       };
 
       const [emailResult, financialSummary, locationContext, activeGoals, activeReminders, messageContext] = await Promise.all([fetchEmails(), fetchFinancial(), fetchLocationContext(), fetchActiveGoals(), fetchActiveReminders(), fetchRecentMessages()]);
@@ -2447,7 +2443,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }));
             }
           }
-        } catch { /* Email fetch failed */ }
+        } catch (err) { console.warn('News-feed: email fetch failed:', err instanceof Error ? err.message : err); }
         return [];
       };
       
@@ -2460,7 +2456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               title: e.title, startTime: e.startTime, endTime: e.endTime, attendees: e.attendees, location: e.location
             }));
           }
-        } catch { /* Calendar fetch failed */ }
+        } catch (err) { console.warn('News-feed: calendar fetch failed:', err instanceof Error ? err.message : err); }
         return [];
       };
       
@@ -2476,7 +2472,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               topMerchants: rawSummary.topMerchants
             };
           }
-        } catch { /* Financial fetch failed */ }
+        } catch (err) { console.warn('News-feed: financial fetch failed:', err instanceof Error ? err.message : err); }
         return undefined;
       };
       
@@ -2492,7 +2488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const patterns = buildLocationContext(frequentPlaces, recentLocations, totalCount);
             return formatLocationContextForAI(patterns);
           }
-        } catch { /* Location fetch failed */ }
+        } catch (err) { console.warn('News-feed: location fetch failed:', err instanceof Error ? err.message : err); }
         return undefined;
       };
       
@@ -2506,7 +2502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             targetDate: g.targetDate?.toISOString() || null,
             status: g.status,
           }));
-        } catch { return []; }
+        } catch (err) { console.warn('News-feed: goals fetch failed:', err instanceof Error ? err.message : err); return []; }
       };
 
       const fetchRecentMessages = async (): Promise<string | undefined> => {
@@ -2538,7 +2534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             summaries.push(`Conversation with ${contact} (${msgs.length} messages, mood: ${msgs[0].mood || 'neutral'}):\n${lines}`);
           }
           return summaries.slice(0, 5).join('\n\n');
-        } catch { return undefined; }
+        } catch (err) { console.warn('News-feed: messages fetch failed:', err instanceof Error ? err.message : err); return undefined; }
       };
 
       const [emailContext, calendarEvents, financialSummary, locationContext, activeGoals, messageContext] = await Promise.all([
@@ -2580,10 +2576,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const memoriesHash = recentMemories.map(m => m.id).join(',');
       await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, 30);
 
+      const dataSourceStatus = {
+        memories: { checked: true, count: recentMemories.length },
+        calendar: { checked: true, count: calendarEvents.length },
+        email: { checked: true, count: emailContext.length },
+        financial: { checked: shouldFetchFinancial === true, available: !!financialSummary },
+        location: { checked: true, available: !!locationContext },
+        goals: { checked: true, count: activeGoals.length },
+        messages: { checked: true, available: !!messageContext },
+      };
+
       res.json({
         status: 'success',
         data: newsFeed,
         dataSources: newsFeed.dataSources,
+        dataSourceStatus,
         cached: false,
         generatedAt: newsFeed.generatedAt.toISOString()
       });
@@ -2652,17 +2659,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }));
         }
       } catch (calendarError) {
-        // Calendar fetch failed, continue without calendar context
+        console.warn('Discoveries: calendar fetch failed:', calendarError instanceof Error ? calendarError.message : calendarError);
       }
       
-      // Get emails
       let emails: Array<{ subject?: string; snippet?: string; from?: string }> = [];
       try {
         const gmailConnected = await isGmailConnected();
         if (gmailConnected) {
           const capabilities = await getGmailCapabilities();
           if (capabilities.canRead) {
-            // Import and use gmail service to get recent emails
             const { getRecentEmails } = await import('./gmail-service');
             const recentEmails = await getRecentEmails(10);
             emails = recentEmails.map(e => ({
@@ -2673,7 +2678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } catch (emailError) {
-        // Email fetch failed, continue without email context
+        console.warn('Discoveries: email fetch failed:', emailError instanceof Error ? emailError.message : emailError);
       }
       
       // Get financial data with transaction details
@@ -2694,11 +2699,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
           }
         } catch (finError) {
-          // Financial fetch failed, continue without financial context
+          console.warn('Discoveries: financial fetch failed:', finError instanceof Error ? finError.message : finError);
         }
       }
       
-      // Get location context - check if user is visiting a new location
       let locationContext: { currentCity?: string; homeCity?: string; isAway?: boolean } | undefined;
       try {
         const frequentPlaces = await storage.getFrequentPlaces(user.id);
@@ -2722,10 +2726,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } catch (locError) {
-        // Location context fetch failed, continue without it
+        console.warn('Discoveries: location fetch failed:', locError instanceof Error ? locError.message : locError);
       }
       
-      // Fetch active goals for discoveries context
       let activeGoals: Array<{ title: string; description: string | null; progressPercent: number; status: string }> = [];
       try {
         const goals = await storage.getGoals(user.id);
@@ -2735,7 +2738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           progressPercent: g.progressPercent,
           status: g.status,
         }));
-      } catch { /* Goals fetch failed */ }
+      } catch (err) { console.warn('Discoveries: goals fetch failed:', err instanceof Error ? err.message : err); }
       
       const discoveries = await getContextualDiscoveries(
         recentMemories
