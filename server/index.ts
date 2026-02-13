@@ -157,6 +157,18 @@ app.use((req, res, next) => {
 
     setTimeout(async () => {
       try {
+        const backfillCheck = await pool.query(`SELECT COUNT(*) as cnt FROM people WHERE source = 'memory' AND EXISTS (SELECT 1 FROM messages m WHERE m.user_id = people.user_id AND people.name = ANY(m.detected_people))`);
+        if (parseInt(backfillCheck.rows[0]?.cnt || '0', 10) > 0) {
+          log('Startup: backfilling people source field...');
+          await pool.query(`UPDATE people p SET source = 'messages' WHERE source = 'memory' AND EXISTS (SELECT 1 FROM messages m WHERE m.user_id = p.user_id AND p.name = ANY(m.detected_people)) AND NOT EXISTS (SELECT 1 FROM log_entries le WHERE le.user_id = p.user_id AND p.name = ANY(le.detected_people))`);
+          await pool.query(`UPDATE people p SET source = 'both' WHERE source = 'memory' AND EXISTS (SELECT 1 FROM messages m WHERE m.user_id = p.user_id AND p.name = ANY(m.detected_people)) AND EXISTS (SELECT 1 FROM log_entries le WHERE le.user_id = p.user_id AND p.name = ANY(le.detected_people))`);
+          log('Startup: people source backfill complete');
+        }
+      } catch (err) {
+        console.error('Startup people source backfill failed (non-fatal):', err);
+      }
+
+      try {
         const allUsers = await pool.query('SELECT DISTINCT user_id FROM messages WHERE ai_processed = false');
         for (const row of allUsers.rows) {
           const userId = row.user_id;
