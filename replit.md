@@ -66,7 +66,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Web Push Notifications**: For briefings, alerts, and approvals, handled by a service worker.
 - **PWA Support**: Installable as a Progressive Web App with manifest.json, app icons (72-512px), service worker caching, and install prompts on landing page, settings, and global banner. iOS instructions included.
 - **Life Purpose Suggestion**: AI detects existential themes and suggests a companion app.
-- **Text Message Integration**: Import SMS/MMS/RCS messages via SMS Import/Export Android app (NDJSON/ZIP format), AI-powered conversation analysis (topics, mood, importance, people), conversation browsing with chat bubble UI, deduplication across imports, message context feeds into morning briefings. Key files: `server/sms-import-service.ts`, `server/message-ai-service.ts`, `client/src/pages/messages.tsx`.
+- **Text Message Integration**: Import SMS/MMS/RCS messages via SMS Import/Export Android app (NDJSON/ZIP format), AI-powered conversation analysis (topics, mood, importance, people), conversation browsing with chat bubble UI, deduplication across imports, message context feeds into morning briefings. Search, sort, and table/card view toggle on conversations list. Key files: `server/sms-import-service.ts`, `server/message-ai-service.ts`, `client/src/pages/messages.tsx`.
 
 ### Security Measures
 - **Authentication**: All API routes require session authentication.
