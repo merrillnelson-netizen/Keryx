@@ -167,6 +167,7 @@ export interface IStorage {
   getMessageConversation(id: string, userId: string): Promise<MessageConversation | undefined>;
   getMessageConversationByContact(userId: string, contactAddress: string, platform: string): Promise<MessageConversation | undefined>;
   upsertMessageConversation(conversation: InsertMessageConversation): Promise<MessageConversation>;
+  updateConversationContactName(id: string, userId: string, contactName: string): Promise<MessageConversation | undefined>;
   getMessageConversationsCount(userId: string): Promise<number>;
 
   // Messages (user-scoped)
@@ -2212,6 +2213,14 @@ export class DatabaseStorage implements IStorage {
           unprocessedCount: sql`COALESCE(${messageConversations.unprocessedCount}, 0) + COALESCE(${conversation.unprocessedCount || 0}, 0)`,
         },
       })
+      .returning();
+    return result;
+  }
+
+  async updateConversationContactName(id: string, userId: string, contactName: string): Promise<MessageConversation | undefined> {
+    const [result] = await db.update(messageConversations)
+      .set({ contactName })
+      .where(and(eq(messageConversations.id, id), eq(messageConversations.userId, userId)))
       .returning();
     return result;
   }

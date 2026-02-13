@@ -5634,6 +5634,23 @@ Respond with JSON only.`
     }
   });
 
+  app.patch("/api/messages/conversations/:id/name", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { contactName } = req.body;
+      if (!contactName || typeof contactName !== 'string' || contactName.trim().length === 0) {
+        return sendErrorResponse(res, 400, "Contact name is required");
+      }
+      const updated = await storage.updateConversationContactName(req.params.id, user.id, contactName.trim());
+      if (!updated) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update contact name", error);
+    }
+  });
+
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;

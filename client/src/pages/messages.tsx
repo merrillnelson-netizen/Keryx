@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -54,9 +54,12 @@ interface AiSearchResult {
 
 function ConversationList() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [aiQuery, setAiQuery] = useState("");
   const [aiResult, setAiResult] = useState<AiSearchResult | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const { toast } = useToast();
 
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
@@ -107,6 +110,43 @@ function ConversationList() {
       });
     },
   });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, contactName }: { id: string; contactName: string }) => {
+      const response = await apiRequest("PATCH", `/api/messages/conversations/${id}/name`, { contactName });
+      if (!response.ok) throw new Error("Failed to update name");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      setEditingId(null);
+      setEditName("");
+      toast({ title: "Name updated", description: "Contact name has been saved" });
+    },
+    onError: () => {
+      toast({ title: "Update failed", description: "Could not save the name. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const handleStartEdit = (convo: MessageConversation, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(convo.id);
+    setEditName(convo.contactName || "");
+  };
+
+  const handleSaveEdit = (e?: React.MouseEvent | React.FormEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    if (editingId && editName.trim()) {
+      renameMutation.mutate({ id: editingId, contactName: editName.trim() });
+    }
+  };
+
+  const handleCancelEdit = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingId(null);
+    setEditName("");
+  };
 
   const handleAiSearch = () => {
     if (aiQuery.trim()) {
@@ -368,10 +408,41 @@ function ConversationList() {
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
                           <User className="w-4 h-4 text-white" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold">{convo.contactName || convo.contactAddress}</p>
-                          {convo.contactName && (
-                            <p className="text-xs text-muted-foreground truncate">{convo.contactAddress}</p>
+                        <div className="min-w-0 flex-1">
+                          {editingId === convo.id ? (
+                            <form onSubmit={handleSaveEdit} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                              <Input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="h-7 text-sm bg-white/5 border-white/20"
+                                placeholder="Enter name..."
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
+                              />
+                              <Button type="submit" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-emerald-400 hover:text-emerald-300" disabled={renameMutation.isPending}>
+                                <Check className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground" onClick={handleCancelEdit}>
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-1 group/name">
+                              <div className="min-w-0">
+                                <p className="truncate font-semibold">{convo.contactName || convo.contactAddress}</p>
+                                {convo.contactName && (
+                                  <p className="text-xs text-muted-foreground truncate">{convo.contactAddress}</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => handleStartEdit(convo, e)}
+                                className="opacity-0 group-hover/name:opacity-100 transition-opacity text-muted-foreground hover:text-foreground p-1 shrink-0"
+                                title="Edit contact name"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -403,7 +474,7 @@ function ConversationList() {
             <Card
               key={convo.id}
               className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]"
-              onClick={() => setLocation(`/messages/${convo.id}`)}
+              onClick={() => editingId !== convo.id && setLocation(`/messages/${convo.id}`)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -411,27 +482,58 @@ function ConversationList() {
                     <User className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-semibold text-foreground truncate">
-                        {convo.contactName || convo.contactAddress}
-                      </h3>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {formatTimestamp(convo.lastMessageAt)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge
-                        variant="outline"
-                        className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                      >
-                        <Smartphone className="w-3 h-3 mr-1" />
-                        {convo.platform}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MessageCircle className="w-3 h-3" />
-                        {convo.messageCount ?? 0}
-                      </span>
-                    </div>
+                    {editingId === convo.id ? (
+                      <form onSubmit={handleSaveEdit} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                        <Input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="h-8 text-sm bg-white/5 border-white/20 flex-1"
+                          placeholder="Enter name..."
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
+                        />
+                        <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-emerald-400 hover:text-emerald-300" disabled={renameMutation.isPending}>
+                          <Check className="w-4 h-4" />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground" onClick={handleCancelEdit}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </form>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <h3 className="font-semibold text-foreground truncate">
+                              {convo.contactName || convo.contactAddress}
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartEdit(convo, e)}
+                              className="text-muted-foreground hover:text-foreground transition-opacity p-0.5 shrink-0"
+                              title="Edit contact name"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">
+                            {formatTimestamp(convo.lastMessageAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          >
+                            <Smartphone className="w-3 h-3 mr-1" />
+                            {convo.platform}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MessageCircle className="w-3 h-3" />
+                            {convo.messageCount ?? 0}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
