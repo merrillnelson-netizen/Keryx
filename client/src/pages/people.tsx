@@ -463,9 +463,19 @@ export default function People() {
                   onChange={(e) => setAiQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
                   placeholder="Ask AI: sort by closeness, show family, who haven't I talked to..."
-                  className="pl-9 pr-4 bg-white/5 border-white/20 focus:border-primary/50"
+                  className="pl-9 pr-9 bg-white/5 border-white/20 focus:border-primary/50"
                   data-testid="ai-search-input"
                 />
+                {aiQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setAiQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Clear text"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
               <Button
                 onClick={handleAiSearch}
