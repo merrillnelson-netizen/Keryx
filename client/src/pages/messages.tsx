@@ -208,18 +208,49 @@ function ConversationList() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header Section - matches People page layout */}
       <div className="glass-card p-6 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
-            <MessageCircle className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center">
+              <MessageCircle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Messages</h2>
+              <p className="text-sm text-muted-foreground">
+                {stats
+                  ? `${stats.totalConversations.toLocaleString()} conversations · ${stats.totalMessages.toLocaleString()} messages`
+                  : "Your text message conversations"}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">Messages</h2>
-            <p className="text-sm text-muted-foreground">
-              {stats
-                ? `${stats.totalConversations.toLocaleString()} conversations · ${stats.totalMessages.toLocaleString()} messages`
-                : "Your text message conversations"}
-            </p>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewMode("cards")}
+              className={cn(
+                "h-9 w-9 p-0 transition-all",
+                viewMode === "cards" 
+                  ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+              )}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "h-9 w-9 p-0 transition-all",
+                viewMode === "table" 
+                  ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+              )}
+            >
+              <TableIcon className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -245,9 +276,10 @@ function ConversationList() {
         </div>
       )}
 
+      {/* Search & Sort Controls - matches People page layout */}
       {conversations.length > 0 && (
         <div className="glass-card p-4 rounded-2xl">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -267,53 +299,32 @@ function ConversationList() {
                 </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <Select value={sortField} onValueChange={(v) => { setSortField(v as SortField); setSortDirection(v === 'contactName' ? 'asc' : 'desc'); }}>
-                <SelectTrigger className="w-[160px] bg-white/5 border-white/20">
-                  <SelectValue placeholder="Sort by..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lastMessageAt">Last Message</SelectItem>
-                  <SelectItem value="contactName">Name</SelectItem>
-                  <SelectItem value="messageCount">Messages</SelectItem>
-                  <SelectItem value="platform">Platform</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-                className="border-white/20 bg-white/5 hover:bg-white/10 shrink-0"
-                title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-              >
-                {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-              </Button>
-              <div className="flex rounded-lg border border-white/20 overflow-hidden">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn("rounded-none border-0 h-10 w-10", viewMode === "cards" && "bg-primary/20 text-primary")}
-                  onClick={() => setViewMode("cards")}
-                  title="Card view"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn("rounded-none border-0 h-10 w-10", viewMode === "table" && "bg-primary/20 text-primary")}
-                  onClick={() => setViewMode("table")}
-                  title="Table view"
-                >
-                  <TableIcon className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+            <Select value={sortField} onValueChange={(v) => { setSortField(v as SortField); setSortDirection(v === 'contactName' ? 'asc' : 'desc'); }}>
+              <SelectTrigger className="w-[140px] bg-white/5 border-white/20 shrink-0">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lastMessageAt">Last Message</SelectItem>
+                <SelectItem value="contactName">Name</SelectItem>
+                <SelectItem value="messageCount">Messages</SelectItem>
+                <SelectItem value="platform">Platform</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+              className="border-white/20 bg-white/5 hover:bg-white/10 shrink-0"
+              title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+            </Button>
           </div>
           {searchQuery && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Showing {displayConversations.length} of {conversations.length} conversations
-            </p>
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Showing {displayConversations.length} of {conversations.length} conversations</span>
+            </div>
           )}
         </div>
       )}
