@@ -1875,6 +1875,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const aiSearchSchema = z.object({
+    query: z.string().min(1, "Search query is required").max(500, "Query too long"),
+  });
+
+  const VALID_SORT_FIELDS = ['name', 'relationship', 'priority', 'mentionCount', 'lastMentioned', 'firstMentioned'] as const;
+
+  app.post("/api/people/ai-search", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const validation = aiSearchSchema.safeParse(req.body);
+      
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
+      }
+
+      const { query } = validation.data;
+
+      const allPeople = await storage.getPeople(user.id);
+      
+      if (allPeople.length === 0) {
+        return res.json({ status: 'success', data: { sortField: 'name', sortDirection: 'asc', filterIds: null, message: 'No people records found.' } });
+      }
+
+      const validPeopleIds = new Set(allPeople.map(p => p.id));
+
+      const peopleSummary = allPeople.slice(0, 500).map(p => ({
+        id: p.id,
+        name: p.name,
+        relationship: p.relationship || 'unset',
+        priority: p.priority,
+        mentionCount: p.mentionCount,
+        lastMentioned: p.lastMentioned?.toISOString().split('T')[0] || 'unknown',
+        firstMentioned: p.firstMentioned?.toISOString().split('T')[0] || 'unknown',
+      }));
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a search/sort/filter assistant for a people management system. The user has ${allPeople.length} people records.
+
+Available fields for sorting: name, relationship, priority (closeness score 1-10, 10=closest), mentionCount, lastMentioned, firstMentioned
+Available relationships: friend, family, colleague, client, acquaintance, partner, mentor, other, unset
+
+Given the user's natural language query, return a JSON object with:
+- "sortField": one of [name, relationship, priority, mentionCount, lastMentioned, firstMentioned] or null if no sort needed
+- "sortDirection": "asc" or "desc"
+- "filterIds": array of matching person IDs if filtering/searching, or null if showing all (just sorting)
+- "message": a brief friendly description of what you did (e.g., "Showing family members, sorted by closeness")
+
+IMPORTANT RULES:
+- For search queries (finding specific people), return only matching IDs in filterIds
+- For sort queries, set filterIds to null (show all, just reorder)
+- For filter queries (e.g., "show family"), return matching IDs in filterIds
+- For combined queries (e.g., "family sorted by mentions"), filter AND sort
+- "closest" or "most important" = highest priority (desc)
+- "most mentioned" = highest mentionCount (desc)
+- "recently mentioned" = lastMentioned desc
+- "neglected" or "haven't talked to" = lastMentioned asc or low mentionCount
+- If the query is ambiguous, do your best interpretation
+- Always provide a helpful message explaining the result
+
+Respond with JSON only.`
+          },
+          {
+            role: "user",
+            content: `Query: "${query.trim()}"\n\nPeople data:\n${JSON.stringify(peopleSummary)}`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+      });
+
+      let result: any;
+      try {
+        result = JSON.parse(response.choices[0].message.content || "{}");
+      } catch {
+        return res.json({
+          status: 'success',
+          data: { sortField: 'name', sortDirection: 'asc' as const, filterIds: null, message: 'Could not interpret query. Showing all people alphabetically.' }
+        });
+      }
+
+      const sortField = VALID_SORT_FIELDS.includes(result.sortField) ? result.sortField : null;
+      const sortDirection = result.sortDirection === 'desc' ? 'desc' as const : 'asc' as const;
+      const filterIds = Array.isArray(result.filterIds)
+        ? result.filterIds.filter((id: string) => typeof id === 'string' && validPeopleIds.has(id))
+        : null;
+
+      res.json({
+        status: 'success',
+        data: {
+          sortField,
+          sortDirection,
+          filterIds: filterIds && filterIds.length > 0 ? filterIds : (Array.isArray(result.filterIds) ? [] : null),
+          message: typeof result.message === 'string' ? result.message.slice(0, 200) : 'Search complete',
+        }
+      });
+    } catch (error) {
+      console.error("AI people search failed:", error);
+      sendErrorResponse(res, 500, "AI search failed", error);
+    }
+  });
+
   /**
    * MOOD ANALYTICS ROUTES
    * Analyze emotional patterns in memories

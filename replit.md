@@ -57,6 +57,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Personal Insights**: AI-generated insights from user data (memories, calendars, emails, finances).
 - **Contextual Discoveries**: Uses Tavily AI Search for personalized content based on user insights.
 - **People Closeness Score**: Priority system (1-10) for people, enabling High-Signal Alerts.
+- **AI People Search**: Natural language search/sort/filter on People page via GPT-4o-mini. Supports queries like "sort by closeness", "show family", "who haven't I talked to". Endpoint: POST /api/people/ai-search.
 - **Calendar & Email Integration**: Multi-provider support for auto-linking memories to events.
 - **AI Task Execution**: Detection of actionable requests with policy-based approval.
 - **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.

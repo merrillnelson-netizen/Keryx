@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -71,6 +71,13 @@ export default function People() {
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiResult, setAiResult] = useState<{
+    sortField: string | null;
+    sortDirection: 'asc' | 'desc';
+    filterIds: string[] | null;
+    message: string;
+  } | null>(null);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -172,6 +179,87 @@ export default function People() {
       });
     },
   });
+
+  const aiSearchMutation = useMutation({
+    mutationFn: async (searchQuery: string) => {
+      const response = await apiRequest("POST", "/api/people/ai-search", { query: searchQuery });
+      if (!response.ok) throw new Error("AI search failed");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setAiResult(data.data);
+    },
+    onError: () => {
+      toast({
+        title: "AI search failed",
+        description: "Could not process your search. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAiSearch = () => {
+    if (aiQuery.trim()) {
+      aiSearchMutation.mutate(aiQuery.trim());
+    }
+  };
+
+  const handleClearAiSearch = () => {
+    setAiQuery("");
+    setAiResult(null);
+  };
+
+  const getDisplayPeople = (): Person[] => {
+    let result = [...people];
+    
+    if (aiResult) {
+      if (aiResult.filterIds) {
+        const idSet = new Set(aiResult.filterIds);
+        result = result.filter(p => idSet.has(p.id));
+      }
+      
+      if (aiResult.sortField) {
+        result.sort((a, b) => {
+          let valA: any, valB: any;
+          switch (aiResult.sortField) {
+            case 'name':
+              valA = a.name.toLowerCase();
+              valB = b.name.toLowerCase();
+              break;
+            case 'relationship':
+              valA = (a.relationship || '').toLowerCase();
+              valB = (b.relationship || '').toLowerCase();
+              break;
+            case 'priority':
+              valA = a.priority || 0;
+              valB = b.priority || 0;
+              break;
+            case 'mentionCount':
+              valA = a.mentionCount || 0;
+              valB = b.mentionCount || 0;
+              break;
+            case 'lastMentioned':
+              valA = a.lastMentioned ? new Date(a.lastMentioned).getTime() : 0;
+              valB = b.lastMentioned ? new Date(b.lastMentioned).getTime() : 0;
+              break;
+            case 'firstMentioned':
+              valA = a.firstMentioned ? new Date(a.firstMentioned).getTime() : 0;
+              valB = b.firstMentioned ? new Date(b.firstMentioned).getTime() : 0;
+              break;
+            default:
+              return 0;
+          }
+          if (valA < valB) return aiResult.sortDirection === 'asc' ? -1 : 1;
+          if (valA > valB) return aiResult.sortDirection === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+    }
+    
+    return result;
+  };
+
+  const displayPeople = getDisplayPeople();
 
   const handleToggleMergeSelection = (personId: string) => {
     setSelectedForMerge(prev => {
@@ -379,6 +467,57 @@ export default function People() {
           )}
         </div>
 
+        {people.length > 0 && !mergeMode && (
+          <div className="glass-card p-4 rounded-2xl">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={aiQuery}
+                  onChange={(e) => setAiQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
+                  placeholder="Ask AI: sort by closeness, show family, who haven't I talked to..."
+                  className="pl-9 pr-4 bg-white/5 border-white/20 focus:border-primary/50"
+                  data-testid="ai-search-input"
+                />
+              </div>
+              <Button
+                onClick={handleAiSearch}
+                disabled={!aiQuery.trim() || aiSearchMutation.isPending}
+                className="bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90 gap-2 shrink-0"
+                data-testid="ai-search-button"
+              >
+                {aiSearchMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">AI Search</span>
+              </Button>
+              {aiResult && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleClearAiSearch}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  data-testid="ai-search-clear"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            {aiResult && (
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="text-purple-300">{aiResult.message}</span>
+                <Badge variant="outline" className="text-xs ml-auto bg-purple-500/10 text-purple-400 border-purple-500/30">
+                  {displayPeople.length} of {people.length}
+                </Badge>
+              </div>
+            )}
+          </div>
+        )}
+
         {people.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
             <Users className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
@@ -386,6 +525,20 @@ export default function People() {
             <p className="text-muted-foreground">
               When you mention people in your memories, they'll appear here
             </p>
+          </div>
+        ) : displayPeople.length === 0 && aiResult ? (
+          <div className="glass-card p-12 rounded-2xl text-center">
+            <Search className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+            <h3 className="text-lg font-medium text-foreground mb-2">No matches found</h3>
+            <p className="text-muted-foreground mb-4">{aiResult.message}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAiSearch}
+              className="border-white/20 hover:bg-white/10"
+            >
+              Clear Search
+            </Button>
           </div>
         ) : viewMode === "table" ? (
           <div className="glass-card rounded-2xl overflow-hidden">
@@ -404,7 +557,7 @@ export default function People() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {people.map((person) => (
+                  {displayPeople.map((person) => (
                     <TableRow 
                       key={person.id} 
                       data-testid={`person-row-${person.id}`}
@@ -527,7 +680,7 @@ export default function People() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {people.map((person) => (
+            {displayPeople.map((person) => (
               <Card 
                 key={person.id} 
                 data-testid={`person-card-${person.id}`}
