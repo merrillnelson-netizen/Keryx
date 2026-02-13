@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Brain, Loader2, Search, X, LayoutGrid, Table as TableIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
