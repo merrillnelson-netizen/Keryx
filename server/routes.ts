@@ -5523,6 +5523,117 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  const MESSAGE_SORT_FIELDS = ['contactName', 'platform', 'messageCount', 'lastMessageAt'] as const;
+
+  app.post("/api/messages/ai-search", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const validation = aiSearchSchema.safeParse(req.body);
+
+      if (!validation.success) {
+        return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
+      }
+
+      const { query } = validation.data;
+      const allConversations = await storage.getMessageConversations(user.id, 1000, 0);
+
+      if (allConversations.length === 0) {
+        return res.json({ status: 'success', data: { sortFields: [{ field: 'lastMessageAt', direction: 'desc' }], filterIds: null, message: 'No conversations found.' } });
+      }
+
+      const validIds = new Set(allConversations.map(c => c.id));
+
+      const convSummary = allConversations.slice(0, 500).map(c => ({
+        id: c.id,
+        contactName: c.contactName || c.contactAddress,
+        contactAddress: c.contactAddress,
+        platform: c.platform || 'sms',
+        messageCount: c.messageCount || 0,
+        lastMessageAt: c.lastMessageAt ? new Date(c.lastMessageAt).toISOString().split('T')[0] : 'unknown',
+      }));
+
+      const openaiModule = await import('openai');
+      const openaiClient = new openaiModule.OpenAI();
+
+      const response = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a search/sort/filter assistant for a text message conversations list. The user has ${allConversations.length} conversations.
+
+Available fields for sorting: contactName, platform, messageCount, lastMessageAt
+Available platforms: sms, mms, rcs
+
+Given the user's natural language query, return a JSON object with:
+- "sortFields": an array of sort criteria, each with { "field": string, "direction": "asc" | "desc" }. Order matters: first entry is primary sort. Use an empty array [] if no sort needed.
+- "filterIds": array of matching conversation IDs if filtering/searching, or null if showing all (just sorting)
+- "message": a brief friendly description of what you did
+
+IMPORTANT RULES:
+- For search queries (finding specific contacts), return only matching IDs in filterIds
+- For sort queries, set filterIds to null (show all, just reorder)
+- For filter queries (e.g., "show sms only"), return matching IDs in filterIds
+- For combined queries (e.g., "sms sorted by messages"), filter AND sort
+- "most messages" or "most active" = messageCount desc
+- "recent" or "latest" = lastMessageAt desc
+- "oldest" = lastMessageAt asc
+- "alphabetical" or "by name" = contactName asc
+- Contact name searches should be fuzzy — match partial names, nicknames, phone numbers
+- If the query is ambiguous, do your best interpretation
+- Always provide a helpful message explaining the result
+
+Respond with JSON only.`
+          },
+          {
+            role: "user",
+            content: `Query: "${query.trim()}"\n\nConversations data:\n${JSON.stringify(convSummary)}`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+      });
+
+      let result: any;
+      try {
+        result = JSON.parse(response.choices[0].message.content || "{}");
+      } catch {
+        return res.json({
+          status: 'success',
+          data: { sortFields: [{ field: 'lastMessageAt', direction: 'desc' as const }], filterIds: null, message: 'Could not interpret query. Showing all conversations by recent.' }
+        });
+      }
+
+      const sortFields: Array<{ field: string; direction: 'asc' | 'desc' }> = [];
+      if (Array.isArray(result.sortFields)) {
+        for (const sf of result.sortFields) {
+          if (sf && typeof sf.field === 'string' && MESSAGE_SORT_FIELDS.includes(sf.field as any)) {
+            sortFields.push({
+              field: sf.field,
+              direction: sf.direction === 'desc' ? 'desc' : 'asc',
+            });
+          }
+        }
+      }
+
+      const filterIds = Array.isArray(result.filterIds)
+        ? result.filterIds.filter((id: string) => typeof id === 'string' && validIds.has(id))
+        : null;
+
+      res.json({
+        status: 'success',
+        data: {
+          sortFields,
+          filterIds: filterIds && filterIds.length > 0 ? filterIds : (Array.isArray(result.filterIds) ? [] : null),
+          message: typeof result.message === 'string' ? result.message.slice(0, 200) : 'Search complete',
+        }
+      });
+    } catch (error) {
+      console.error("AI messages search failed:", error);
+      sendErrorResponse(res, 500, "AI search failed", error);
+    }
+  });
+
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;

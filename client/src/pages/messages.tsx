@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -14,17 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 function formatTimestamp(date: string | Date | null) {
   if (!date) return "";
@@ -51,17 +46,18 @@ function formatMessageTime(date: string | Date) {
   });
 }
 
-type SortField = 'lastMessageAt' | 'contactName' | 'messageCount' | 'platform';
-type SortDirection = 'asc' | 'desc';
+interface AiSearchResult {
+  sortFields: Array<{ field: string; direction: 'asc' | 'desc' }>;
+  filterIds: string[] | null;
+  message: string;
+}
 
 function ConversationList() {
   const [, setLocation] = useLocation();
-  const [offset, setOffset] = useState(0);
-  const limit = 50;
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortField, setSortField] = useState<SortField>("lastMessageAt");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiResult, setAiResult] = useState<AiSearchResult | null>(null);
+  const { toast } = useToast();
 
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
     queryKey: ["/api/messages/stats"],
@@ -81,9 +77,9 @@ function ConversationList() {
     conversations: MessageConversation[];
     total: number;
   }>({
-    queryKey: ["/api/messages/conversations", { limit, offset }],
+    queryKey: ["/api/messages/conversations"],
     queryFn: async () => {
-      const res = await fetch(`/api/messages/conversations?limit=${limit}&offset=${offset}`, {
+      const res = await fetch(`/api/messages/conversations?limit=1000&offset=0`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch conversations");
@@ -93,63 +89,72 @@ function ConversationList() {
   });
 
   const conversations = conversationsData?.conversations || [];
-  const total = conversationsData?.total || 0;
-  const hasMore = offset + limit < total;
 
-  const displayConversations = useMemo(() => {
+  const aiSearchMutation = useMutation({
+    mutationFn: async (searchQuery: string) => {
+      const response = await apiRequest("POST", "/api/messages/ai-search", { query: searchQuery });
+      if (!response.ok) throw new Error("AI search failed");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setAiResult(data.data);
+    },
+    onError: () => {
+      toast({
+        title: "AI search failed",
+        description: "Could not process your search. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAiSearch = () => {
+    if (aiQuery.trim()) {
+      aiSearchMutation.mutate(aiQuery.trim());
+    }
+  };
+
+  const handleClearAiSearch = () => {
+    setAiQuery("");
+    setAiResult(null);
+  };
+
+  const getDisplayConversations = (): MessageConversation[] => {
     let result = [...conversations];
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter(c =>
-        (c.contactName || "").toLowerCase().includes(q) ||
-        (c.contactAddress || "").toLowerCase().includes(q) ||
-        (c.platform || "").toLowerCase().includes(q)
-      );
-    }
-
-    result.sort((a, b) => {
-      let valA: any, valB: any;
-      switch (sortField) {
-        case 'contactName':
-          valA = (a.contactName || a.contactAddress || "").toLowerCase();
-          valB = (b.contactName || b.contactAddress || "").toLowerCase();
-          break;
-        case 'messageCount':
-          valA = a.messageCount || 0;
-          valB = b.messageCount || 0;
-          break;
-        case 'platform':
-          valA = (a.platform || "").toLowerCase();
-          valB = (b.platform || "").toLowerCase();
-          break;
-        case 'lastMessageAt':
-        default:
-          valA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-          valB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-          break;
+    if (aiResult) {
+      if (aiResult.filterIds) {
+        const idSet = new Set(aiResult.filterIds);
+        result = result.filter(c => idSet.has(c.id));
       }
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
+
+      if (aiResult.sortFields && aiResult.sortFields.length > 0) {
+        const getSortValue = (conv: MessageConversation, field: string): any => {
+          switch (field) {
+            case 'contactName': return (conv.contactName || conv.contactAddress || '').toLowerCase();
+            case 'platform': return (conv.platform || '').toLowerCase();
+            case 'messageCount': return conv.messageCount || 0;
+            case 'lastMessageAt': return conv.lastMessageAt ? new Date(conv.lastMessageAt).getTime() : 0;
+            default: return 0;
+          }
+        };
+
+        result.sort((a, b) => {
+          for (const { field, direction } of aiResult.sortFields) {
+            const valA = getSortValue(a, field);
+            const valB = getSortValue(b, field);
+            if (valA < valB) return direction === 'asc' ? -1 : 1;
+            if (valA > valB) return direction === 'asc' ? 1 : -1;
+          }
+          return 0;
+        });
+      }
+    }
 
     return result;
-  }, [conversations, searchQuery, sortField, sortDirection]);
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection(field === 'contactName' ? 'asc' : 'desc');
-    }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
-    return sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
-  };
+  const displayConversations = getDisplayConversations();
 
   if (isLoading) {
     return (
@@ -174,7 +179,7 @@ function ConversationList() {
     );
   }
 
-  if (conversations.length === 0 && offset === 0) {
+  if (conversations.length === 0) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div className="glass-card p-6 rounded-2xl">
@@ -276,64 +281,70 @@ function ConversationList() {
         </div>
       )}
 
-      {/* Search & Sort Controls - matches People page layout */}
+      {/* AI Search - matches People page layout */}
       {conversations.length > 0 && (
         <div className="glass-card p-4 rounded-2xl">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name, number, or platform..."
+                value={aiQuery}
+                onChange={(e) => setAiQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
+                placeholder="Ask AI: sort by most messages, find Michael, show recent..."
                 className="pl-9 pr-9 bg-white/5 border-white/20 focus:border-primary/50"
               />
-              {searchQuery && (
+              {aiQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => setAiQuery("")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="Clear search"
+                  aria-label="Clear text"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-            <Select value={sortField} onValueChange={(v) => { setSortField(v as SortField); setSortDirection(v === 'contactName' ? 'asc' : 'desc'); }}>
-              <SelectTrigger className="w-[140px] bg-white/5 border-white/20 shrink-0">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lastMessageAt">Last Message</SelectItem>
-                <SelectItem value="contactName">Name</SelectItem>
-                <SelectItem value="messageCount">Messages</SelectItem>
-                <SelectItem value="platform">Platform</SelectItem>
-              </SelectContent>
-            </Select>
             <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-              className="border-white/20 bg-white/5 hover:bg-white/10 shrink-0"
-              title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              onClick={handleAiSearch}
+              disabled={!aiQuery.trim() || aiSearchMutation.isPending}
+              className="bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90 gap-2 shrink-0"
             >
-              {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+              {aiSearchMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">AI Search</span>
             </Button>
+            {aiResult && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClearAiSearch}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
-          {searchQuery && (
+          {aiResult && (
             <div className="mt-3 flex items-center gap-2 text-sm">
-              <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Showing {displayConversations.length} of {conversations.length} conversations</span>
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="text-purple-300">{aiResult.message}</span>
+              <Badge variant="outline" className="text-xs ml-auto bg-purple-500/10 text-purple-400 border-purple-500/30">
+                {displayConversations.length} of {conversations.length}
+              </Badge>
             </div>
           )}
         </div>
       )}
 
-      {displayConversations.length === 0 && searchQuery ? (
+      {displayConversations.length === 0 && aiResult ? (
         <div className="glass-card p-8 rounded-2xl text-center">
           <Search className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
           <h3 className="text-lg font-medium text-foreground mb-2">No matches found</h3>
-          <p className="text-muted-foreground">Try a different search term</p>
+          <p className="text-muted-foreground">Try a different search query</p>
         </div>
       ) : viewMode === "table" ? (
         <div className="glass-card rounded-2xl overflow-hidden">
@@ -341,30 +352,10 @@ function ConversationList() {
             <Table>
               <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
                 <TableRow className="border-white/10 hover:bg-transparent">
-                  <TableHead
-                    className="w-[250px] text-foreground font-semibold cursor-pointer select-none"
-                    onClick={() => toggleSort('contactName')}
-                  >
-                    <div className="flex items-center gap-1">Contact <SortIcon field="contactName" /></div>
-                  </TableHead>
-                  <TableHead
-                    className="w-[100px] text-foreground font-semibold cursor-pointer select-none"
-                    onClick={() => toggleSort('platform')}
-                  >
-                    <div className="flex items-center gap-1">Platform <SortIcon field="platform" /></div>
-                  </TableHead>
-                  <TableHead
-                    className="w-[100px] text-foreground font-semibold cursor-pointer select-none"
-                    onClick={() => toggleSort('messageCount')}
-                  >
-                    <div className="flex items-center gap-1">Messages <SortIcon field="messageCount" /></div>
-                  </TableHead>
-                  <TableHead
-                    className="w-[140px] text-foreground font-semibold cursor-pointer select-none"
-                    onClick={() => toggleSort('lastMessageAt')}
-                  >
-                    <div className="flex items-center gap-1">Last Message <SortIcon field="lastMessageAt" /></div>
-                  </TableHead>
+                  <TableHead className="w-[250px] text-foreground font-semibold">Contact</TableHead>
+                  <TableHead className="w-[100px] text-foreground font-semibold">Platform</TableHead>
+                  <TableHead className="w-[100px] text-foreground font-semibold">Messages</TableHead>
+                  <TableHead className="w-[140px] text-foreground font-semibold">Last Message</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -451,18 +442,6 @@ function ConversationList() {
         </div>
       )}
 
-      {hasMore && (
-        <div className="flex justify-center">
-          <Button
-            variant="outline"
-            className="border-white/20 hover:bg-white/10 gap-2"
-            onClick={() => setOffset((prev) => prev + limit)}
-          >
-            <ChevronDown className="w-4 h-4" />
-            Load More
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
