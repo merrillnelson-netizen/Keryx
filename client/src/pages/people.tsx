@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare } from "lucide-react";
@@ -208,7 +208,7 @@ export default function People() {
     setAiResult(null);
   };
 
-  const getDisplayPeople = (): Person[] => {
+  const displayPeople = useMemo(() => {
     let result = [...people];
     
     if (aiResult) {
@@ -244,9 +244,7 @@ export default function People() {
     }
     
     return result;
-  };
-
-  const displayPeople = getDisplayPeople();
+  }, [people, aiResult]);
 
   const handleToggleMergeSelection = (personId: string) => {
     setSelectedForMerge(prev => {

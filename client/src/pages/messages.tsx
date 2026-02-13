@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -119,7 +119,7 @@ function ConversationList() {
     setAiResult(null);
   };
 
-  const getDisplayConversations = (): MessageConversation[] => {
+  const displayConversations = useMemo(() => {
     let result = [...conversations];
 
     if (aiResult) {
@@ -152,9 +152,7 @@ function ConversationList() {
     }
 
     return result;
-  };
-
-  const displayConversations = getDisplayConversations();
+  }, [conversations, aiResult]);
 
   if (isLoading) {
     return (
