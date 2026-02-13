@@ -107,16 +107,13 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        try {
-          logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-        } catch (serializeError) {
-          // Prevent logging serialization failures from affecting the response
-          logLine += ` :: [response logging failed: ${serializeError instanceof Error ? serializeError.message : 'unknown error'}]`;
-        }
+        const status = capturedJsonResponse.status || '';
+        const cached = capturedJsonResponse.cached ? ' [cached]' : '';
+        if (status) logLine += ` :: ${status}${cached}`;
       }
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+      if (logLine.length > 120) {
+        logLine = logLine.slice(0, 119) + "…";
       }
 
       log(logLine);
@@ -171,8 +168,9 @@ app.use((req, res, next) => {
             try {
               await processMessageBatch(userId, batch);
               retries = 0;
-            } catch {
+            } catch (batchErr) {
               retries++;
+              console.warn(`Startup message batch retry ${retries}/3 for user ${userId.slice(0, 8)}:`, batchErr instanceof Error ? batchErr.message : batchErr);
               if (retries < 3) await new Promise(r => setTimeout(r, 5000 * retries));
             }
           }

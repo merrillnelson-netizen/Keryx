@@ -2901,7 +2901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             const conv = await storage.getMessageConversation(cid, user.id);
             if (conv) convNames.set(cid, conv.contactName || conv.contactAddress);
-          } catch {}
+          } catch (err) { console.warn('Alerts: conversation lookup failed:', err instanceof Error ? err.message : err); }
         }
         const grouped = new Map<string, typeof processedMsgs>();
         for (const msg of processedMsgs) {
@@ -4233,7 +4233,8 @@ Be encouraging but honest. Keep responses concise and actionable.`;
               updatedListItems = parsed.updatedListItems;
             }
           }
-        } catch {
+        } catch (err) {
+          console.warn('Ideas chat: AI response parse failed:', err instanceof Error ? err.message : err);
           displayMessage = rawContent;
         }
       }
@@ -4311,11 +4312,11 @@ Return ONLY the JSON array, no other text.`;
         // Extract JSON from response (handle markdown code blocks)
         const jsonMatch = content.match(/\[[\s\S]*\]/);
         tasks = JSON.parse(jsonMatch?.[0] || '[]');
-      } catch {
+      } catch (err) {
+        console.warn('Ideas tasks: AI response parse failed:', err instanceof Error ? err.message : err);
         return sendErrorResponse(res, 500, "Failed to parse AI response");
       }
       
-      // Create the tasks in the database
       const existingTasks = await storage.getIdeaTasks(id);
       const startOrder = existingTasks.length;
       
@@ -5364,7 +5365,7 @@ Return ONLY the JSON array, no other text.`;
             errorMessage: error.message || 'Unknown error',
           });
         }
-      } catch {}
+      } catch (updateErr) { console.warn('Messages import: failed to update import status:', updateErr instanceof Error ? updateErr.message : updateErr); }
       const userMessage = error.message?.includes('format') || error.message?.includes('parse') || error.message?.includes('XML')
         ? error.message
         : "Failed to import messages. Check the file format — export as JSON (NDJSON) from the SMS app.";
@@ -5480,8 +5481,9 @@ Return ONLY the JSON array, no other text.`;
               try {
                 await processMessageBatch(user.id, batch);
                 retries = 0;
-              } catch {
+              } catch (batchErr) {
                 retries++;
+                console.warn(`Background message batch retry ${retries}/3:`, batchErr instanceof Error ? batchErr.message : batchErr);
                 if (retries < 3) await new Promise(r => setTimeout(r, 5000 * retries));
               }
             }
