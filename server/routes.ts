@@ -1910,7 +1910,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstMentioned: p.firstMentioned?.toISOString().split('T')[0] || 'unknown',
       }));
 
-      const response = await openai.chat.completions.create({
+      const openaiModule = await import('openai');
+      const openaiClient = new openaiModule.OpenAI();
+
+      const response = await openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
