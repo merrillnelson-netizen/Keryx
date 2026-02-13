@@ -1879,7 +1879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     query: z.string().min(1, "Search query is required").max(500, "Query too long"),
   });
 
-  const VALID_SORT_FIELDS = ['name', 'relationship', 'priority', 'mentionCount', 'lastMentioned', 'firstMentioned'] as const;
+  const VALID_SORT_FIELDS = ['name', 'relationship', 'priority', 'mentionCount', 'source', 'lastMentioned', 'firstMentioned'] as const;
 
   app.post("/api/people/ai-search", requireAuth, aiLimiter, async (req, res) => {
     try {
@@ -1906,6 +1906,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         relationship: p.relationship || 'unset',
         priority: p.priority,
         mentionCount: p.mentionCount,
+        source: p.source || 'memory',
         lastMentioned: p.lastMentioned?.toISOString().split('T')[0] || 'unknown',
         firstMentioned: p.firstMentioned?.toISOString().split('T')[0] || 'unknown',
       }));
@@ -1920,8 +1921,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             role: "system",
             content: `You are a search/sort/filter assistant for a people management system. The user has ${allPeople.length} people records.
 
-Available fields for sorting: name, relationship, priority (closeness score 1-10, 10=closest), mentionCount, lastMentioned, firstMentioned
+Available fields for sorting: name, relationship, priority (closeness score 1-10, 10=closest), mentionCount, source, lastMentioned, firstMentioned
 Available relationships: friend, family, colleague, client, acquaintance, partner, mentor, other, unset
+Available sources: memory (from voice/text memories), messages (from text message imports), both (appears in both), manual (manually created)
 
 Given the user's natural language query, return a JSON object with:
 - "sortFields": an array of sort criteria, each with { "field": string, "direction": "asc" | "desc" }. Use multiple entries for multi-field sorts (e.g., group by relationship then sort by closeness). Order matters: first entry is primary sort, second is tiebreaker, etc. Use an empty array [] if no sort needed.

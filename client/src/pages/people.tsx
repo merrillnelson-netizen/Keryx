@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2 } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -224,6 +224,7 @@ export default function People() {
             case 'relationship': return (person.relationship || '').toLowerCase();
             case 'priority': return person.priority || 0;
             case 'mentionCount': return person.mentionCount || 0;
+            case 'source': return person.source || 'memory';
             case 'lastMentioned': return person.lastMentioned ? new Date(person.lastMentioned).getTime() : 0;
             case 'firstMentioned': return person.firstMentioned ? new Date(person.firstMentioned).getTime() : 0;
             default: return 0;
@@ -306,6 +307,16 @@ export default function People() {
           priority: editPriority,
         },
       });
+    }
+  };
+
+  const getSourceInfo = (source: string) => {
+    switch (source) {
+      case 'memory': return { label: 'Memory', icon: Brain, color: 'bg-violet-500/20 text-violet-400 border-violet-500/30' };
+      case 'messages': return { label: 'Messages', icon: MessagesSquare, color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
+      case 'both': return { label: 'Both', icon: Users, color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' };
+      case 'manual': return { label: 'Manual', icon: Edit2, color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
+      default: return { label: 'Unknown', icon: User, color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' };
     }
   };
 
@@ -547,6 +558,7 @@ export default function People() {
                     <TableHead className="w-[80px] text-foreground font-semibold">Priority</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Relationship</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Mentions</TableHead>
+                    <TableHead className="w-[100px] text-foreground font-semibold">Source</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Last Mentioned</TableHead>
                     <TableHead className="min-w-[200px] text-foreground font-semibold">Notes</TableHead>
                     <TableHead className="w-[90px] text-right text-foreground font-semibold">Actions</TableHead>
@@ -617,6 +629,18 @@ export default function People() {
                         <Badge variant="secondary" className="bg-sky-500/20 text-sky-400 border-sky-500/30">
                           {person.mentionCount}
                         </Badge>
+                      </TableCell>
+                      <TableCell data-testid={`source-cell-${person.id}`}>
+                        {(() => {
+                          const src = getSourceInfo(person.source || 'memory');
+                          const Icon = src.icon;
+                          return (
+                            <Badge variant="outline" className={cn("text-xs gap-1", src.color)}>
+                              <Icon className="w-3 h-3" />
+                              {src.label}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground" data-testid={`last-mentioned-cell-${person.id}`}>
                         {new Date(person.lastMentioned).toLocaleDateString()}
@@ -781,6 +805,16 @@ export default function People() {
                     <Badge variant="outline" className={cn("text-xs", getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).color)}>
                       {getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).label}
                     </Badge>
+                    {(() => {
+                      const src = getSourceInfo(person.source || 'memory');
+                      const Icon = src.icon;
+                      return (
+                        <Badge variant="outline" className={cn("text-xs gap-1", src.color)}>
+                          <Icon className="w-3 h-3" />
+                          {src.label}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                   {person.notes && (
                     <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
