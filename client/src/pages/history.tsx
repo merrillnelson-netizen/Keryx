@@ -346,7 +346,7 @@ export default function History() {
   } = useInfiniteQuery<LogsResponse>({
     queryKey: ["/api/logs", "paginated"],
     queryFn: async ({ pageParam = 0 }) => {
-      const response = await fetch(`/api/logs?limit=${PAGE_SIZE}&offset=${pageParam}`);
+      const response = await fetch(`/api/logs?limit=${PAGE_SIZE}&offset=${pageParam}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch logs");
       return response.json();
     },
