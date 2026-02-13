@@ -189,6 +189,7 @@ export const people = pgTable("people", {
   notes: text("notes"), // User notes about this person
   priority: integer("priority").default(5).notNull(), // 1-10 closeness score (10 = highest, e.g., spouse/partner)
   mentionCount: integer("mention_count").default(0), // How many times mentioned
+  source: text("source").default("memory").notNull(), // 'memory', 'messages', 'both', 'manual'
   firstMentioned: timestamp("first_mentioned").defaultNow().notNull(),
   lastMentioned: timestamp("last_mentioned").defaultNow().notNull(),
 }, (table) => ({
