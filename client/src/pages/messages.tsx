@@ -1,11 +1,27 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Brain, Loader2 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Brain, Loader2, Search, X, LayoutGrid, Table as TableIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -35,10 +51,17 @@ function formatMessageTime(date: string | Date) {
   });
 }
 
+type SortField = 'lastMessageAt' | 'contactName' | 'messageCount' | 'platform';
+type SortDirection = 'asc' | 'desc';
+
 function ConversationList() {
   const [, setLocation] = useLocation();
   const [offset, setOffset] = useState(0);
   const limit = 50;
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>("lastMessageAt");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
     queryKey: ["/api/messages/stats"],
@@ -72,6 +95,61 @@ function ConversationList() {
   const conversations = conversationsData?.conversations || [];
   const total = conversationsData?.total || 0;
   const hasMore = offset + limit < total;
+
+  const displayConversations = useMemo(() => {
+    let result = [...conversations];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(c =>
+        (c.contactName || "").toLowerCase().includes(q) ||
+        (c.contactAddress || "").toLowerCase().includes(q) ||
+        (c.platform || "").toLowerCase().includes(q)
+      );
+    }
+
+    result.sort((a, b) => {
+      let valA: any, valB: any;
+      switch (sortField) {
+        case 'contactName':
+          valA = (a.contactName || a.contactAddress || "").toLowerCase();
+          valB = (b.contactName || b.contactAddress || "").toLowerCase();
+          break;
+        case 'messageCount':
+          valA = a.messageCount || 0;
+          valB = b.messageCount || 0;
+          break;
+        case 'platform':
+          valA = (a.platform || "").toLowerCase();
+          valB = (b.platform || "").toLowerCase();
+          break;
+        case 'lastMessageAt':
+        default:
+          valA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          valB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          break;
+      }
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [conversations, searchQuery, sortField, sortDirection]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'contactName' ? 'asc' : 'desc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+  };
 
   if (isLoading) {
     return (
@@ -167,46 +245,200 @@ function ConversationList() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {conversations.map((convo) => (
-          <Card
-            key={convo.id}
-            className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]"
-            onClick={() => setLocation(`/messages/${convo.id}`)}
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-semibold text-foreground truncate">
-                      {convo.contactName || convo.contactAddress}
-                    </h3>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {formatTimestamp(convo.lastMessageAt)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge
-                      variant="outline"
-                      className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                    >
-                      <Smartphone className="w-3 h-3 mr-1" />
-                      {convo.platform}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <MessageCircle className="w-3 h-3" />
-                      {convo.messageCount ?? 0}
-                    </span>
-                  </div>
-                </div>
+      {conversations.length > 0 && (
+        <div className="glass-card p-4 rounded-2xl">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, number, or platform..."
+                className="pl-9 pr-9 bg-white/5 border-white/20 focus:border-primary/50"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Select value={sortField} onValueChange={(v) => { setSortField(v as SortField); setSortDirection(v === 'contactName' ? 'asc' : 'desc'); }}>
+                <SelectTrigger className="w-[160px] bg-white/5 border-white/20">
+                  <SelectValue placeholder="Sort by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lastMessageAt">Last Message</SelectItem>
+                  <SelectItem value="contactName">Name</SelectItem>
+                  <SelectItem value="messageCount">Messages</SelectItem>
+                  <SelectItem value="platform">Platform</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+                className="border-white/20 bg-white/5 hover:bg-white/10 shrink-0"
+                title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              >
+                {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+              </Button>
+              <div className="flex rounded-lg border border-white/20 overflow-hidden">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn("rounded-none border-0 h-10 w-10", viewMode === "cards" && "bg-primary/20 text-primary")}
+                  onClick={() => setViewMode("cards")}
+                  title="Card view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn("rounded-none border-0 h-10 w-10", viewMode === "table" && "bg-primary/20 text-primary")}
+                  onClick={() => setViewMode("table")}
+                  title="Table view"
+                >
+                  <TableIcon className="w-4 h-4" />
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+          </div>
+          {searchQuery && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Showing {displayConversations.length} of {conversations.length} conversations
+            </p>
+          )}
+        </div>
+      )}
+
+      {displayConversations.length === 0 && searchQuery ? (
+        <div className="glass-card p-8 rounded-2xl text-center">
+          <Search className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+          <h3 className="text-lg font-medium text-foreground mb-2">No matches found</h3>
+          <p className="text-muted-foreground">Try a different search term</p>
+        </div>
+      ) : viewMode === "table" ? (
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
+            <Table>
+              <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-sm z-10">
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead
+                    className="w-[250px] text-foreground font-semibold cursor-pointer select-none"
+                    onClick={() => toggleSort('contactName')}
+                  >
+                    <div className="flex items-center gap-1">Contact <SortIcon field="contactName" /></div>
+                  </TableHead>
+                  <TableHead
+                    className="w-[100px] text-foreground font-semibold cursor-pointer select-none"
+                    onClick={() => toggleSort('platform')}
+                  >
+                    <div className="flex items-center gap-1">Platform <SortIcon field="platform" /></div>
+                  </TableHead>
+                  <TableHead
+                    className="w-[100px] text-foreground font-semibold cursor-pointer select-none"
+                    onClick={() => toggleSort('messageCount')}
+                  >
+                    <div className="flex items-center gap-1">Messages <SortIcon field="messageCount" /></div>
+                  </TableHead>
+                  <TableHead
+                    className="w-[140px] text-foreground font-semibold cursor-pointer select-none"
+                    onClick={() => toggleSort('lastMessageAt')}
+                  >
+                    <div className="flex items-center gap-1">Last Message <SortIcon field="lastMessageAt" /></div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayConversations.map((convo) => (
+                  <TableRow
+                    key={convo.id}
+                    className="border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
+                    onClick={() => setLocation(`/messages/${convo.id}`)}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold">{convo.contactName || convo.contactAddress}</p>
+                          {convo.contactName && (
+                            <p className="text-xs text-muted-foreground truncate">{convo.contactAddress}</p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                        <Smartphone className="w-3 h-3 mr-1" />
+                        {convo.platform}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="bg-sky-500/20 text-sky-400 border-sky-500/30">
+                        <MessageCircle className="w-3 h-3 mr-1" />
+                        {convo.messageCount ?? 0}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatTimestamp(convo.lastMessageAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {displayConversations.map((convo) => (
+            <Card
+              key={convo.id}
+              className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]"
+              onClick={() => setLocation(`/messages/${convo.id}`)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-foreground truncate">
+                        {convo.contactName || convo.contactAddress}
+                      </h3>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatTimestamp(convo.lastMessageAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                      >
+                        <Smartphone className="w-3 h-3 mr-1" />
+                        {convo.platform}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MessageCircle className="w-3 h-3" />
+                        {convo.messageCount ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {hasMore && (
         <div className="flex justify-center">
