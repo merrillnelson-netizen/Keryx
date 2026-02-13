@@ -77,7 +77,7 @@ export async function processMessageBatch(
 
         if (analysis.detectedPeople.length > 0) {
           Promise.all(
-            analysis.detectedPeople.map(name => storage.upsertPerson(userId, name))
+            analysis.detectedPeople.map(name => storage.upsertPerson(userId, name, 'messages'))
           ).catch(() => {});
         }
       } catch (error) {
