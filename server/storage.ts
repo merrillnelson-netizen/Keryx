@@ -67,12 +67,14 @@ export interface IStorage {
   // People tracking (user-scoped)
   getPeople(userId: string): Promise<Person[]>;
   getPerson(userId: string, name: string): Promise<Person | undefined>;
+  getPersonById(userId: string, id: string): Promise<Person | undefined>;
   getActivePeopleCount(userId: string): Promise<number>;
   getHighPriorityPeople(userId: string, minPriority?: number): Promise<Person[]>;
   upsertPerson(userId: string, name: string, source?: 'memory' | 'messages' | 'manual', phoneNumber?: string): Promise<Person>;
   getPersonByPhone(userId: string, phoneNumber: string): Promise<Person | undefined>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
   deletePerson(userId: string, id: string): Promise<boolean>;
+  mergePersonRecords(userId: string, target: Person, source: Person, updateData: Partial<InsertPerson>): Promise<Person>;
   mergePeople(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; updatedMemories: number }>;
   getPersonMentions(userId: string, personName: string): Promise<LogEntry[]>;
   
@@ -858,6 +860,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getPersonById(userId: string, id: string): Promise<Person | undefined> {
+    try {
+      const [person] = await db.select().from(people)
+        .where(and(eq(people.userId, userId), eq(people.id, id)));
+      return person;
+    } catch (error) {
+      console.error('Failed to get person by id:', error);
+      throw new Error('Database error while fetching person by id');
+    }
+  }
+
   async updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined> {
     try {
       const [updated] = await db
@@ -882,6 +895,56 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to delete person:', error);
       throw new Error('Database error while deleting person');
+    }
+  }
+
+  async mergePersonRecords(userId: string, target: Person, source: Person, updateData: Partial<InsertPerson>): Promise<Person> {
+    try {
+      const mergeUpdates: Record<string, any> = {};
+
+      mergeUpdates.phoneNumber = target.phoneNumber || source.phoneNumber;
+
+      mergeUpdates.relationship = updateData.relationship || target.relationship || source.relationship;
+
+      const allNotes = [target.notes, source.notes, updateData.notes].filter(Boolean);
+      mergeUpdates.notes = allNotes.length > 0 ? allNotes.join('\n') : null;
+
+      const targetPri = target.priority ?? 5;
+      const sourcePri = source.priority ?? 5;
+      const updatePri = updateData.priority;
+      if (updatePri && updatePri !== 5) {
+        mergeUpdates.priority = updatePri;
+      } else {
+        mergeUpdates.priority = Math.max(targetPri, sourcePri);
+      }
+
+      if (target.source !== source.source) {
+        mergeUpdates.source = 'both';
+      }
+
+      mergeUpdates.mentionCount = (target.mentionCount || 0) + (source.mentionCount || 0);
+
+      if (source.lastMentioned && (!target.lastMentioned || source.lastMentioned > target.lastMentioned)) {
+        mergeUpdates.lastMentioned = source.lastMentioned;
+      }
+      if (source.firstMentioned && (!target.firstMentioned || source.firstMentioned < target.firstMentioned)) {
+        mergeUpdates.firstMentioned = source.firstMentioned;
+      }
+
+      const [merged] = await db
+        .update(people)
+        .set(mergeUpdates)
+        .where(and(eq(people.userId, userId), eq(people.id, target.id)))
+        .returning();
+
+      await db
+        .delete(people)
+        .where(and(eq(people.userId, userId), eq(people.id, source.id)));
+
+      return merged;
+    } catch (error) {
+      console.error('Failed to merge person records:', error);
+      throw new Error('Database error while merging person records');
     }
   }
 

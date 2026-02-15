@@ -1784,7 +1784,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as User;
       const { id } = req.params;
       const updateData = insertPersonSchema.partial().parse(req.body);
-      
+
+      if (updateData.name) {
+        const existingWithName = await storage.getPerson(user.id, updateData.name);
+        if (existingWithName && existingWithName.id !== id) {
+          const currentPerson = await storage.getPersonById(user.id, id);
+          if (!currentPerson) {
+            return sendErrorResponse(res, 404, "Person not found");
+          }
+
+          const merged = await storage.mergePersonRecords(user.id, existingWithName, currentPerson, updateData);
+
+          return res.json({
+            status: 'success',
+            data: merged,
+            message: `Merged with existing "${updateData.name}" record`,
+            merged: true,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
       const updated = await storage.updatePerson(user.id, id, updateData);
       
       if (!updated) {

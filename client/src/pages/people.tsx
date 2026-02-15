@@ -110,18 +110,18 @@ export default function People() {
       if (!response.ok) throw new Error("Failed to update person");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
       toast({
-        title: "Person updated",
-        description: "Details have been saved successfully",
+        title: data?.merged ? "Records merged" : "Person updated",
+        description: data?.message || "Details have been saved successfully",
       });
       setEditingPerson(null);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Update failed",
-        description: "Failed to update person. Please try again.",
+        description: error.message || "Failed to update person. Please try again.",
         variant: "destructive",
       });
     },
@@ -296,15 +296,11 @@ export default function People() {
 
   const handleSaveEdit = () => {
     if (editingPerson) {
-      updatePersonMutation.mutate({
-        id: editingPerson.id,
-        data: {
-          name: editName !== editingPerson.name ? editName : undefined,
-          relationship: editRelationship || undefined,
-          notes: editNotes || undefined,
-          priority: editPriority,
-        },
-      });
+      const data: Record<string, any> = { priority: editPriority };
+      if (editName && editName !== editingPerson.name) data.name = editName;
+      if (editRelationship) data.relationship = editRelationship;
+      if (editNotes) data.notes = editNotes;
+      updatePersonMutation.mutate({ id: editingPerson.id, data });
     }
   };
 
