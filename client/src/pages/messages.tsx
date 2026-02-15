@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -430,9 +430,10 @@ function ConversationList() {
                             <div className="flex items-center gap-1 group/name">
                               <div className="min-w-0">
                                 <p className="truncate font-semibold">{convo.contactName || convo.contactAddress}</p>
-                                {convo.contactName && (
-                                  <p className="text-xs text-muted-foreground truncate">{convo.contactAddress}</p>
-                                )}
+                                <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                  <Phone className="w-3 h-3 shrink-0" />
+                                  {convo.contactAddress}
+                                </p>
                               </div>
                               <button
                                 type="button"
@@ -519,6 +520,10 @@ function ConversationList() {
                             {formatTimestamp(convo.lastMessageAt)}
                           </span>
                         </div>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 shrink-0" />
+                          {convo.contactAddress}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge
                             variant="outline"
