@@ -5646,6 +5646,8 @@ Respond with JSON only.`
         return res.status(404).json({ message: "Conversation not found" });
       }
 
+      let personSynced = false;
+      let personSyncWarning: string | undefined;
       try {
         const phoneNumber = updated.contactAddress;
         const trimmedName = contactName.trim();
@@ -5655,22 +5657,31 @@ Respond with JSON only.`
         if (existingPerson) {
           if (!nameConflict || nameConflict.id === existingPerson.id) {
             await storage.updatePerson(user.id, existingPerson.id, { name: trimmedName, phoneNumber });
+            personSynced = true;
+          } else {
+            personSyncWarning = `A person named "${trimmedName}" already exists — the People record was not renamed to avoid a duplicate.`;
           }
         } else {
           const phonePerson = await storage.getPerson(user.id, phoneNumber);
           if (phonePerson) {
             if (!nameConflict || nameConflict.id === phonePerson.id) {
               await storage.updatePerson(user.id, phonePerson.id, { name: trimmedName, phoneNumber });
+              personSynced = true;
+            } else {
+              personSyncWarning = `A person named "${trimmedName}" already exists — the People record was not renamed to avoid a duplicate.`;
             }
           } else if (!nameConflict) {
             await storage.upsertPerson(user.id, trimmedName, 'messages', phoneNumber);
+            personSynced = true;
+          } else {
+            personSyncWarning = `A person named "${trimmedName}" already exists — linked the conversation but kept the existing People record name.`;
           }
         }
       } catch (syncErr) {
         console.error('Failed to sync person name from conversation rename:', syncErr);
       }
 
-      res.json(updated);
+      res.json({ ...updated, personSynced, personSyncWarning });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update contact name", error);
     }

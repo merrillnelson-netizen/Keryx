@@ -117,11 +117,15 @@ function ConversationList() {
       if (!response.ok) throw new Error("Failed to update name");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
       setEditingId(null);
       setEditName("");
-      toast({ title: "Name updated", description: "Contact name has been saved" });
+      if (data?.personSyncWarning) {
+        toast({ title: "Name updated", description: data.personSyncWarning, variant: "destructive" });
+      } else {
+        toast({ title: "Name updated", description: data?.personSynced ? "Contact name saved and People record updated" : "Contact name has been saved" });
+      }
     },
     onError: () => {
       toast({ title: "Update failed", description: "Could not save the name. Please try again.", variant: "destructive" });
@@ -430,10 +434,12 @@ function ConversationList() {
                             <div className="flex items-center gap-1 group/name">
                               <div className="min-w-0">
                                 <p className="truncate font-semibold">{convo.contactName || convo.contactAddress}</p>
-                                <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
-                                  <Phone className="w-3 h-3 shrink-0" />
-                                  {convo.contactAddress}
-                                </p>
+                                {convo.contactAddress && (
+                                  <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                                    <Phone className="w-3 h-3 shrink-0" />
+                                    {convo.contactAddress}
+                                  </p>
+                                )}
                               </div>
                               <button
                                 type="button"
@@ -520,10 +526,12 @@ function ConversationList() {
                             {formatTimestamp(convo.lastMessageAt)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Phone className="w-3 h-3 shrink-0" />
-                          {convo.contactAddress}
-                        </p>
+                        {convo.contactAddress && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Phone className="w-3 h-3 shrink-0" />
+                            {convo.contactAddress}
+                          </p>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <Badge
                             variant="outline"

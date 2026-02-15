@@ -824,8 +824,8 @@ export class DatabaseStorage implements IStorage {
         if (phoneNumber && !existing.phoneNumber) {
           updates.phoneNumber = phoneNumber;
         }
-        if (phoneNumber && existing.phoneNumber === phoneNumber && name !== existing.name && !/^\+?\d[\d\s\-()]+$/.test(existing.name)) {
-        } else if (name !== existing.name && existing.phoneNumber && /^\+?\d[\d\s\-()]+$/.test(existing.name)) {
+        const isPhoneNumberName = /^\+?\d[\d\s\-()]+$/.test(existing.name);
+        if (name !== existing.name && isPhoneNumberName) {
           updates.name = name;
         }
         const [updated] = await db

@@ -80,12 +80,14 @@ export async function parseAndImportNDJSON(
       if (Array.isArray(parsed)) {
         entries = parsed;
       }
-    } catch {
+    } catch (err) {
+      console.error('SMS import: failed to parse JSON array format:', err instanceof Error ? err.message : err);
     }
   }
 
   if (entries.length === 0) {
     const lines = trimmed.split('\n').filter(line => line.trim().length > 0);
+    let parseErrors = 0;
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line.trim());
@@ -95,8 +97,12 @@ export async function parseAndImportNDJSON(
           entries.push(parsed);
         }
       } catch {
+        parseErrors++;
         result.errors++;
       }
+    }
+    if (parseErrors > 0) {
+      console.warn(`SMS import: ${parseErrors} line(s) failed to parse as JSON out of ${lines.length} total lines`);
     }
   }
 
