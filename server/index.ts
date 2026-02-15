@@ -169,6 +169,56 @@ app.use((req, res, next) => {
       }
 
       try {
+        const phoneBackfill = await pool.query(`
+          SELECT p.id as person_id, p.name as person_name, p.user_id,
+                 mc.contact_address, mc.contact_name
+          FROM people p
+          JOIN message_conversations mc 
+            ON mc.user_id = p.user_id 
+            AND mc.contact_address = p.name
+          WHERE p.phone_number IS NULL
+            AND p.name ~ '^\\+?[0-9][0-9\\s\\-()]+$'
+        `);
+        if (phoneBackfill.rows.length > 0) {
+          log(`Startup: backfilling ${phoneBackfill.rows.length} phone-number people records...`);
+          for (const row of phoneBackfill.rows) {
+            const newName = row.contact_name || row.contact_address;
+            try {
+              const existing = await pool.query(
+                `SELECT id FROM people WHERE user_id = $1 AND name = $2 AND id != $3`,
+                [row.user_id, newName, row.person_id]
+              );
+              if (existing.rows.length === 0) {
+                await pool.query(
+                  `UPDATE people SET phone_number = $1, name = $2 WHERE id = $3`,
+                  [row.contact_address, newName, row.person_id]
+                );
+              } else {
+                await pool.query(
+                  `UPDATE people SET phone_number = $1 WHERE id = $2`,
+                  [row.contact_address, row.person_id]
+                );
+              }
+            } catch {
+            }
+          }
+
+          const noConvoPhones = await pool.query(`
+            UPDATE people SET phone_number = name
+            WHERE phone_number IS NULL
+              AND name ~ '^\\+?[0-9][0-9\\s\\-()]+$'
+              AND NOT EXISTS (
+                SELECT 1 FROM message_conversations mc 
+                WHERE mc.user_id = people.user_id AND mc.contact_address = people.name
+              )
+          `);
+          log(`Startup: phone-number people backfill complete (${phoneBackfill.rows.length} with convos, ${noConvoPhones.rowCount || 0} standalone)`);
+        }
+      } catch (err) {
+        console.error('Startup phone-number people backfill failed (non-fatal):', err);
+      }
+
+      try {
         const allUsers = await pool.query('SELECT DISTINCT user_id FROM messages WHERE ai_processed = false');
         for (const row of allUsers.rows) {
           const userId = row.user_id;

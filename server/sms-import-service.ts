@@ -246,6 +246,12 @@ export async function parseAndImportNDJSON(
       }
 
       result.conversations++;
+
+      try {
+        const personName = convData.contactName || convData.contactAddress;
+        await storage.upsertPerson(userId, personName, 'messages', convData.contactAddress);
+      } catch {
+      }
     } catch (error) {
       console.error(`Failed to process conversation for ${convData.contactAddress}:`, error);
       result.errors += convData.messages.length;

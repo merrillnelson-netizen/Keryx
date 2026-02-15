@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -601,12 +601,22 @@ export default function People() {
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                             <User className="w-4 h-4 text-white" />
                           </div>
-                          {person.name}
-                          {mergeMode && mergeTarget === person.id && (
-                            <Badge className="ml-2 bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
-                              Target
-                            </Badge>
-                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1">
+                              {person.name}
+                              {mergeMode && mergeTarget === person.id && (
+                                <Badge className="ml-1 bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">
+                                  Target
+                                </Badge>
+                              )}
+                            </div>
+                            {person.phoneNumber && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3" />
+                                {person.phoneNumber}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell data-testid={`priority-cell-${person.id}`}>
@@ -744,6 +754,12 @@ export default function People() {
                             </Badge>
                           )}
                         </CardTitle>
+                        {person.phoneNumber && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Phone className="w-3 h-3" />
+                            {person.phoneNumber}
+                          </p>
+                        )}
                         {person.relationship && (
                           <Badge variant="outline" className="mt-1 text-xs border-primary/30 text-primary">
                             {person.relationship}

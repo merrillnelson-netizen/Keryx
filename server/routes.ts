@@ -5645,6 +5645,31 @@ Respond with JSON only.`
       if (!updated) {
         return res.status(404).json({ message: "Conversation not found" });
       }
+
+      try {
+        const phoneNumber = updated.contactAddress;
+        const trimmedName = contactName.trim();
+        const existingPerson = await storage.getPersonByPhone(user.id, phoneNumber);
+        const nameConflict = await storage.getPerson(user.id, trimmedName);
+        
+        if (existingPerson) {
+          if (!nameConflict || nameConflict.id === existingPerson.id) {
+            await storage.updatePerson(user.id, existingPerson.id, { name: trimmedName, phoneNumber });
+          }
+        } else {
+          const phonePerson = await storage.getPerson(user.id, phoneNumber);
+          if (phonePerson) {
+            if (!nameConflict || nameConflict.id === phonePerson.id) {
+              await storage.updatePerson(user.id, phonePerson.id, { name: trimmedName, phoneNumber });
+            }
+          } else if (!nameConflict) {
+            await storage.upsertPerson(user.id, trimmedName, 'messages', phoneNumber);
+          }
+        }
+      } catch (syncErr) {
+        console.error('Failed to sync person name from conversation rename:', syncErr);
+      }
+
       res.json(updated);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update contact name", error);

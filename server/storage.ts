@@ -69,7 +69,8 @@ export interface IStorage {
   getPerson(userId: string, name: string): Promise<Person | undefined>;
   getActivePeopleCount(userId: string): Promise<number>;
   getHighPriorityPeople(userId: string, minPriority?: number): Promise<Person[]>;
-  upsertPerson(userId: string, name: string, source?: 'memory' | 'messages' | 'manual'): Promise<Person>;
+  upsertPerson(userId: string, name: string, source?: 'memory' | 'messages' | 'manual', phoneNumber?: string): Promise<Person>;
+  getPersonByPhone(userId: string, phoneNumber: string): Promise<Person | undefined>;
   updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined>;
   deletePerson(userId: string, id: string): Promise<boolean>;
   mergePeople(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; updatedMemories: number }>;
@@ -801,34 +802,59 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async upsertPerson(userId: string, name: string, source: 'memory' | 'messages' | 'manual' = 'memory'): Promise<Person> {
+  async upsertPerson(userId: string, name: string, source: 'memory' | 'messages' | 'manual' = 'memory', phoneNumber?: string): Promise<Person> {
     try {
-      const existing = await this.getPerson(userId, name);
+      let existing: Person | undefined;
+      if (phoneNumber) {
+        existing = await this.getPersonByPhone(userId, phoneNumber);
+      }
+      if (!existing) {
+        existing = await this.getPerson(userId, name);
+      }
       
       if (existing) {
         const newSource = existing.source !== source && existing.source !== 'both' && source !== 'manual'
           ? 'both'
           : existing.source;
+        const updates: Record<string, any> = {
+          mentionCount: sql`${people.mentionCount} + 1`,
+          lastMentioned: new Date(),
+          ...(newSource !== existing.source ? { source: newSource } : {}),
+        };
+        if (phoneNumber && !existing.phoneNumber) {
+          updates.phoneNumber = phoneNumber;
+        }
+        if (phoneNumber && existing.phoneNumber === phoneNumber && name !== existing.name && !/^\+?\d[\d\s\-()]+$/.test(existing.name)) {
+        } else if (name !== existing.name && existing.phoneNumber && /^\+?\d[\d\s\-()]+$/.test(existing.name)) {
+          updates.name = name;
+        }
         const [updated] = await db
           .update(people)
-          .set({ 
-            mentionCount: sql`${people.mentionCount} + 1`,
-            lastMentioned: new Date(),
-            ...(newSource !== existing.source ? { source: newSource } : {})
-          })
-          .where(and(eq(people.userId, userId), eq(people.name, name)))
+          .set(updates)
+          .where(and(eq(people.userId, userId), eq(people.id, existing.id)))
           .returning();
         return updated;
       } else {
         const [created] = await db
           .insert(people)
-          .values({ userId, name, mentionCount: 1, source })
+          .values({ userId, name, mentionCount: 1, source, ...(phoneNumber ? { phoneNumber } : {}) })
           .returning();
         return created;
       }
     } catch (error) {
       console.error('Failed to upsert person:', error);
       throw new Error('Database error while upserting person');
+    }
+  }
+
+  async getPersonByPhone(userId: string, phoneNumber: string): Promise<Person | undefined> {
+    try {
+      const [person] = await db.select().from(people)
+        .where(and(eq(people.userId, userId), eq(people.phoneNumber, phoneNumber)));
+      return person;
+    } catch (error) {
+      console.error('Failed to get person by phone:', error);
+      throw new Error('Database error while fetching person by phone');
     }
   }
 
