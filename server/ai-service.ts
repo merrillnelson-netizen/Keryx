@@ -1155,17 +1155,28 @@ export async function generatePersonalNewsFeed(
       return `${importanceLabel}[${m.timestamp.toISOString().split('T')[0]}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
     }).join('\n\n');
 
-    // Get current date/time in user's timezone for accurate "today/tomorrow" references
     const nowInUserTz = new Date().toLocaleString('en-US', { timeZone: userTimezone });
     const userLocalDate = new Date(nowInUserTz);
     const todayStr = formatDateInTimezone(new Date(), userTimezone);
-    
+
+    const getDayLabel = (eventDate: Date) => {
+      const eventLocal = new Date(eventDate.toLocaleString('en-US', { timeZone: userTimezone }));
+      const todayLocal = new Date(userLocalDate);
+      todayLocal.setHours(0, 0, 0, 0);
+      eventLocal.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((eventLocal.getTime() - todayLocal.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) return '(TODAY)';
+      if (diffDays === 1) return '(TOMORROW)';
+      const dayName = eventDate.toLocaleDateString('en-US', { timeZone: userTimezone, weekday: 'long' }).toUpperCase();
+      if (diffDays >= 2) return `(THIS ${dayName})`;
+      return '';
+    };
+
     let calendarContext = '';
     if (upcomingEvents && upcomingEvents.length > 0) {
-      calendarContext = `\n\nTODAY'S DATE (user's local time): ${todayStr}\n\nUPCOMING CALENDAR EVENTS:\n${upcomingEvents.map(e => {
+      calendarContext = `\n\nTODAY'S DATE (user's local time): ${todayStr}\nCURRENT DAY: ${userLocalDate.toLocaleDateString('en-US', { timeZone: userTimezone, weekday: 'long' })}\n\nUPCOMING CALENDAR EVENTS (next 3 days):\n${upcomingEvents.map(e => {
         const eventDate = formatDateInTimezone(new Date(e.startTime), userTimezone);
-        const isToday = eventDate === todayStr;
-        const dayLabel = isToday ? '(TODAY)' : '';
+        const dayLabel = getDayLabel(new Date(e.startTime));
         return `- ${e.title} on ${eventDate} ${dayLabel} at ${formatTimeInTimezone(new Date(e.startTime), userTimezone)}${e.attendees?.length ? ` with ${e.attendees.join(', ')}` : ''}${e.location ? ` at ${e.location}` : ''}`;
       }).join('\n')}`;
     }
@@ -1235,8 +1246,16 @@ STORY CATEGORIES:
 - highlights: Notable achievements, milestones, or positive moments
 - location: Location-based observations (places visited, routine patterns, travel activity)
 
+CRITICAL TIMING RULES FOR CALENDAR EVENTS:
+- Each calendar event has a day label in parentheses: (TODAY), (TOMORROW), or (THIS WEDNESDAY), etc.
+- You MUST use exactly these labels when referring to events. Do NOT compute your own relative dates.
+- If an event says "(TODAY)", say "today" in the headline/summary.
+- If an event says "(TOMORROW)", say "tomorrow" in the headline/summary.
+- If an event says "(THIS THURSDAY)", say "this Thursday" in the headline/summary.
+- NEVER say "tomorrow" for an event that is labeled "(THIS THURSDAY)" or any other non-tomorrow label.
+
 STORY PRIORITIES:
-- breaking: Time-sensitive or very important (upcoming event today, urgent email)
+- breaking: Time-sensitive or very important (upcoming event today or tomorrow, urgent email)
 - featured: Significant patterns or notable events (mood improvements, project milestones)
 - standard: Regular updates and observations
 

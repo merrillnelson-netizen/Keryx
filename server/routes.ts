@@ -2526,8 +2526,11 @@ Respond with JSON only.`
       const forceRefresh = req.query.refresh === 'true';
       const userTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : 'UTC';
       
-      const today = new Date().toISOString().split('T')[0];
-      const cacheKey = `${today}-${userTimezone}`;
+      const nowForCache = new Date();
+      const userLocalNow = new Date(nowForCache.toLocaleString('en-US', { timeZone: userTimezone }));
+      const userLocalDate = `${userLocalNow.getFullYear()}-${String(userLocalNow.getMonth() + 1).padStart(2, '0')}-${String(userLocalNow.getDate()).padStart(2, '0')}`;
+      const userLocalHour = userLocalNow.getHours();
+      const cacheKey = `${userLocalDate}-h${userLocalHour}-${userTimezone}`;
       
       if (!forceRefresh) {
         const cached = await storage.getAiCache(user.id, 'newsfeed', cacheKey);
@@ -2596,7 +2599,7 @@ Respond with JSON only.`
         try {
           const calendarConnected = await isCalendarConnected();
           if (calendarConnected) {
-            const events = await getTodaysEvents();
+            const events = await getUpcomingEvents(3);
             return events.map(e => ({
               title: e.title, startTime: e.startTime, endTime: e.endTime, attendees: e.attendees, location: e.location
             }));
