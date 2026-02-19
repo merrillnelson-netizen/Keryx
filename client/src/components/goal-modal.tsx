@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -281,6 +282,9 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                     <DialogTitle className="text-lg font-semibold truncate">
                       {isCreating ? "New Goal" : goal?.title || "Goal"}
                     </DialogTitle>
+                    <DialogDescription className="sr-only">
+                      {isCreating ? "Create a new goal to track" : `Details for ${goal?.title || "goal"}`}
+                    </DialogDescription>
                     {!isCreating && goal && (
                       <div className="flex items-center gap-2 mt-1">
                         <Progress value={goal.progressPercent} className="h-1.5 flex-1 max-w-32" />

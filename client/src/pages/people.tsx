@@ -1,13 +1,13 @@
 import AppLayout from "@/components/app-layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, ChevronRight, Shield, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/select";
 import { LogEntry, Person } from "@shared/schema";
 import { getPriorityInfo, DEFAULT_PRIORITY_VALUE } from "@shared/priority-utils";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 
 const RELATIONSHIP_OPTIONS = [
   "friend",
@@ -77,8 +78,6 @@ export default function People() {
     filterIds: string[] | null;
     message: string;
   } | null>(null);
-  const [isVoiceListening, setIsVoiceListening] = useState(false);
-  const voiceRecognitionRef = useRef<any>(null);
   const [duplicateGroups, setDuplicateGroups] = useState<Array<{
     ids: string[];
     reason: string;
@@ -90,7 +89,9 @@ export default function People() {
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const isVoiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+  const { isListening: isVoiceListening, isSupported: isVoiceSupported, startListening: startVoiceInput, stopListening: stopVoiceInput } = useVoiceInput(
+    useCallback((text: string) => setAiQuery(text), [])
+  );
 
   const { data: people = [], isLoading } = useQuery<Person[]>({
     queryKey: ["/api/people"],
@@ -219,45 +220,6 @@ export default function People() {
     setAiResult(null);
   };
 
-  const startVoiceInput = useCallback(() => {
-    if (!isVoiceSupported) return;
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    recognition.onstart = () => setIsVoiceListening(true);
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalTranscript += t;
-        else interimTranscript += t;
-      }
-      setAiQuery(finalTranscript || interimTranscript);
-    };
-    recognition.onerror = () => setIsVoiceListening(false);
-    recognition.onend = () => setIsVoiceListening(false);
-    voiceRecognitionRef.current = recognition;
-    recognition.start();
-  }, [isVoiceSupported]);
-
-  const stopVoiceInput = useCallback(() => {
-    if (voiceRecognitionRef.current) {
-      voiceRecognitionRef.current.stop();
-      voiceRecognitionRef.current = null;
-    }
-    setIsVoiceListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (voiceRecognitionRef.current) {
-        try { voiceRecognitionRef.current.stop(); } catch {}
-      }
-    };
-  }, []);
 
   const findDuplicatesMutation = useMutation({
     mutationFn: async () => {

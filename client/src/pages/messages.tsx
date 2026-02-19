@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff } from "lucide-react";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
 import { cn } from "@/lib/utils";
@@ -60,10 +61,10 @@ function ConversationList() {
   const [aiResult, setAiResult] = useState<AiSearchResult | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [isVoiceListening, setIsVoiceListening] = useState(false);
-  const voiceRecognitionRef = useRef<any>(null);
   const { toast } = useToast();
-  const isVoiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+  const { isListening: isVoiceListening, isSupported: isVoiceSupported, startListening: startVoiceInput, stopListening: stopVoiceInput } = useVoiceInput(
+    useCallback((text: string) => setAiQuery(text), [])
+  );
 
   const { data: stats } = useQuery<{ totalConversations: number; totalMessages: number }>({
     queryKey: ["/api/messages/stats"],
@@ -165,47 +166,6 @@ function ConversationList() {
     setAiQuery("");
     setAiResult(null);
   };
-
-  const startVoiceInput = useCallback(() => {
-    if (!isVoiceSupported) return;
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-    recognition.onstart = () => setIsVoiceListening(true);
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalTranscript += t;
-        else interimTranscript += t;
-      }
-      setAiQuery(finalTranscript || interimTranscript);
-    };
-    recognition.onerror = () => setIsVoiceListening(false);
-    recognition.onend = () => setIsVoiceListening(false);
-    voiceRecognitionRef.current = recognition;
-    recognition.start();
-  }, [isVoiceSupported]);
-
-  const stopVoiceInput = useCallback(() => {
-    if (voiceRecognitionRef.current) {
-      voiceRecognitionRef.current.stop();
-      voiceRecognitionRef.current = null;
-    }
-    setIsVoiceListening(false);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (voiceRecognitionRef.current) {
-        try { voiceRecognitionRef.current.stop(); } catch {}
-        voiceRecognitionRef.current = null;
-      }
-    };
-  }, []);
 
   const displayConversations = useMemo(() => {
     let result = [...conversations];
@@ -396,7 +356,7 @@ function ConversationList() {
                 type="button"
                 size="icon"
                 variant={isVoiceListening ? "destructive" : "outline"}
-                onClick={isVoiceListening ? stopVoiceInput : startVoiceInput}
+                onClick={() => isVoiceListening ? stopVoiceInput() : startVoiceInput()}
                 className={cn(
                   "shrink-0 border-white/20",
                   isVoiceListening && "animate-pulse bg-red-500 hover:bg-red-600 border-red-500"
