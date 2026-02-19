@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, Check, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, ChevronRight, Shield, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -77,9 +77,20 @@ export default function People() {
     filterIds: string[] | null;
     message: string;
   } | null>(null);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const voiceRecognitionRef = useRef<any>(null);
+  const [duplicateGroups, setDuplicateGroups] = useState<Array<{
+    ids: string[];
+    reason: string;
+    suggestedTargetId: string;
+    confidence: 'high' | 'medium' | 'low';
+  }>>([]);
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [dismissedGroups, setDismissedGroups] = useState<Set<number>>(new Set());
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const isVoiceSupported = typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
 
   const { data: people = [], isLoading } = useQuery<Person[]>({
     queryKey: ["/api/people"],
@@ -208,6 +219,93 @@ export default function People() {
     setAiResult(null);
   };
 
+  const startVoiceInput = useCallback(() => {
+    if (!isVoiceSupported) return;
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.onstart = () => setIsVoiceListening(true);
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalTranscript += t;
+        else interimTranscript += t;
+      }
+      setAiQuery(finalTranscript || interimTranscript);
+    };
+    recognition.onerror = () => setIsVoiceListening(false);
+    recognition.onend = () => setIsVoiceListening(false);
+    voiceRecognitionRef.current = recognition;
+    recognition.start();
+  }, [isVoiceSupported]);
+
+  const stopVoiceInput = useCallback(() => {
+    if (voiceRecognitionRef.current) {
+      voiceRecognitionRef.current.stop();
+      voiceRecognitionRef.current = null;
+    }
+    setIsVoiceListening(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (voiceRecognitionRef.current) {
+        try { voiceRecognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
+
+  const findDuplicatesMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/people/find-duplicates", {});
+      if (!response.ok) throw new Error("Failed to find duplicates");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const groups = data.data?.groups || [];
+      setDuplicateGroups(groups);
+      setShowDuplicates(true);
+      setDismissedGroups(new Set());
+      if (groups.length === 0) {
+        toast({ title: "No duplicates found", description: data.data?.message || "All records look unique!" });
+      } else {
+        toast({ title: "Duplicates found", description: `Found ${groups.length} potential duplicate group(s)` });
+      }
+    },
+    onError: () => {
+      toast({ title: "Detection failed", description: "Could not scan for duplicates. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const duplicateMergeMutation = useMutation({
+    mutationFn: async ({ targetId, sourceIds }: { targetId: string; sourceIds: string[] }) => {
+      const response = await apiRequest("POST", "/api/people/merge", { targetId, sourceIds });
+      if (!response.ok) throw new Error("Failed to merge people");
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "People merged", description: data.message || "Successfully consolidated records" });
+      setDuplicateGroups(prev => prev.filter(g => !g.ids.includes(variables.targetId)));
+    },
+    onError: () => {
+      toast({ title: "Merge failed", description: "Failed to merge people. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const handleDuplicateMerge = (group: typeof duplicateGroups[0], targetId: string) => {
+    const sourceIds = group.ids.filter(id => id !== targetId);
+    duplicateMergeMutation.mutate({ targetId, sourceIds });
+  };
+
+  const handleDismissGroup = (index: number) => {
+    setDismissedGroups(prev => { const next = new Set(prev); next.add(index); return next; });
+  };
+
   const displayPeople = useMemo(() => {
     let result = [...people];
     
@@ -334,7 +432,7 @@ export default function People() {
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className={cn("space-y-6 animate-fade-in", mergeMode && selectedForMerge.size >= 2 && "pb-24")}>
         {/* Header Section */}
         <div className="glass-card p-6 rounded-2xl">
           <div className="flex items-center justify-between">
@@ -350,115 +448,71 @@ export default function People() {
               </div>
             </div>
             <div className="flex gap-2">
-              {!mergeMode ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setViewMode("cards")}
-                    className={cn(
-                      "h-9 w-9 p-0 transition-all",
-                      viewMode === "cards" 
-                        ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                    )}
-                    data-testid="button-view-cards"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setViewMode("table")}
-                    className={cn(
-                      "h-9 w-9 p-0 transition-all",
-                      viewMode === "table" 
-                        ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                    )}
-                    data-testid="button-view-table"
-                  >
-                    <TableIcon className="w-4 h-4" />
-                  </Button>
-                  {people.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setMergeMode(true)}
-                      className={cn(
-                        "h-9 w-9 p-0 transition-all",
-                        "text-muted-foreground hover:text-foreground hover:bg-white/10"
-                      )}
-                      title="Consolidate people"
-                      data-testid="button-merge-mode"
-                    >
-                      <Merge className="w-4 h-4" />
-                    </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("cards")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "cards" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-cards"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  viewMode === "table" 
+                    ? "bg-gradient-to-r from-primary/20 to-secondary/20 text-foreground" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                data-testid="button-view-table"
+              >
+                <TableIcon className="w-4 h-4" />
+              </Button>
+              {people.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (mergeMode) {
+                      handleCancelMerge();
+                    } else {
+                      setMergeMode(true);
+                    }
+                  }}
+                  className={cn(
+                    "h-9 w-9 p-0 transition-all",
+                    mergeMode
+                      ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
                   )}
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelMerge}
-                    className="border-white/20 hover:bg-white/10 gap-2"
-                    data-testid="button-cancel-merge"
-                  >
-                    <X className="w-4 h-4" />
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleExecuteMerge}
-                    disabled={selectedForMerge.size < 2 || !mergeTarget || mergeMutation.isPending}
-                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 gap-2"
-                    data-testid="button-execute-merge"
-                  >
-                    <Check className="w-4 h-4" />
-                    {mergeMutation.isPending ? "Merging..." : `Merge ${selectedForMerge.size} People`}
-                  </Button>
-                </>
+                  title={mergeMode ? "Exit merge mode" : "Merge people"}
+                  data-testid="button-merge-mode"
+                >
+                  <Merge className="w-4 h-4" />
+                </Button>
               )}
             </div>
           </div>
           
           {mergeMode && (
-            <div className="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-              <p className="text-sm text-amber-300 font-medium mb-2">Consolidation Mode</p>
-              <p className="text-xs text-muted-foreground">
-                1. Select the people you want to merge (nicknames, variations, duplicates)<br/>
-                2. Click on one to set it as the target name (shown with a star)<br/>
-                3. All memories will be updated to use the target name
+            <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <p className="text-sm text-amber-300 font-medium">Merge Mode Active</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Tap people to select them, then use the bar at the bottom to merge. You can also use AI to find duplicates.
               </p>
-              {selectedForMerge.size > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {Array.from(selectedForMerge).map(id => {
-                    const person = people.find(p => p.id === id);
-                    return person ? (
-                      <Badge 
-                        key={id} 
-                        variant="outline"
-                        className={cn(
-                          "cursor-pointer",
-                          mergeTarget === id 
-                            ? "bg-primary/20 border-primary text-primary" 
-                            : "bg-white/10 border-white/20"
-                        )}
-                        onClick={() => handleSetMergeTarget(id)}
-                      >
-                        {mergeTarget === id && "★ "}
-                        {person.name}
-                      </Badge>
-                    ) : null;
-                  })}
-                </div>
-              )}
             </div>
           )}
         </div>
 
-        {people.length > 0 && !mergeMode && (
+        {people.length > 0 && (
           <div className="glass-card p-4 rounded-2xl">
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -467,7 +521,7 @@ export default function People() {
                   value={aiQuery}
                   onChange={(e) => setAiQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
-                  placeholder="Ask AI: sort by closeness, show family, who haven't I talked to..."
+                  placeholder={mergeMode ? "Search or say 'find duplicates'..." : "Ask AI: sort by closeness, show family, find duplicates..."}
                   className="pl-9 pr-9 bg-white/5 border-white/20 focus:border-primary/50"
                   data-testid="ai-search-input"
                 />
@@ -482,6 +536,23 @@ export default function People() {
                   </button>
                 )}
               </div>
+              {isVoiceSupported && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={isVoiceListening ? stopVoiceInput : startVoiceInput}
+                  className={cn(
+                    "shrink-0 h-10 w-10 transition-all",
+                    isVoiceListening
+                      ? "bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                  )}
+                  title={isVoiceListening ? "Stop listening" : "Voice input"}
+                  data-testid="voice-input-button"
+                >
+                  {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+              )}
               <Button
                 onClick={handleAiSearch}
                 disabled={!aiQuery.trim() || aiSearchMutation.isPending}
@@ -494,6 +565,20 @@ export default function People() {
                   <Sparkles className="w-4 h-4" />
                 )}
                 <span className="hidden sm:inline">AI Search</span>
+              </Button>
+              <Button
+                onClick={() => findDuplicatesMutation.mutate()}
+                disabled={findDuplicatesMutation.isPending}
+                className="bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 gap-2 shrink-0"
+                title="AI finds potential duplicate records"
+                data-testid="find-duplicates-button"
+              >
+                {findDuplicatesMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ScanSearch className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">Find Duplicates</span>
               </Button>
               {aiResult && (
                 <Button
@@ -516,6 +601,130 @@ export default function People() {
                 </Badge>
               </div>
             )}
+          </div>
+        )}
+
+        {showDuplicates && duplicateGroups.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <ScanSearch className="w-5 h-5 text-amber-400" />
+                Potential Duplicates
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setShowDuplicates(false); setDuplicateGroups([]); }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4 mr-1" />
+                Dismiss All
+              </Button>
+            </div>
+            {duplicateGroups.map((group, index) => {
+              if (dismissedGroups.has(index)) return null;
+              const groupPeople = group.ids.map(id => people.find(p => p.id === id)).filter(Boolean) as Person[];
+              if (groupPeople.length < 2) return null;
+              const ConfidenceIcon = group.confidence === 'high' ? ShieldAlert : group.confidence === 'medium' ? Shield : ShieldQuestion;
+              const confidenceColor = group.confidence === 'high' ? 'text-red-400' : group.confidence === 'medium' ? 'text-amber-400' : 'text-blue-400';
+              const confidenceBg = group.confidence === 'high' ? 'bg-red-500/10 border-red-500/30' : group.confidence === 'medium' ? 'bg-amber-500/10 border-amber-500/30' : 'bg-blue-500/10 border-blue-500/30';
+              return (
+                <div key={index} className={cn("glass-card p-4 rounded-xl border", confidenceBg)}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <ConfidenceIcon className={cn("w-4 h-4", confidenceColor)} />
+                      <Badge variant="outline" className={cn("text-xs capitalize", confidenceBg, confidenceColor)}>
+                        {group.confidence} confidence
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDismissGroup(index)}
+                      className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">{group.reason}</p>
+                  <div className="grid gap-2">
+                    {groupPeople.map(person => {
+                      const isTarget = group.suggestedTargetId === person.id;
+                      return (
+                        <div
+                          key={person.id}
+                          className={cn(
+                            "flex items-center justify-between p-3 rounded-lg border transition-all",
+                            isTarget
+                              ? "bg-primary/10 border-primary/30"
+                              : "bg-white/5 border-white/10"
+                          )}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shrink-0">
+                              <User className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground truncate">{person.name}</span>
+                                {isTarget && (
+                                  <Badge className="bg-primary/20 text-primary border-primary/30 text-xs shrink-0">
+                                    Keep
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                {person.phoneNumber && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone className="w-3 h-3" />
+                                    {person.phoneNumber}
+                                  </span>
+                                )}
+                                {person.relationship && <span>{person.relationship}</span>}
+                                <span>{person.mentionCount} mentions</span>
+                              </div>
+                            </div>
+                          </div>
+                          {!isTarget && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDuplicateGroups(prev => prev.map((g, i) =>
+                                  i === index ? { ...g, suggestedTargetId: person.id } : g
+                                ));
+                              }}
+                              className="text-xs h-7 px-2 border-white/20 hover:bg-white/10 shrink-0 ml-2"
+                            >
+                              Set as Keep
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end mt-3 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDismissGroup(index)}
+                      className="border-white/20 hover:bg-white/10"
+                    >
+                      Skip
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleDuplicateMerge(group, group.suggestedTargetId)}
+                      disabled={duplicateMergeMutation.isPending}
+                      className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 gap-1"
+                    >
+                      <Merge className="w-3.5 h-3.5" />
+                      {duplicateMergeMutation.isPending ? "Merging..." : "Merge"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -841,6 +1050,74 @@ export default function People() {
         )}
 
       </div>
+
+      {mergeMode && selectedForMerge.size >= 2 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur-md border-t border-white/10 shadow-2xl" data-testid="floating-merge-bar">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge className="bg-primary/20 text-primary border-primary/30 text-sm px-3 py-1">
+                  {selectedForMerge.size} selected
+                </Badge>
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-1">
+                  {Array.from(selectedForMerge).map(id => {
+                    const person = people.find(p => p.id === id);
+                    if (!person) return null;
+                    return (
+                      <Badge
+                        key={id}
+                        variant="outline"
+                        className={cn(
+                          "cursor-pointer whitespace-nowrap shrink-0 transition-all",
+                          mergeTarget === id
+                            ? "bg-amber-500/20 border-amber-500 text-amber-400"
+                            : "bg-white/10 border-white/20 hover:bg-white/20"
+                        )}
+                        onClick={() => handleSetMergeTarget(id)}
+                      >
+                        {mergeTarget === id && "★ "}
+                        {person.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {!mergeTarget && selectedForMerge.size >= 2 && (
+                  <p className="text-xs text-amber-400 mt-1">Tap a name above to set it as the target (record to keep)</p>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedForMerge(new Set());
+                    setMergeTarget(null);
+                  }}
+                  className="border-white/20 hover:bg-white/10 gap-1"
+                  data-testid="floating-clear-button"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleExecuteMerge}
+                  disabled={selectedForMerge.size < 2 || !mergeTarget || mergeMutation.isPending}
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 gap-1"
+                  data-testid="floating-merge-button"
+                >
+                  <Merge className="w-3.5 h-3.5" />
+                  {mergeMutation.isPending ? "Merging..." : "Merge"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Memories Popup Dialog */}
       <Dialog open={!!selectedPerson} onOpenChange={() => setSelectedPerson(null)}>

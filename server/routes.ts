@@ -1901,6 +1901,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const VALID_SORT_FIELDS = ['name', 'relationship', 'priority', 'mentionCount', 'source', 'lastMentioned', 'firstMentioned'] as const;
 
+  app.post("/api/people/find-duplicates", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const allPeople = await storage.getPeople(user.id);
+
+      if (allPeople.length < 2) {
+        return res.json({ status: 'success', data: { groups: [], message: 'Not enough people to find duplicates.' } });
+      }
+
+      const peopleSummary = allPeople.slice(0, 500).map(p => ({
+        id: p.id,
+        name: p.name,
+        phoneNumber: p.phoneNumber || null,
+        relationship: p.relationship || 'unset',
+        priority: p.priority,
+        mentionCount: p.mentionCount,
+        source: p.source || 'memory',
+        notes: p.notes || '',
+      }));
+
+      const validPeopleIds = new Set(allPeople.map(p => p.id));
+
+      const openaiModule = await import('openai');
+      const openaiClient = new openaiModule.OpenAI();
+
+      const response = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a duplicate detection assistant for a people/contacts database. Analyze the list of people and find likely duplicates or records that should be merged.
+
+Look for:
+1. Similar names (e.g., "Mike" and "Michael Smith", "Bob" and "Robert", nicknames vs full names)
+2. Same phone number across different records
+3. Very similar names with different spellings (e.g., "Jon" and "John")
+4. First-name-only records that likely match a full-name record
+5. Records that appear to be the same person from different sources
+
+Return a JSON object with:
+- "groups": array of duplicate groups, each containing:
+  - "ids": array of person IDs in this group (2 or more)
+  - "reason": brief explanation of why these are likely duplicates
+  - "suggestedTargetId": the ID of the record that should be kept as the primary (prefer the record with: most data, full name over nickname, highest mention count)
+  - "confidence": "high" | "medium" | "low" based on how confident you are they're the same person
+- "message": summary of findings
+
+Rules:
+- Only include genuine likely duplicates, don't force matches
+- A person can only appear in one group
+- Prefer "high" confidence for exact phone matches or very similar names
+- Prefer "medium" for plausible name variations
+- "low" for uncertain matches
+- Sort groups by confidence (high first)
+- If no duplicates found, return empty groups array
+
+Respond with JSON only.`
+          },
+          {
+            role: "user",
+            content: `Find potential duplicates in these ${allPeople.length} people records:\n${JSON.stringify(peopleSummary)}`
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+      });
+
+      let result: any;
+      try {
+        result = JSON.parse(response.choices[0].message.content || "{}");
+      } catch {
+        return res.json({ status: 'success', data: { groups: [], message: 'Could not analyze records for duplicates.' } });
+      }
+
+      const groups = Array.isArray(result.groups) ? result.groups.filter((g: any) => {
+        if (!Array.isArray(g.ids) || g.ids.length < 2) return false;
+        return g.ids.every((id: string) => typeof id === 'string' && validPeopleIds.has(id));
+      }).map((g: any) => ({
+        ids: g.ids,
+        reason: typeof g.reason === 'string' ? g.reason.slice(0, 200) : 'Possible duplicate',
+        suggestedTargetId: typeof g.suggestedTargetId === 'string' && validPeopleIds.has(g.suggestedTargetId) ? g.suggestedTargetId : g.ids[0],
+        confidence: ['high', 'medium', 'low'].includes(g.confidence) ? g.confidence : 'medium',
+      })) : [];
+
+      res.json({
+        status: 'success',
+        data: {
+          groups,
+          message: typeof result.message === 'string' ? result.message.slice(0, 300) : `Found ${groups.length} potential duplicate group(s).`,
+        }
+      });
+    } catch (error) {
+      console.error("AI duplicate detection failed:", error);
+      sendErrorResponse(res, 500, "Duplicate detection failed", error);
+    }
+  });
+
   app.post("/api/people/ai-search", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
