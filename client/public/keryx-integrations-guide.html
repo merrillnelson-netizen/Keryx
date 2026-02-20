@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keryx Integration Guide - Complete Reference</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f0f0f5; padding: 16px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; text-align: center; margin-bottom: 8px; color: #16213e; }
+  .subtitle { text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 24px; }
+  .toc { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .toc h2 { font-size: 1.1rem; margin-bottom: 8px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: #4361ee; text-decoration: none; }
+  .section { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .section h2 { font-size: 1.3rem; color: #16213e; border-bottom: 2px solid #4361ee; padding-bottom: 8px; margin-bottom: 16px; }
+  .section h3 { font-size: 1rem; color: #4361ee; margin: 16px 0 8px 0; }
+  .detail { margin-bottom: 16px; }
+  .detail-label { font-weight: 700; color: #333; display: inline; }
+  .detail p, .detail ul { margin-top: 4px; }
+  .detail ul { padding-left: 20px; }
+  .detail li { margin-bottom: 4px; }
+  .tag { display: inline-block; background: #e8eaff; color: #4361ee; border-radius: 6px; padding: 2px 8px; font-size: 0.8rem; margin-right: 4px; margin-bottom: 4px; }
+  .tag.green { background: #e6f9ed; color: #0a8f3f; }
+  .tag.orange { background: #fff3e0; color: #e65100; }
+  .tag.red { background: #fde8e8; color: #c62828; }
+  .divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+  code { background: #f0f0f5; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+  .file-ref { font-family: monospace; font-size: 0.85em; color: #666; }
+  footer { text-align: center; color: #999; font-size: 0.8rem; margin-top: 24px; padding-bottom: 40px; }
+</style>
+</head>
+<body>
+
+<h1>Keryx Integration Guide</h1>
+<p class="subtitle">Complete Where / Why / When / How Reference<br>Last updated: February 20, 2026</p>
+
+<nav class="toc">
+<h2>Table of Contents</h2>
+<ol>
+<li><a href="#openai">OpenAI (GPT + Embeddings)</a></li>
+<li><a href="#google-calendar">Google Calendar</a></li>
+<li><a href="#outlook-calendar">Outlook Calendar</a></li>
+<li><a href="#gmail">Gmail</a></li>
+<li><a href="#outlook-mail">Outlook Mail</a></li>
+<li><a href="#telegram">Telegram Bot</a></li>
+<li><a href="#plaid">Plaid (Financial Data)</a></li>
+<li><a href="#tavily">Tavily AI Search</a></li>
+<li><a href="#location">Location Services</a></li>
+<li><a href="#push">Web Push Notifications</a></li>
+<li><a href="#speech">Speech Recognition & Synthesis</a></li>
+<li><a href="#pwa">PWA (Progressive Web App)</a></li>
+<li><a href="#analytics">Google Analytics</a></li>
+<li><a href="#sms">Text Message Import</a></li>
+<li><a href="#ai-actions">AI Task Execution</a></li>
+<li><a href="#companion">Meta Glasses Companion App</a></li>
+<li><a href="#high-signal">High-Signal Alerts</a></li>
+<li><a href="#database">Database (Neon PostgreSQL)</a></li>
+<li><a href="#auth">Authentication</a></li>
+</ol>
+</nav>
+
+<!-- ====== 1. OPENAI ====== -->
+<div class="section" id="openai">
+<h2>1. OpenAI (GPT + Embeddings)</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Used across the entire backend. The AI engine behind nearly every smart feature in Keryx.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Provides the intelligence layer. Without OpenAI, Keryx would be a simple note-taking app. It turns free-form voice or text into structured, searchable, actionable data.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Every time you save a memory (extracts topics, mood, people, importance, categories)</li>
+<li>Every search query (generates embeddings for semantic matching)</li>
+<li>Morning briefings (synthesizes recent data into a personalized summary)</li>
+<li>Pattern detection (spots recurring themes in your memories)</li>
+<li>Goal analysis and milestone suggestions</li>
+<li>Thematic insights and deep pattern analysis with Q&A</li>
+<li>Intent detection (determines if input is a log or a search query)</li>
+<li>AI action detection (spots calendar events, emails, reminders in your input)</li>
+<li>People duplicate detection and AI-powered people search</li>
+<li>Financial query answering (when Plaid is connected)</li>
+<li>Personal news feed generation</li>
+<li>Contextual discoveries (generates search queries from your data)</li>
+<li>Message conversation analysis (topics, mood, importance)</li>
+<li>Ideas workspace AI assistance</li>
+<li>Personal insights generation</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Uses GPT-4o-mini for fast, cost-effective processing of most tasks</li>
+<li>Uses <code>text-embedding-3-small</code> for generating vector embeddings (1536 dimensions)</li>
+<li>Connects via Replit AI Integration (preferred) or direct OpenAI API key as fallback</li>
+<li>Rate-limited: 15 requests per minute per user on AI routes</li>
+<li>30-minute TTL cache for briefings and alerts to avoid redundant calls</li>
+<li>30-second timeout with 2 automatic retries</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/ai-service.ts, server/message-ai-service.ts, server/ai-actions-service.ts, server/contextual-discoveries-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Secrets: OPENAI_API_KEY</span>
+</div>
+</div>
+
+<!-- ====== 2. GOOGLE CALENDAR ====== -->
+<div class="section" id="google-calendar">
+<h2>2. Google Calendar</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (connection toggle), memory creation flow, morning briefings, AI actions, dashboard.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Automatically links your memories to calendar events. If you log "the team meeting went well," Keryx checks your calendar and attaches the actual meeting details. Also lets AI create calendar events from natural language.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When saving a memory: Searches for calendar events happening around the same time and auto-links matching ones</li>
+<li>During morning briefings: Pulls today's schedule into the briefing summary</li>
+<li>AI action execution: Creates calendar events when you say things like "schedule a dentist appointment for Thursday at 2pm"</li>
+<li>Contextual discoveries: Calendar events inform search queries for relevant content</li>
+<li>Personal insights: Calendar data contributes to pattern analysis</li>
+<li>Duplicate event checking before creating new ones</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Connected via Replit's Google Calendar connector (OAuth managed by Replit)</li>
+<li>Uses Google Calendar API v3 via <code>googleapis</code> library</li>
+<li>Tokens cached for 30 seconds to ensure freshness</li>
+<li>Searches events within +/- 2 hours of memory timestamp for auto-linking</li>
+<li>Handles both all-day events and timed events correctly across timezones</li>
+<li>Connection status checked dynamically; gracefully degrades when disconnected</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/calendar-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Replit Connector</span>
+<span class="tag">OAuth</span>
+</div>
+</div>
+
+<!-- ====== 3. OUTLOOK CALENDAR ====== -->
+<div class="section" id="outlook-calendar">
+<h2>3. Outlook Calendar</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (connection toggle), memory creation flow, morning briefings, AI actions.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Same benefits as Google Calendar but for Microsoft/Outlook users. Keryx supports both providers so you can use whichever calendar system you prefer.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Same triggers as Google Calendar - memory linking, briefings, event creation</li>
+<li>If both Google and Outlook are connected, events from both are merged</li>
+<li>AI action system can create events on Outlook when it's the connected provider</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Connected via Replit's Outlook connector (OAuth managed by Replit)</li>
+<li>Uses Microsoft Graph API via <code>@microsoft/microsoft-graph-client</code></li>
+<li>Token management similar to Google Calendar with automatic refresh</li>
+<li>Unified calendar interface: both providers share the same internal API shape</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/outlook-calendar-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Replit Connector</span>
+<span class="tag">OAuth</span>
+</div>
+</div>
+
+<!-- ====== 4. GMAIL ====== -->
+<div class="section" id="gmail">
+<h2>4. Gmail</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (connection toggle), morning briefings, AI actions, personal insights.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Pulls email highlights into your morning briefing so you know what's important without opening your inbox. Also enables AI to send emails on your behalf from natural language instructions.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Morning briefings: Scans recent emails for highlights to include in the daily summary</li>
+<li>AI action execution: Sends emails when you say things like "email John about the project update"</li>
+<li>Personal insights: Email patterns contribute to activity analysis</li>
+<li>Contextual discoveries: Email content informs relevant content suggestions</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Connected via Replit's Google Mail connector (OAuth managed by Replit)</li>
+<li>Uses Gmail API v1 via <code>googleapis</code> library</li>
+<li>Capabilities check: Verifies what permissions are available (read, send)</li>
+<li>Email sending constructs proper MIME messages with headers</li>
+<li>Token caching and refresh handled automatically</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/gmail-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Replit Connector</span>
+<span class="tag">OAuth</span>
+</div>
+</div>
+
+<!-- ====== 5. OUTLOOK MAIL ====== -->
+<div class="section" id="outlook-mail">
+<h2>5. Outlook Mail</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (connection toggle), morning briefings, AI actions.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Same as Gmail but for Microsoft/Outlook email users. Supports both providers for maximum flexibility.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Same triggers as Gmail: briefing email highlights, AI-sent emails</li>
+<li>AI action system routes to Outlook Mail when it's the connected email provider</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Connected via Replit's Outlook connector (shared with Outlook Calendar)</li>
+<li>Uses Microsoft Graph API via <code>@microsoft/microsoft-graph-client</code></li>
+<li>Sends emails via the /me/sendMail Graph endpoint</li>
+<li>Falls back gracefully when not connected</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/outlook-mail-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Replit Connector</span>
+<span class="tag">OAuth</span>
+</div>
+</div>
+
+<!-- ====== 6. TELEGRAM ====== -->
+<div class="section" id="telegram">
+<h2>6. Telegram Bot</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (account linking), external Telegram app, morning briefings delivery.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Lets you record memories from anywhere without opening Keryx. Send a text message or voice note to the Telegram bot, and it becomes a full memory with AI processing. Also delivers morning briefings and notifications directly to Telegram.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When you send a text message to the Keryx bot: Saved as a memory with full AI processing</li>
+<li>When you send a voice note: Transcribed via OpenAI Whisper, then processed as a memory</li>
+<li>Morning briefings: Optionally delivered to your Telegram chat</li>
+<li>Pattern alerts and notifications: Sent to Telegram when push notifications aren't available</li>
+<li>Account linking: Connect your Telegram account to Keryx via a one-time code</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Uses Telegram Bot API with webhook-based message receiving</li>
+<li>Webhook URL receives updates at <code>/api/telegram/webhook</code></li>
+<li>HMAC-SHA256 signature validation protects the webhook endpoint</li>
+<li>Voice notes: Downloads the audio file, sends to OpenAI Whisper for transcription</li>
+<li>Account linking: User starts bot, gets a 6-digit code, enters it in Keryx settings</li>
+<li>HTML formatting for rich message display in Telegram</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/telegram-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET</span>
+</div>
+</div>
+
+<!-- ====== 7. PLAID ====== -->
+<div class="section" id="plaid">
+<h2>7. Plaid (Financial Data)</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (bank connection), search page (financial queries), morning briefings, personal insights, contextual discoveries.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Connects your bank accounts so Keryx can answer financial questions naturally. Ask "how much did I spend on food this month?" and get a real answer from your actual transaction data. Spending patterns also enrich briefings and insights.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When searching: Detects financial queries and routes them to Plaid data instead of memory search</li>
+<li>Transaction syncing: Periodically pulls new transactions from connected bank accounts</li>
+<li>Morning briefings: Notable spending included in daily summary</li>
+<li>Personal insights: Spending patterns analyzed alongside other life data</li>
+<li>Contextual discoveries: Large transactions can trigger relevant content suggestions</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Uses Plaid API SDK for secure bank connection via Plaid Link widget</li>
+<li>Flow: Create link token &rarr; User authenticates with bank &rarr; Exchange public token &rarr; Store access token</li>
+<li>Transaction sync uses Plaid's incremental sync API (cursor-based)</li>
+<li>Stores items, accounts, and transactions in dedicated database tables</li>
+<li>Financial queries answered by GPT analyzing actual transaction data</li>
+<li>Configurable environment: sandbox (testing) or development/production</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/plaid-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Secrets: PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV</span>
+</div>
+</div>
+
+<!-- ====== 8. TAVILY ====== -->
+<div class="section" id="tavily">
+<h2>8. Tavily AI Search</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Contextual Discoveries page, accessible from the main navigation.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Makes Keryx proactive rather than just reactive. Instead of you searching the web, Keryx analyzes your memories, calendar, emails, and finances to find content that's relevant to YOUR life right now. Planning a trip? It finds travel tips. Mentioned a health concern? It surfaces helpful articles.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When you visit the Discoveries page: Generates personalized content based on recent data</li>
+<li>Analyzes recent memories (last 7 days), upcoming calendar events, email highlights, financial patterns, and location history</li>
+<li>Results filtered by relevance score (minimum 0.6 threshold)</li>
+<li>Cached for 30 minutes to avoid excessive API calls</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Step 1: GPT analyzes your recent data to identify "insight contexts" (upcoming trip, recurring topic, notable spending, etc.)</li>
+<li>Step 2: GPT generates targeted web search queries from those insights</li>
+<li>Step 3: Tavily executes the searches and returns results with relevance scores</li>
+<li>Step 4: Results are categorized (travel, shopping, professional, lifestyle, financial, local, general)</li>
+<li>Urgency levels: immediate, upcoming, or general</li>
+<li>Notable transaction threshold: $100+ triggers financial discoveries</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/contextual-discoveries-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Secrets: TAVILY_API_KEY</span>
+</div>
+</div>
+
+<!-- ====== 9. LOCATION ====== -->
+<div class="section" id="location">
+<h2>9. Location Services</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Memory creation (automatic capture), Location History page, Google Timeline import, frequent places detection.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Adds "where" context to your memories. Know not just what you were thinking, but where you were. Builds a history of your movements and identifies places you visit frequently (home, office, gym, etc.).</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When saving a memory: If location permission is granted, captures GPS coordinates and attaches them</li>
+<li>Google Timeline import: Bulk import location history from Google Takeout</li>
+<li>Frequent place detection: Clusters nearby locations to identify places you visit regularly</li>
+<li>Reverse geocoding: Converts GPS coordinates into readable addresses</li>
+<li>Location-based reminders: Triggers reminders when you're near a specific place</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Frontend: Uses Browser Geolocation API (<code>navigator.geolocation</code>) for GPS capture</li>
+<li>Reverse geocoding: OpenStreetMap Nominatim API (free, no API key needed)</li>
+<li>Rate limited: 1 request per second to comply with Nominatim usage policy</li>
+<li>Location clustering: Groups locations within proximity radius to detect frequent places</li>
+<li>Stores history in <code>location_history</code> table, frequent places in <code>frequent_places</code> table</li>
+<li>Sources tracked: "memory" (automatic capture), "import" (Google Timeline), "manual"</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/location-service.ts, client/src/hooks/use-geolocation.tsx</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">No API key needed</span>
+<span class="tag">Browser Permission Required</span>
+</div>
+</div>
+
+<!-- ====== 10. PUSH ====== -->
+<div class="section" id="push">
+<h2>10. Web Push Notifications</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Settings page (enable/disable), background delivery for briefings, alerts, and AI action approvals.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Keeps you informed without needing to open Keryx. Get your morning briefing as a phone notification. Get alerted when the AI detects a pattern. Get prompted to approve an AI action.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Morning briefings: Push notification with your daily summary</li>
+<li>Pattern alerts: When AI detects notable patterns in your data</li>
+<li>AI action approvals: When an action needs your approval before executing</li>
+<li>Goal alerts: When AI detects patterns related to your goals</li>
+<li>Reminder triggers: Time-based reminder notifications</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Uses Web Push API with VAPID (Voluntary Application Server Identification)</li>
+<li>Service worker (<code>service-worker.js</code>) handles background push events</li>
+<li>Subscriptions stored per-device in <code>pushSubscriptions</code> table</li>
+<li>Supports action buttons in notifications (approve/deny for AI actions)</li>
+<li>Failed subscriptions automatically cleaned up (removes expired/invalid subscriptions)</li>
+<li>Falls back to Telegram notifications when push isn't available</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/push-service.ts, client/public/service-worker.js</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY</span>
+<span class="tag">Browser Permission Required</span>
+</div>
+</div>
+
+<!-- ====== 11. SPEECH ====== -->
+<div class="section" id="speech">
+<h2>11. Speech Recognition & Synthesis</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Main input bar (voice recording), People search (voice input), Messages search (voice input), memory playback (text-to-speech).</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> The core of Keryx's hands-free experience. Speak your thoughts naturally and they become structured memories. Voice input is also available on search bars across the app. Text-to-speech reads memories and briefings back to you.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When you tap the microphone button on the main input</li>
+<li>When you tap the mic icon on People or Messages AI search bars</li>
+<li>When you use text-to-speech playback for memories or briefings</li>
+<li>Voice activation mode: Continuous listening with wake word detection</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Speech Recognition: Browser's native Web Speech API (<code>webkitSpeechRecognition</code>)</li>
+<li>Speech Synthesis: Browser's native Web Speech Synthesis API</li>
+<li>Shared <code>useVoiceInput</code> hook eliminates code duplication across pages</li>
+<li>Proper TypeScript types via custom <code>speech.ts</code> type definitions</li>
+<li>No server-side processing needed for browser speech (happens locally)</li>
+<li>Telegram voice notes use OpenAI Whisper for server-side transcription (different path)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">client/src/hooks/use-voice-input.ts, client/src/hooks/use-speech-recognition.tsx, client/src/hooks/use-speech-synthesis.tsx, client/src/types/speech.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">No API key needed</span>
+<span class="tag">Browser API</span>
+</div>
+</div>
+
+<!-- ====== 12. PWA ====== -->
+<div class="section" id="pwa">
+<h2>12. PWA (Progressive Web App)</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Landing page (install prompt), Settings page (install prompt), global banner for eligible devices, manifest.json, service worker.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Makes Keryx installable on your phone like a native app. You get a home screen icon, full-screen experience, offline capability, and push notification support. No app store needed.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When visiting on a mobile browser: Install prompts appear on landing page and in settings</li>
+<li>Service worker caches essential assets for faster loading</li>
+<li>Handles push notifications in the background even when the app is closed</li>
+<li>iOS-specific instructions provided since iOS handles PWAs differently</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li><code>manifest.json</code> defines the app name, icons (72px to 512px), theme colors, and display mode</li>
+<li>Service worker (<code>service-worker.js</code>) handles caching and push events</li>
+<li>Install detection via <code>beforeinstallprompt</code> browser event</li>
+<li>Standalone display mode for app-like experience</li>
+<li>Works across Android (Chrome), iOS (Safari - with limitations), and desktop browsers</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">client/public/manifest.json, client/public/service-worker.js, client/public/icons/</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">No API key needed</span>
+</div>
+</div>
+
+<!-- ====== 13. GOOGLE ANALYTICS ====== -->
+<div class="section" id="analytics">
+<h2>13. Google Analytics 4</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Every page in the app (automatic page view tracking), key user interactions (event tracking).</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Tracks how the app is being used - which pages are visited, how users navigate, which features are popular. Helps understand usage patterns and prioritize improvements.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>On app initialization: GA script loaded automatically</li>
+<li>On every page navigation: Page view tracked via <code>trackPageView</code></li>
+<li>On key interactions: Custom events tracked via <code>trackEvent</code></li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Google Tag Manager script loaded dynamically on app startup</li>
+<li>Measurement ID stored as environment variable (<code>VITE_GA_MEASUREMENT_ID</code>)</li>
+<li>The measurement ID is public by design (it's embedded in page HTML like all GA implementations)</li>
+<li>Tracks page views via <code>gtag('config', ...)</code> and events via <code>gtag('event', ...)</code></li>
+<li>Gracefully disabled when measurement ID is not set</li>
+<li>Data appears in Google Analytics dashboard within 24-48 hours</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">client/src/lib/analytics.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Env: VITE_GA_MEASUREMENT_ID = G-9K0CTR39SS</span>
+<span class="tag">Public identifier</span>
+</div>
+</div>
+
+<!-- ====== 14. SMS ====== -->
+<div class="section" id="sms">
+<h2>14. Text Message Import</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Messages page (import button), conversation browser with chat bubble UI.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Brings your text message history into Keryx. AI analyzes conversations for topics, mood, and people mentions. This data feeds into morning briefings and gives you a searchable archive of your message history.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When you upload an export file from the "SMS Import/Export" Android app</li>
+<li>Supports NDJSON and ZIP file formats</li>
+<li>AI analysis runs on each conversation after import</li>
+<li>Conversation context feeds into morning briefings</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Import flow: Upload file &rarr; Parse NDJSON entries &rarr; Group by conversation &rarr; Deduplicate &rarr; Store</li>
+<li>Handles SMS, MMS, and RCS message types</li>
+<li>Smart timestamp parsing handles multiple formats</li>
+<li>Deduplication prevents duplicate messages across multiple imports</li>
+<li>AI analysis via GPT extracts: topics, mood, importance, people mentioned</li>
+<li>Chat bubble UI for natural conversation browsing</li>
+<li>Search, sort, and table/card view toggle on conversations list</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/sms-import-service.ts, server/message-ai-service.ts, client/src/pages/messages.tsx</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">No API key needed</span>
+<span class="tag">Android only (export app)</span>
+</div>
+</div>
+
+<!-- ====== 15. AI ACTIONS ====== -->
+<div class="section" id="ai-actions">
+<h2>15. AI Task Execution</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Main input (automatic detection), AI Actions page (manage pending/completed actions), Settings (action preferences).</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Lets you do things with your voice, not just record things. Say "email Sarah about the meeting" or "remind me to call the dentist tomorrow" and Keryx detects the action, asks for approval, then executes it.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Every time you save a memory: GPT scans input for actionable requests</li>
+<li>Supported actions: Create calendar events, send emails, create reminders</li>
+<li>Policy system: "always ask" (default), "auto-approve", or "never" per action type</li>
+<li>Push notification sent when action needs approval</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>GPT analyzes memory text for action intent with structured JSON output</li>
+<li>Detected actions include: type, title, description, payload, confidence score, reasoning</li>
+<li>User preference system controls approval policy per action type</li>
+<li>Execution routes to the appropriate service (Calendar, Gmail/Outlook, Reminders)</li>
+<li>Full audit trail: every action logged with status, timestamps, and results</li>
+<li>Actions have statuses: pending &rarr; approved/denied &rarr; executed/failed</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/ai-actions-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Requires: OpenAI + Calendar/Email connected</span>
+</div>
+</div>
+
+<!-- ====== 16. COMPANION ====== -->
+<div class="section" id="companion">
+<h2>16. Meta Glasses Companion App</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Separate React Native app in <code>/companion-app/</code>, communicates with Keryx backend via API.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Designed for Oakley Meta glasses integration. Record memories hands-free while wearing your glasses. Captures GPS location, device context, and supports wake word activation so you can say "Hey Keryx" to start recording.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When using the companion app on your phone (paired with Meta glasses)</li>
+<li>Wake word detection: "Hey Keryx" starts recording via Picovoice Porcupine SDK</li>
+<li>Records speech, captures location, sends to Keryx backend</li>
+<li>Also supports querying memories by voice</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>MCP Protocol 2025-01 compliant payloads for structured communication</li>
+<li>Unified action endpoint: <code>POST /api/companion/action</code></li>
+<li>Actions: "record" (save memory) and "query" (search memories)</li>
+<li>Geolocation capture enriches memories with location data</li>
+<li>Bluetooth service for Meta glasses connectivity</li>
+<li>Speech service for voice recognition on the companion device</li>
+<li>Location service for continuous GPS tracking</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">companion-app/src/services/api.ts, companion-app/src/services/speech.ts, companion-app/src/services/location.ts, companion-app/src/services/bluetooth.ts, companion-app/src/services/wakeWord.ts, companion-app/src/types/mcp.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag orange">React Native (separate build)</span>
+<span class="tag">Picovoice SDK</span>
+</div>
+</div>
+
+<!-- ====== 17. HIGH SIGNAL ====== -->
+<div class="section" id="high-signal">
+<h2>17. High-Signal Alerts</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Runs automatically during contextual discoveries, People page (closeness score configuration).</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> If someone important to you (closeness score 8+) appears in a news article or web result, you want to know about it immediately. This system watches for mentions of your high-priority people in contextual discoveries.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Every time contextual discoveries are generated</li>
+<li>Scans discovery titles and content for mentions of high-priority people (score 8-10)</li>
+<li>Supports full name matches, first+last name matches, and last name matches with varying confidence levels</li>
+<li>Skips names that are too short (< 2 characters) to avoid false positives</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Fetches all people with closeness score >= 8 (configurable minimum)</li>
+<li>Scans discovery text for name matches at three confidence levels: full name (0.95), first+last (0.85), last name only (0.7)</li>
+<li>Returns matches with context explaining why the alert triggered</li>
+<li>Results shown as alerts in the discoveries interface</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/high-signal-service.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Depends on: Tavily + People data</span>
+</div>
+</div>
+
+<!-- ====== 18. DATABASE ====== -->
+<div class="section" id="database">
+<h2>18. Database (Neon PostgreSQL)</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Everything. Every piece of data in Keryx lives in the database.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> The persistent backbone of the entire system. Stores memories, people, settings, AI actions, location history, financial data, messages, ideas, goals, reminders, push subscriptions, and AI cache.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Every single API request reads from or writes to the database</li>
+<li>Session management stored in PostgreSQL</li>
+<li>Vector embeddings stored for semantic search</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Neon serverless PostgreSQL (managed by Replit)</li>
+<li>Drizzle ORM for type-safe queries and schema management</li>
+<li>WebSocket connections via <code>@neondatabase/serverless</code></li>
+<li>Schema migrations via <code>npm run db:push</code> (never manual SQL)</li>
+<li>All queries filter by <code>userId</code> for data isolation</li>
+<li>Strategic indexes on frequently queried columns</li>
+<li>JSONB columns for flexible metadata storage</li>
+<li>Vector type columns for embedding storage (1536 dimensions)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key tables:</span></p>
+<ul>
+<li><code>users</code> - Account data and authentication</li>
+<li><code>log_entries</code> - Memories with AI metadata and embeddings</li>
+<li><code>settings</code> - Per-user configuration</li>
+<li><code>categories</code>, <code>people</code> - Organization entities</li>
+<li><code>aiActions</code>, <code>aiActionPreferences</code> - AI task management</li>
+<li><code>ai_cache</code> - Cached AI responses (30-min TTL)</li>
+<li><code>location_history</code>, <code>frequent_places</code> - Location data</li>
+<li><code>pushSubscriptions</code> - Push notification endpoints</li>
+<li><code>ideas</code>, <code>ideaTasks</code> - Workspace items</li>
+<li><code>goals</code>, <code>reminders</code> - Tracking systems</li>
+<li><code>messageConversations</code>, <code>messages</code>, <code>messageImports</code> - SMS data</li>
+<li><code>plaidItems</code>, <code>financialAccounts</code>, <code>financialTransactions</code> - Financial data</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">shared/schema.ts, server/db.ts, server/storage.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Env: DATABASE_URL (managed by Replit)</span>
+</div>
+</div>
+
+<!-- ====== 19. AUTH ====== -->
+<div class="section" id="auth">
+<h2>19. Authentication</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Login/signup pages, every API route (session validation), Telegram account linking.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Protects your data. Every piece of information in Keryx is tied to your account and invisible to other users. No one can access your memories, people, finances, or messages without being logged in as you.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>On every API request: Session cookie validated via Passport.js middleware</li>
+<li>On login/signup: Password hashed with bcrypt, session created</li>
+<li>Telegram linking: Validates ownership before connecting accounts</li>
+<li>Companion app: Session-based authentication for API calls</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Passport.js with local strategy (username/password)</li>
+<li>Passwords hashed with bcrypt (10 rounds)</li>
+<li>Sessions stored in PostgreSQL via <code>connect-pg-simple</code></li>
+<li>Session cookie sent with every request for stateful authentication</li>
+<li>All database queries include <code>userId</code> filter to prevent cross-user data access</li>
+<li>Object ownership validated before any update/delete operation</li>
+<li>Zod input validation on all request bodies</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/auth.ts</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">No external service</span>
+</div>
+</div>
+
+<hr class="divider" style="margin: 32px 0;">
+
+<div class="section">
+<h2>Quick Reference: All Secrets & Environment Variables</h2>
+<table style="width:100%; border-collapse: collapse; font-size: 0.9em;">
+<tr style="border-bottom: 2px solid #ddd; text-align: left;">
+<th style="padding: 8px;">Variable</th>
+<th style="padding: 8px;">Used By</th>
+<th style="padding: 8px;">Type</th>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>OPENAI_API_KEY</code></td>
+<td style="padding: 8px;">OpenAI (fallback)</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>AI_INTEGRATIONS_OPENAI_API_KEY</code></td>
+<td style="padding: 8px;">OpenAI (Replit integration, preferred)</td>
+<td style="padding: 8px;">Auto-managed</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>TELEGRAM_BOT_TOKEN</code></td>
+<td style="padding: 8px;">Telegram Bot</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>TELEGRAM_WEBHOOK_SECRET</code></td>
+<td style="padding: 8px;">Telegram webhook validation</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>PLAID_CLIENT_ID</code></td>
+<td style="padding: 8px;">Plaid financial integration</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>PLAID_SECRET</code></td>
+<td style="padding: 8px;">Plaid financial integration</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>PLAID_ENV</code></td>
+<td style="padding: 8px;">Plaid environment</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>TAVILY_API_KEY</code></td>
+<td style="padding: 8px;">Tavily AI Search</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>NEWSDATA_API_KEY</code></td>
+<td style="padding: 8px;">News data</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>NEWS_API_KEY</code></td>
+<td style="padding: 8px;">News API</td>
+<td style="padding: 8px;">Secret</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>VAPID_PUBLIC_KEY</code></td>
+<td style="padding: 8px;">Web Push</td>
+<td style="padding: 8px;">Env var</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>VAPID_PRIVATE_KEY</code></td>
+<td style="padding: 8px;">Web Push</td>
+<td style="padding: 8px;">Env var</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>VITE_GA_MEASUREMENT_ID</code></td>
+<td style="padding: 8px;">Google Analytics</td>
+<td style="padding: 8px;">Env var (public)</td>
+</tr>
+<tr style="border-bottom: 1px solid #eee;">
+<td style="padding: 8px;"><code>DATABASE_URL</code></td>
+<td style="padding: 8px;">PostgreSQL</td>
+<td style="padding: 8px;">Auto-managed</td>
+</tr>
+</table>
+</div>
+
+<div class="section">
+<h2>Integration Dependency Map</h2>
+<p style="margin-bottom: 12px;">Some integrations depend on others to function:</p>
+<ul style="padding-left: 20px;">
+<li><strong>AI Actions</strong> &rarr; requires OpenAI + at least one of: Calendar, Email, or Reminders</li>
+<li><strong>Contextual Discoveries</strong> &rarr; requires OpenAI + Tavily; enriched by Calendar, Email, Plaid, Location</li>
+<li><strong>High-Signal Alerts</strong> &rarr; requires Contextual Discoveries + People with closeness scores</li>
+<li><strong>Morning Briefings</strong> &rarr; requires OpenAI; enriched by Calendar, Email, Plaid, Goals, Reminders, Messages</li>
+<li><strong>Financial Queries</strong> &rarr; requires OpenAI + Plaid</li>
+<li><strong>Memory Auto-Linking</strong> &rarr; requires Calendar connected</li>
+<li><strong>Telegram Voice Notes</strong> &rarr; requires Telegram + OpenAI (Whisper transcription)</li>
+<li><strong>Personal Insights</strong> &rarr; requires OpenAI; enriched by all data sources</li>
+</ul>
+</div>
+
+<footer>
+<p>Keryx - Kinetic Enterprise & Resource Yielding X-system</p>
+<p>Generated February 20, 2026</p>
+</footer>
+
+</body>
+</html>
