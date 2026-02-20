@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -2122,6 +2122,30 @@ export default function SettingsPage() {
                   {backfillStatus?.status === 'running' 
                     ? `Processing ${backfillStatus.processed || 0} of ${backfillStatus.total || 0}...` 
                     : "Re-analyze All Memories"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="backdrop-blur-xl bg-white/5 dark:bg-white/5 bg-white border-white/10">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                Documentation
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  View the complete integration reference guide covering all services connected to Keryx.
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open('/keryx-integrations-guide.html', '_blank')}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  View Integration Guide
                 </Button>
               </div>
             </CardContent>
