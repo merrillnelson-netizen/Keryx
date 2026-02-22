@@ -30,13 +30,7 @@ function validateEnvironment() {
   }
 
   if (missing.length > 0) {
-    console.error('\n❌ CRITICAL: Missing required environment variables:');
-    missing.forEach(envVar => {
-      console.error(`   - ${envVar}`);
-    });
-    console.error('\nPlease set these environment variables before starting the application.');
-    console.error('For local development, you can use a .env file.');
-    console.error('For production, set them in your deployment environment.\n');
+    console.error(`\n❌ CRITICAL: Missing required environment variables: ${missing.join(', ')}. Set them before starting the application.\n`);
     process.exit(1);
   }
 

@@ -290,8 +290,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     return response.data[0].embedding;
   } catch (error) {
-    console.error("Error generating embedding:", error);
-    console.warn("Falling back to zero vector for embedding");
+    console.error("Error generating embedding, falling back to zero vector:", error);
     // Return a zero vector of correct dimensions (1536) as fallback
     // This allows memories to be saved even if OpenAI is unavailable
     // Semantic search won't work for these entries, but basic filtering will

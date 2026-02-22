@@ -1,9 +1,9 @@
 import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertLogEntrySchema, insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type MCPPayload, type LogEntry, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type GoalMilestone, type Reminder } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, GoalPatternAlert, detectCalendarEvent } from "./ai-service";
+import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -40,6 +40,29 @@ interface BackfillJob {
   message?: string;
 }
 const backfillJobs = new Map<string, BackfillJob>();
+
+// Type for JSONB milestone data stored in goals table
+interface MilestoneJSON {
+  id?: string;
+  title?: string;
+  isCompleted?: boolean;
+  completedAt?: string;
+  order?: number;
+}
+
+// Type for AI duplicate detection response
+interface DuplicateGroupJSON {
+  ids?: string[];
+  reason?: string;
+  suggestedTargetId?: string;
+  confidence?: string;
+}
+
+// Type for AI sort field response
+interface AISortFieldJSON {
+  field?: string;
+  direction?: string;
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -726,7 +749,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to update memory:", error);
       sendErrorResponse(res, 500, "Failed to update memory", error);
     }
   });
@@ -888,7 +910,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to search memories:", error);
       sendErrorResponse(res, 500, "Failed to search memories", error);
     }
   });
@@ -1025,7 +1046,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           timestamp: new Date().toISOString()
         });
       }
-      console.error("Companion action failed:", error);
       sendErrorResponse(res, 500, "Failed to process companion action", error);
     }
   });
@@ -1114,7 +1134,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       return; // Ensure no further processing
     } catch (error) {
-      console.error("Failed to create log entry:", error);
       sendErrorResponse(res, 500, "Failed to create log entry", error);
     }
   });
@@ -1508,7 +1527,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to fetch today's events:", error);
       sendErrorResponse(res, 500, "Failed to fetch calendar events", error);
     }
   });
@@ -1525,7 +1543,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to fetch current event:", error);
       sendErrorResponse(res, 500, "Failed to fetch current event", error);
     }
   });
@@ -1550,7 +1567,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to detect calendar event:", error);
       sendErrorResponse(res, 500, "Failed to detect calendar event", error);
     }
   });
@@ -1626,7 +1642,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to create calendar event:", error);
       sendErrorResponse(res, 500, "Failed to create calendar event", error);
     }
   });
@@ -1653,7 +1668,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to check for duplicate event:", error);
       sendErrorResponse(res, 500, "Failed to check for duplicate event", error);
     }
   });
@@ -1968,17 +1982,17 @@ Respond with JSON only.`
         temperature: 0.2,
       });
 
-      let result: any;
+      let result: { groups?: DuplicateGroupJSON[]; message?: string };
       try {
         result = JSON.parse(response.choices[0].message.content || "{}");
       } catch {
         return res.json({ status: 'success', data: { groups: [], message: 'Could not analyze records for duplicates.' } });
       }
 
-      const groups = Array.isArray(result.groups) ? result.groups.filter((g: any) => {
+      const groups = Array.isArray(result.groups) ? result.groups.filter((g) => {
         if (!Array.isArray(g.ids) || g.ids.length < 2) return false;
         return g.ids.every((id: string) => typeof id === 'string' && validPeopleIds.has(id));
-      }).map((g: any) => ({
+      }).map((g) => ({
         ids: g.ids,
         reason: typeof g.reason === 'string' ? g.reason.slice(0, 200) : 'Possible duplicate',
         suggestedTargetId: typeof g.suggestedTargetId === 'string' && validPeopleIds.has(g.suggestedTargetId) ? g.suggestedTargetId : g.ids[0],
@@ -1993,7 +2007,6 @@ Respond with JSON only.`
         }
       });
     } catch (error) {
-      console.error("AI duplicate detection failed:", error);
       sendErrorResponse(res, 500, "Duplicate detection failed", error);
     }
   });
@@ -2112,7 +2125,6 @@ Respond with JSON only.`
         }
       });
     } catch (error) {
-      console.error("AI people search failed:", error);
       sendErrorResponse(res, 500, "AI search failed", error);
     }
   });
@@ -2334,7 +2346,6 @@ Respond with JSON only.`
         timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error("Failed to generate insights:", error);
       sendErrorResponse(res, 500, "Failed to generate insights", error);
     }
   });
@@ -2391,12 +2402,12 @@ Respond with JSON only.`
         }
       }
       
-      // OPTIMIZED: Fetch independent data sources in parallel (using lightweight query)
-      const [recentMemories, userSettings, userPeople] = await Promise.all([
+      // OPTIMIZED: Fetch independent data sources in parallel (reuse settings from cache key check)
+      const [recentMemories, userPeople] = await Promise.all([
         storage.getRecentLogEntriesLight(user.id, 7, 100),
-        storage.getSettings(user.id),
         storage.getPeople(user.id)
       ]);
+      const userSettings = settingsForCache;
       
       const activeProjects = userSettings?.activeProjects || undefined;
       const knownPeople = userPeople.map(p => ({
@@ -2473,7 +2484,7 @@ Respond with JSON only.`
         try {
           const goals = await storage.getActiveGoals(user.id);
           return goals.map(g => {
-            const milestones = g.milestones as any[] || [];
+            const milestones = (Array.isArray(g.milestones) ? g.milestones : []) as MilestoneJSON[];
             const completedCount = milestones.filter(m => m.isCompleted).length;
             return {
               title: g.title,
@@ -2622,7 +2633,6 @@ Respond with JSON only.`
       
       return;
     } catch (error) {
-      console.error("Failed to generate briefing:", error);
       sendErrorResponse(res, 500, "Failed to generate briefing", error);
     }
   });
@@ -2857,7 +2867,6 @@ Respond with JSON only.`
         generatedAt: newsFeed.generatedAt.toISOString()
       });
     } catch (error) {
-      console.error("Error generating news feed:", error);
       sendErrorResponse(res, 500, "Failed to generate news feed", error);
     }
   });
@@ -3092,7 +3101,6 @@ Respond with JSON only.`
       
       return;
     } catch (error) {
-      console.error("Failed to fetch contextual discoveries:", error);
       sendErrorResponse(res, 500, "Failed to fetch contextual discoveries", error);
     }
   });
@@ -3249,7 +3257,6 @@ Respond with JSON only.`
       
       return;
     } catch (error) {
-      console.error("Failed to detect patterns:", error);
       sendErrorResponse(res, 500, "Failed to detect patterns", error);
     }
   });
@@ -3987,7 +3994,7 @@ Respond with JSON only.`
     } catch (error: any) {
       // Handle specific Plaid API errors
       const plaidError = error?.response?.data;
-      console.error("Plaid link-token error:", JSON.stringify(plaidError || error.message || error));
+      console.error("Plaid link-token error:", plaidError?.error_code || error.message || error);
       
       if (plaidError?.error_code === 'INVALID_PRODUCT') {
         return sendErrorResponse(res, 503, "Plaid production access required. Please wait for Plaid to approve your Transactions product access, then try again.");
@@ -4155,7 +4162,7 @@ Respond with JSON only.`
     } catch (error: any) {
       // Log detailed Plaid error info
       const plaidError = error?.response?.data;
-      console.error("Transaction sync error:", JSON.stringify(plaidError || error.message || error));
+      console.error("Transaction sync error:", plaidError?.error_code || error.message || error);
       
       // Provide user-friendly error messages for common Plaid errors
       if (plaidError?.error_code === 'PRODUCT_NOT_READY') {
@@ -4891,7 +4898,7 @@ Return ONLY the JSON array, no other text.`;
       // Call AI to analyze progress
       const analysis = await analyzeGoalProgress({
         ...goal,
-        milestones: goal.milestones as any[] || [],
+        milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
       }, recentMemories);
       
       // Update the goal with AI analysis
@@ -4922,7 +4929,7 @@ Return ONLY the JSON array, no other text.`;
       
       const suggestions = await suggestGoalMilestones({
         ...goal,
-        milestones: goal.milestones as any[] || [],
+        milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
       });
       res.json({ suggestions });
     } catch (error) {
@@ -4953,7 +4960,7 @@ Return ONLY the JSON array, no other text.`;
           status: g.status,
           targetDate: g.targetDate,
           aiLastAnalyzed: g.aiLastAnalyzed,
-          milestones: (g.milestones as any[] || []).map(m => ({
+          milestones: ((Array.isArray(g.milestones) ? g.milestones : []) as MilestoneJSON[]).map(m => ({
             title: m.title,
             isCompleted: m.isCompleted,
             completedAt: m.completedAt,
@@ -5254,7 +5261,6 @@ Return ONLY the JSON array, no other text.`;
         } : undefined
       });
     } catch (error) {
-      console.error('Location import failed:', error);
       sendErrorResponse(res, 500, "Failed to import location data", error);
     }
   });
@@ -5315,7 +5321,6 @@ Return ONLY the JSON array, no other text.`;
         } : undefined
       });
     } catch (error) {
-      console.error('Location import failed:', error);
       sendErrorResponse(res, 500, "Failed to import location data", error);
     }
   });
@@ -5453,7 +5458,6 @@ Return ONLY the JSON array, no other text.`;
       
       res.json({ success: true, geocoded: geocodedCount, remaining: Math.max(0, placesToGeocode.length - 10) });
     } catch (error) {
-      console.error('Geocoding failed:', error);
       sendErrorResponse(res, 500, "Failed to geocode places", error);
     }
   });
@@ -5953,7 +5957,6 @@ Respond with JSON only.`
         });
       }
     } catch (error) {
-      console.error('Message AI processing failed:', error);
       sendErrorResponse(res, 500, "Failed to process messages", error);
     }
   });
