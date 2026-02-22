@@ -91,6 +91,7 @@ export interface IStorage {
   createAiAction(action: InsertAiAction): Promise<AiAction>;
   updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined>;
   getPendingActions(userId: string): Promise<AiAction[]>;
+  resolvePendingActionsBySource(userId: string, sourceId: string, actionType?: string, resolution?: 'completed' | 'rejected'): Promise<number>;
   
   // AI Action Preferences (user-scoped)
   getAiActionPreferences(userId: string): Promise<AiActionPreference[]>;
@@ -1292,6 +1293,28 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch pending actions:', error);
       throw new Error('Database error while fetching pending actions');
+    }
+  }
+
+  async resolvePendingActionsBySource(userId: string, sourceId: string, actionType?: string, resolution: 'completed' | 'rejected' = 'completed'): Promise<number> {
+    try {
+      const conditions = [
+        eq(aiActions.userId, userId),
+        eq(aiActions.status, 'pending'),
+        eq(aiActions.sourceId, sourceId),
+      ];
+      if (actionType) {
+        conditions.push(eq(aiActions.actionType, actionType));
+      }
+      const result = await db
+        .update(aiActions)
+        .set({ status: resolution, executedAt: new Date() })
+        .where(and(...conditions))
+        .returning();
+      return result.length;
+    } catch (error) {
+      console.error('Failed to resolve pending actions by source:', error);
+      return 0;
     }
   }
 

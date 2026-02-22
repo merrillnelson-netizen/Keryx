@@ -3650,6 +3650,34 @@ Respond with JSON only.`
   });
 
   /**
+   * POST /api/actions/resolve-by-source - Resolve pending actions for a specific memory
+   * Used when an action is handled inline (e.g., calendar event created from Log screen)
+   */
+  app.post("/api/actions/resolve-by-source", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { sourceId, actionType, resolution } = req.body;
+      
+      if (!sourceId || typeof sourceId !== 'string') {
+        return sendErrorResponse(res, 400, "sourceId is required");
+      }
+      
+      const validResolutions = ['completed', 'rejected'] as const;
+      const resolvedStatus = validResolutions.includes(resolution) ? resolution : 'completed';
+      
+      const resolved = await storage.resolvePendingActionsBySource(user.id, sourceId, actionType, resolvedStatus);
+      
+      res.json({
+        status: 'success',
+        resolved,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to resolve actions", error);
+    }
+  });
+
+  /**
    * POST /api/actions/detect - Detect actions from user input (for testing)
    */
   app.post("/api/actions/detect", requireAuth, aiLimiter, async (req, res) => {

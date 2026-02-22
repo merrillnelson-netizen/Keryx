@@ -38,7 +38,21 @@ export default function CalendarEventSuggestion({
   const [dismissed, setDismissed] = useState(false);
   const [autoExecuted, setAutoExecuted] = useState(false);
   const autoExecuteTriggered = useRef(false);
+  const resolvedRef = useRef(false);
   const queryClient = useQueryClient();
+
+  const resolvePendingActions = (resolution: 'completed' | 'rejected' = 'completed') => {
+    if (memoryId && !resolvedRef.current) {
+      resolvedRef.current = true;
+      apiRequest("POST", "/api/actions/resolve-by-source", {
+        sourceId: memoryId,
+        actionType: "calendar.create",
+        resolution,
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
+      }).catch(() => {});
+    }
+  };
 
   const { data: calendarStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["/api/calendar/status"],
@@ -82,6 +96,7 @@ export default function CalendarEventSuggestion({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/logs"] });
+      resolvePendingActions('completed');
       if (data.data?.duplicate) {
         // Event already exists
       } else {
@@ -168,6 +183,7 @@ export default function CalendarEventSuggestion({
 
   const handleDismiss = () => {
     setDismissed(true);
+    resolvePendingActions('rejected');
     onDismiss();
   };
 
