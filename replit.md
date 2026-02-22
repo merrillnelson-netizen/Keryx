@@ -31,6 +31,15 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Schema**: Includes tables for `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals`, `reminders`, `messageConversations`, `messages`, `messageImports`.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
+### Timezone Handling
+- **Storage**: All timestamps in PostgreSQL are stored in UTC (`timestamp without time zone`, defaulting to `now()` in UTC).
+- **User Timezone**: Stored in `settings.userTimezone` (IANA format, e.g., `America/Denver`). Auto-synced from browser on login via `useTimezoneSync()` in App.tsx.
+- **AI Prompts**: Memory timestamps are converted to user's local timezone using `formatDateForTimezone()` before being passed to AI (briefings, insights, alerts, news feed). This prevents UTC date mismatch (e.g., 11 PM Mountain showing as next day in UTC).
+- **Frontend Display**: Uses browser's native `toLocaleString()` / `date-fns format()` which auto-convert UTC to local time.
+- **Calendar Events**: Created with user's timezone passed as IANA string to Google/Outlook APIs.
+- **Reminders**: Trigger times stored in UTC, AI extracts reminder times by converting from user's local to UTC.
+- **Key Helpers**: `formatDateForTimezone(date, tz)` and `formatDateTimeForTimezone(date, tz)` in `server/ai-service.ts`.
+
 ### Performance Optimizations
 - **AI Caching**: 30-minute TTL cache for briefings and alerts.
 - **Frontend Pagination**: `useInfiniteQuery` with "Load More" buttons.

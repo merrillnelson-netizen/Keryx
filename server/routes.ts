@@ -3189,9 +3189,10 @@ Respond with JSON only.`
         }
       }
       
-      // Get user timezone from settings
+      // Get user timezone from query param or settings
+      const queryTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : undefined;
       const userSettings = await storage.getSettings(user.id);
-      const userTimezone = userSettings?.userTimezone || 'America/Denver';
+      const userTimezone = queryTimezone || userSettings?.userTimezone || 'America/Denver';
       
       const alerts = await detectPatternAlerts(alertMemories, userTimezone);
 

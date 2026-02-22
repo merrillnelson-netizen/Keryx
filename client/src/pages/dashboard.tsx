@@ -115,9 +115,9 @@ export default function Dashboard() {
   });
 
   const { data: alertsData, isLoading: alertsLoading, isFetching: alertsFetching, refetch: refetchAlerts } = useQuery<AlertsResponse>({
-    queryKey: ["/api/alerts"],
+    queryKey: ["/api/alerts", userTimezone],
     queryFn: async () => {
-      const response = await fetch("/api/alerts", { credentials: "include" });
+      const response = await fetch(`/api/alerts?timezone=${encodeURIComponent(userTimezone)}`, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
         throw new Error(`${response.status}: ${text}`);
