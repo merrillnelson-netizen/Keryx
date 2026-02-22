@@ -3064,7 +3064,7 @@ Respond with JSON only.`
               type: 'discovery',
               title: `🚨 ${topAlert.person.name} mentioned`,
               body: alertMessage.body.substring(0, 120),
-              url: '/insights',
+              url: '/dashboard',
               requireInteraction: topAlert.person.priority >= 9,
             });
           } catch (err) {
