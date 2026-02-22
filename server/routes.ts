@@ -5911,16 +5911,17 @@ Respond with JSON only.`
       const settings = await storage.getSettings(user.id);
       const userTz = settings?.userTimezone || 'America/Denver';
 
-      const localStart = new Date(dateStr + 'T00:00:00');
-      const localEnd = new Date(dateStr + 'T23:59:59.999');
-      const offsetMs = localStart.getTime() - new Date(
-        localStart.toLocaleString('en-US', { timeZone: userTz })
-      ).getTime();
-      const startDate = new Date(localStart.getTime() + offsetMs);
-      const endDate = new Date(localEnd.getTime() + offsetMs);
+      const localToUtc = (localDate: Date, tz: string): Date => {
+        const localMs = localDate.getTime();
+        const inTz = new Date(localDate.toLocaleString('en-US', { timeZone: tz }));
+        return new Date(localMs + (localMs - inTz.getTime()));
+      };
+
+      const utcStart = localToUtc(new Date(`${dateStr}T00:00:00`), userTz);
+      const utcEnd = localToUtc(new Date(`${dateStr}T23:59:59.999`), userTz);
 
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-      const msgs = await storage.getMessagesByDateRange(user.id, startDate, endDate, limit);
+      const msgs = await storage.getMessagesByDateRange(user.id, utcStart, utcEnd, limit);
       const sanitized = msgs.map(({ embeddingVector: _, ...rest }) => rest);
       res.json({ status: 'success', data: sanitized });
     } catch (error) {

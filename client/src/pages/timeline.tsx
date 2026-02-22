@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, Users, ChevronLeft, ChevronRight, Clock, Flame, TrendingUp, Brain, Loader2, X, MessageCircle, CalendarDays, BookOpen, ArrowUpDown } from "lucide-react";
+import { Calendar, Users, ChevronLeft, ChevronRight, Clock, Flame, TrendingUp, Brain, Loader2, MessageCircle, CalendarDays, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect } from "react";
 import {
@@ -74,11 +74,15 @@ function DayDetailModal({ open, onClose, date, entries, dateKey }: DayDetailModa
     queryKey: ["/api/messages/by-date", dateKey],
     queryFn: async () => {
       const response = await fetch(`/api/messages/by-date?date=${dateKey}`, { credentials: "include" });
-      if (!response.ok) return { status: 'success', data: [] };
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        throw new Error(`${response.status}: ${errorText}`);
+      }
       return response.json();
     },
-    enabled: open && activeTab === "messages",
+    enabled: open && !!dateKey && activeTab === "messages",
     staleTime: 1000 * 60 * 5,
+    retry: false,
   });
 
   const dayMessages = messagesData?.data || [];
