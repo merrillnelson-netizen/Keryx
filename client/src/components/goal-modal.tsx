@@ -272,47 +272,41 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
           </div>
         ) : (
           <>
-            <DialogHeader className="flex-shrink-0 p-4 pb-2 border-b">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Target className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <DialogTitle className="text-lg font-semibold truncate">
-                      {isCreating ? "New Goal" : goal?.title || "Goal"}
-                    </DialogTitle>
-                    <DialogDescription className="sr-only">
-                      {isCreating ? "Create a new goal to track" : `Details for ${goal?.title || "goal"}`}
-                    </DialogDescription>
-                    {!isCreating && goal && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <Progress value={goal.progressPercent} className="h-1.5 flex-1 max-w-32" />
-                        <span className="text-xs text-muted-foreground">{goal.progressPercent}%</span>
-                      </div>
-                    )}
-                  </div>
+            <DialogHeader className="flex-shrink-0 p-4 pb-3 border-b">
+              <div className="flex items-center gap-3 min-w-0 pr-6">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Target className="w-5 h-5 text-primary" />
                 </div>
-                <div className="flex items-center gap-2">
-                  {!isCreating && goal && (
-                    <Select value={goal.status} onValueChange={handleStatusChange}>
-                      <SelectTrigger className="w-32 h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map(opt => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            <div className="flex items-center gap-2">
-                              <opt.icon className={cn("w-3 h-3", opt.color)} />
-                              {opt.label}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="text-lg font-semibold truncate">
+                    {isCreating ? "New Goal" : goal?.title || "Goal"}
+                  </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {isCreating ? "Create a new goal to track" : `Details for ${goal?.title || "goal"}`}
+                  </DialogDescription>
                 </div>
               </div>
+              {!isCreating && goal && (
+                <div className="flex items-center gap-3 mt-2 pl-[52px]">
+                  <Progress value={goal.progressPercent} className="h-1.5 flex-1" />
+                  <span className="text-xs text-muted-foreground flex-shrink-0">{goal.progressPercent}%</span>
+                  <Select value={goal.status} onValueChange={handleStatusChange}>
+                    <SelectTrigger className="w-32 h-8 text-xs flex-shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <div className="flex items-center gap-2">
+                            <opt.icon className={cn("w-3 h-3", opt.color)} />
+                            {opt.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </DialogHeader>
 
             {!isCreating && (
