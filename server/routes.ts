@@ -5896,6 +5896,23 @@ Respond with JSON only.`
     }
   });
 
+  app.get("/api/messages/by-date", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const dateStr = req.query.date as string;
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return sendErrorResponse(res, 400, "Date parameter required in YYYY-MM-DD format");
+      }
+      const startDate = new Date(dateStr + 'T00:00:00.000Z');
+      const endDate = new Date(dateStr + 'T23:59:59.999Z');
+      const msgs = await storage.getMessagesByDateRange(user.id, startDate, endDate, 50);
+      const sanitized = msgs.map(({ embeddingVector: _, ...rest }) => rest);
+      res.json({ status: 'success', data: sanitized });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch messages for date", error);
+    }
+  });
+
   app.get("/api/messages/stats", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;

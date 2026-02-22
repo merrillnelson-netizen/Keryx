@@ -178,6 +178,7 @@ export interface IStorage {
   getMessages(userId: string, conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
   getMessagesCount(userId: string, conversationId?: string): Promise<number>;
   getRecentMessages(userId: string, daysBack: number, limit?: number): Promise<Message[]>;
+  getMessagesByDateRange(userId: string, startDate: Date, endDate: Date, limit?: number): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   createMessagesBatch(messages: InsertMessage[]): Promise<number>;
   getUnprocessedMessages(userId: string, limit?: number): Promise<Message[]>;
@@ -2365,6 +2366,17 @@ export class DatabaseStorage implements IStorage {
     cutoff.setDate(cutoff.getDate() - daysBack);
     return db.select().from(messages)
       .where(and(eq(messages.userId, userId), gte(messages.timestamp, cutoff)))
+      .orderBy(desc(messages.timestamp))
+      .limit(limit);
+  }
+
+  async getMessagesByDateRange(userId: string, startDate: Date, endDate: Date, limit = 50): Promise<Message[]> {
+    return db.select().from(messages)
+      .where(and(
+        eq(messages.userId, userId),
+        gte(messages.timestamp, startDate),
+        lte(messages.timestamp, endDate)
+      ))
       .orderBy(desc(messages.timestamp))
       .limit(limit);
   }
