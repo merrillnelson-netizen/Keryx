@@ -2,11 +2,11 @@ import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, Clock, Filter } from "lucide-react";
+import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, Clock, Flame, TrendingUp, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -125,12 +125,6 @@ function CalendarBadge({ title, attendees }: { title?: string | null; attendees?
   );
 }
 
-interface CalendarGridProps {
-  entries: LogEntry[];
-  currentMonth: Date;
-  onDayClick: (date: Date, entries: LogEntry[]) => void;
-}
-
 function getLocalDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -138,19 +132,14 @@ function getLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) {
-  const entriesByDay = useMemo(() => {
-    const map = new Map<string, LogEntry[]>();
-    entries.forEach((entry) => {
-      const dateKey = getLocalDateKey(new Date(entry.timestamp!));
-      if (!map.has(dateKey)) {
-        map.set(dateKey, []);
-      }
-      map.get(dateKey)!.push(entry);
-    });
-    return map;
-  }, [entries]);
+interface CalendarGridProps {
+  entriesByDay: Map<string, LogEntry[]>;
+  currentMonth: Date;
+  onDayClick: (date: Date, entries: LogEntry[]) => void;
+  selectedDateKey: string | null;
+}
 
+function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey }: CalendarGridProps) {
   const daysInMonth = new Date(
     currentMonth.getFullYear(),
     currentMonth.getMonth() + 1,
@@ -172,6 +161,26 @@ function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) 
   }
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const maxEntriesInDay = useMemo(() => {
+    let max = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const count = entriesByDay.get(dateKey)?.length || 0;
+      if (count > max) max = count;
+    }
+    return max;
+  }, [entriesByDay, currentMonth, daysInMonth]);
+
+  const getIntensityClass = (count: number) => {
+    if (count === 0) return "";
+    if (maxEntriesInDay <= 1) return "bg-purple-500/40 border-purple-500/50";
+    const ratio = count / maxEntriesInDay;
+    if (ratio > 0.75) return "bg-purple-500/60 border-purple-500/70";
+    if (ratio > 0.5) return "bg-purple-500/40 border-purple-500/50";
+    if (ratio > 0.25) return "bg-purple-500/25 border-purple-500/35";
+    return "bg-purple-500/15 border-purple-500/25";
+  };
 
   return (
     <div className="glass-card rounded-2xl p-4 md:p-6">
@@ -195,44 +204,35 @@ function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) 
           const dayEntries = entriesByDay.get(dateKey) || [];
           const hasEntries = dayEntries.length > 0;
           const isToday = getLocalDateKey(new Date()) === dateKey;
+          const isSelected = selectedDateKey === dateKey;
 
           return (
             <button
               key={day}
               onClick={() => {
-                if (hasEntries) {
-                  const clickedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                  onDayClick(clickedDate, dayEntries);
-                }
+                const clickedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                onDayClick(clickedDate, dayEntries);
               }}
-              disabled={!hasEntries}
               className={cn(
-                "aspect-square rounded-lg flex flex-col items-center justify-center p-1 transition-all relative",
+                "aspect-square rounded-lg flex flex-col items-center justify-center p-1 transition-all relative border",
                 hasEntries 
-                  ? "bg-purple-500/20 hover:bg-purple-500/30 cursor-pointer border border-purple-500/30" 
-                  : "hover:bg-white/5",
-                isToday && "ring-2 ring-primary"
+                  ? cn(getIntensityClass(dayEntries.length), "hover:brightness-125 cursor-pointer")
+                  : "border-transparent hover:bg-white/5 cursor-pointer",
+                isToday && "ring-2 ring-primary",
+                isSelected && "ring-2 ring-white"
               )}
               data-testid={`calendar-day-${day}`}
             >
               <span className={cn(
                 "text-sm md:text-base font-medium",
-                hasEntries ? "text-purple-400" : "text-muted-foreground"
+                hasEntries ? "text-purple-300" : "text-muted-foreground"
               )}>
                 {day}
               </span>
               {hasEntries && (
-                <div className="flex gap-0.5 mt-0.5">
-                  {dayEntries.slice(0, 3).map((entry, i) => (
-                    <div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-purple-400"
-                    />
-                  ))}
-                  {dayEntries.length > 3 && (
-                    <span className="text-[8px] text-purple-400">+{dayEntries.length - 3}</span>
-                  )}
-                </div>
+                <span className="text-[10px] text-purple-300 font-medium">
+                  {dayEntries.length}
+                </span>
               )}
             </button>
           );
@@ -243,33 +243,139 @@ function CalendarGrid({ entries, currentMonth, onDayClick }: CalendarGridProps) 
 }
 
 export default function Timeline() {
-  const [filterMode, setFilterMode] = useState<"all" | "calendar">("all");
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<LogEntry[]>([]);
   const [detailViewMode, setDetailViewMode] = useState<"cards" | "table">("cards");
   
-  const { data: logEntries = [], isLoading } = useQuery<LogEntry[]>({
-    queryKey: ["/api/logs"],
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery<{
+    data: LogEntry[];
+    hasMore: boolean;
+    total?: number;
+    offset: number;
+  }>({
+    queryKey: ["/api/logs", "timeline-all"],
+    queryFn: async ({ pageParam }) => {
+      const offset = pageParam as number;
+      const response = await fetch(`/api/logs?limit=100&offset=${offset}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch");
+      const result = await response.json();
+      return { data: result.data, hasMore: result.hasMore, total: result.total, offset };
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.hasMore) return undefined;
+      return lastPage.offset + 100;
+    },
     staleTime: 1000 * 60 * 2,
   });
 
-  const filteredEntries = useMemo(() => {
-    if (filterMode === "calendar") {
-      return logEntries.filter((entry) => entry.calendarEventId);
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-    return logEntries;
-  }, [logEntries, filterMode]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const sortedEntries = useMemo(() => {
-    return [...filteredEntries].sort(
-      (a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
-    );
-  }, [filteredEntries]);
+  const allEntries = useMemo(() => {
+    if (!data?.pages) return [];
+    return data.pages.flatMap(page => page.data);
+  }, [data]);
+
+  const totalCount = data?.pages?.[0]?.total || allEntries.length;
+  const loadedAll = !hasNextPage;
+
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, LogEntry[]>();
+    allEntries.forEach((entry) => {
+      if (!entry.timestamp) return;
+      const dateKey = getLocalDateKey(new Date(entry.timestamp));
+      if (!map.has(dateKey)) {
+        map.set(dateKey, []);
+      }
+      map.get(dateKey)!.push(entry);
+    });
+    return map;
+  }, [allEntries]);
+
+  const monthStats = useMemo(() => {
+    const monthPrefix = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+    let memoryCount = 0;
+    let activeDays = 0;
+    const moodCounts: Record<string, number> = {};
+    const topicCounts: Record<string, number> = {};
+    
+    entriesByDay.forEach((entries, dateKey) => {
+      if (!dateKey.startsWith(monthPrefix)) return;
+      memoryCount += entries.length;
+      activeDays++;
+      entries.forEach(e => {
+        if (e.mood) moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
+        if (e.topicTag) topicCounts[e.topicTag] = (topicCounts[e.topicTag] || 0) + 1;
+      });
+    });
+    
+    const topMoods = Object.entries(moodCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3);
+      
+    const topTopics = Object.entries(topicCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3);
+    
+    const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+    
+    return { memoryCount, activeDays, daysInMonth, topMoods, topTopics };
+  }, [entriesByDay, currentMonth]);
+
+  const streakInfo = useMemo(() => {
+    const today = new Date();
+    const todayKey = getLocalDateKey(today);
+    
+    let currentStreak = 0;
+    let checkDate = new Date(today);
+    
+    if (!entriesByDay.has(todayKey)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    
+    while (true) {
+      const key = getLocalDateKey(checkDate);
+      if (entriesByDay.has(key)) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    
+    let longestStreak = 0;
+    let tempStreak = 0;
+    const sortedDates = Array.from(entriesByDay.keys()).sort();
+    
+    for (let i = 0; i < sortedDates.length; i++) {
+      if (i === 0) {
+        tempStreak = 1;
+      } else {
+        const prevDate = new Date(sortedDates[i - 1] + 'T12:00:00');
+        const currDate = new Date(sortedDates[i] + 'T12:00:00');
+        const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          tempStreak++;
+        } else {
+          tempStreak = 1;
+        }
+      }
+      if (tempStreak > longestStreak) longestStreak = tempStreak;
+    }
+    
+    return { currentStreak, longestStreak };
+  }, [entriesByDay]);
 
   const handleDayClick = (date: Date, entries: LogEntry[]) => {
     setSelectedDate(date);
-    setSelectedEntries(entries);
+    setSelectedEntries(entries.sort((a, b) => 
+      new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
+    ));
   };
 
   const goToPreviousMonth = () => {
@@ -290,6 +396,8 @@ export default function Timeline() {
     setSelectedEntries([]);
   };
 
+  const selectedDateKey = selectedDate ? getLocalDateKey(selectedDate) : null;
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -307,54 +415,86 @@ export default function Timeline() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <div className="glass-card p-6 rounded-2xl">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-violet-500 to-indigo-500 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Timeline</h2>
-                <p className="text-sm text-muted-foreground">
-                  {filterMode === "all" ? "All memories" : "Calendar-linked memories"} ({filteredEntries.length} total)
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-violet-500 to-indigo-500 flex items-center justify-center">
+              <Clock className="w-6 h-6 text-white" />
             </div>
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
-              <Button
-                variant={filterMode === "all" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setFilterMode("all")}
-                data-testid="filter-all"
-                className="text-xs"
-              >
-                <Filter className="w-3 h-3 mr-1" />
-                All
-              </Button>
-              <Button
-                variant={filterMode === "calendar" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setFilterMode("calendar")}
-                data-testid="filter-calendar"
-                className="text-xs"
-              >
-                <Calendar className="w-3 h-3 mr-1" />
-                Calendar
-              </Button>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">Timeline</h2>
+              <p className="text-sm text-muted-foreground">
+                {totalCount} {totalCount === 1 ? "memory" : "memories"} across {entriesByDay.size} days
+              </p>
             </div>
           </div>
         </div>
 
-        {filteredEntries.length === 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="glass-card rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-foreground">{monthStats.memoryCount}</div>
+            <div className="text-xs text-muted-foreground mt-1">Memories this month</div>
+          </div>
+          <div className="glass-card rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-foreground">
+              {monthStats.activeDays}<span className="text-sm text-muted-foreground font-normal">/{monthStats.daysInMonth}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Active days</div>
+          </div>
+          <div className="glass-card rounded-xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1">
+              <Flame className="w-5 h-5 text-orange-400" />
+              <span className="text-2xl font-bold text-foreground">{streakInfo.currentStreak}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Current streak</div>
+          </div>
+          <div className="glass-card rounded-xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1">
+              <TrendingUp className="w-5 h-5 text-green-400" />
+              <span className="text-2xl font-bold text-foreground">{streakInfo.longestStreak}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Best streak</div>
+          </div>
+        </div>
+
+        {monthStats.topMoods.length > 0 && (
+          <div className="glass-card rounded-xl p-4">
+            <div className="flex flex-wrap gap-4 justify-between">
+              <div className="flex-1 min-w-[140px]">
+                <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Brain className="w-3 h-3" />
+                  Top moods this month
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {monthStats.topMoods.map(([mood, count]) => {
+                    const config = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
+                    return (
+                      <Badge key={mood} variant="outline" className={cn("text-xs", config.bgColor)}>
+                        {config.emoji} {config.label} ({count})
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+              {monthStats.topTopics.length > 0 && (
+                <div className="flex-1 min-w-[140px]">
+                  <div className="text-xs font-medium text-muted-foreground mb-2">Top topics this month</div>
+                  <div className="flex flex-wrap gap-2">
+                    {monthStats.topTopics.map(([topic, count]) => (
+                      <Badge key={topic} variant="secondary" className="text-xs bg-primary/20 text-primary">
+                        {topic} ({count})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {allEntries.length === 0 ? (
           <div className="glass-card p-12 rounded-2xl text-center">
             <Clock className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-foreground mb-2">
-              {filterMode === "all" ? "No memories yet" : "No calendar-linked memories"}
-            </h3>
-            <p className="text-muted-foreground">
-              {filterMode === "all" 
-                ? "Start recording memories to see them here" 
-                : "When you record memories during calendar events, they'll appear here"}
-            </p>
+            <h3 className="text-lg font-medium text-foreground mb-2">No memories yet</h3>
+            <p className="text-muted-foreground">Start recording memories to see your timeline</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -396,16 +536,24 @@ export default function Timeline() {
             </div>
 
             <CalendarGrid
-              entries={filteredEntries}
+              entriesByDay={entriesByDay}
               currentMonth={currentMonth}
               onDayClick={handleDayClick}
+              selectedDateKey={selectedDateKey}
             />
 
-            {selectedDate && selectedEntries.length > 0 && (
+            {!loadedAll && (
+              <div className="text-center text-sm text-muted-foreground flex items-center justify-center gap-2 py-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading memories... ({allEntries.length} of {totalCount})
+              </div>
+            )}
+
+            {selectedDate && (
               <Card className="glass-card border-white/20">
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                       <Calendar className="w-5 h-5 text-purple-500" />
                       {selectedDate.toLocaleDateString("en-US", {
                         weekday: "long",
@@ -442,7 +590,9 @@ export default function Timeline() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {detailViewMode === "cards" ? (
+                  {selectedEntries.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No memories recorded on this day</p>
+                  ) : detailViewMode === "cards" ? (
                     <div className="space-y-3">
                       {selectedEntries.map((entry) => {
                         const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;

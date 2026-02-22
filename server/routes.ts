@@ -1993,10 +1993,10 @@ Respond with JSON only.`
         if (!Array.isArray(g.ids) || g.ids.length < 2) return false;
         return g.ids.every((id: string) => typeof id === 'string' && validPeopleIds.has(id));
       }).map((g) => ({
-        ids: g.ids,
+        ids: g.ids!,
         reason: typeof g.reason === 'string' ? g.reason.slice(0, 200) : 'Possible duplicate',
-        suggestedTargetId: typeof g.suggestedTargetId === 'string' && validPeopleIds.has(g.suggestedTargetId) ? g.suggestedTargetId : g.ids[0],
-        confidence: ['high', 'medium', 'low'].includes(g.confidence) ? g.confidence : 'medium',
+        suggestedTargetId: typeof g.suggestedTargetId === 'string' && validPeopleIds.has(g.suggestedTargetId) ? g.suggestedTargetId : g.ids![0],
+        confidence: ['high', 'medium', 'low'].includes(g.confidence ?? '') ? g.confidence! : 'medium',
       })) : [];
 
       res.json({
@@ -4961,8 +4961,8 @@ Return ONLY the JSON array, no other text.`;
           targetDate: g.targetDate,
           aiLastAnalyzed: g.aiLastAnalyzed,
           milestones: ((Array.isArray(g.milestones) ? g.milestones : []) as MilestoneJSON[]).map(m => ({
-            title: m.title,
-            isCompleted: m.isCompleted,
+            title: m.title || '',
+            isCompleted: m.isCompleted ?? false,
             completedAt: m.completedAt,
           })),
         })),
