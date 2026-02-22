@@ -1009,6 +1009,70 @@ export default function SettingsPage() {
           <Card className="glass-card border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-500" />
+                Timezone
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Your timezone is auto-detected from your browser. Override it here if you're traveling or prefer a different timezone.
+              </p>
+              <Select
+                value={settings.userTimezone || "auto"}
+                onValueChange={(value) => {
+                  if (value === "auto") {
+                    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    const newSettings = { ...settings, userTimezone: browserTz };
+                    setSettings(newSettings);
+                    updateSettingsMutation.mutate(newSettings);
+                    sessionStorage.setItem('keryx_tz_synced', browserTz);
+                    sessionStorage.removeItem('keryx_tz_manual');
+                  } else {
+                    const newSettings = { ...settings, userTimezone: value };
+                    setSettings(newSettings);
+                    updateSettingsMutation.mutate(newSettings);
+                    sessionStorage.setItem('keryx_tz_synced', value);
+                    sessionStorage.setItem('keryx_tz_manual', 'true');
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    Auto-detect ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+                  </SelectItem>
+                  <SelectItem value="Pacific/Honolulu">Hawaii (HST)</SelectItem>
+                  <SelectItem value="America/Anchorage">Alaska (AKST/AKDT)</SelectItem>
+                  <SelectItem value="America/Los_Angeles">Pacific (PST/PDT)</SelectItem>
+                  <SelectItem value="America/Denver">Mountain (MST/MDT)</SelectItem>
+                  <SelectItem value="America/Chicago">Central (CST/CDT)</SelectItem>
+                  <SelectItem value="America/New_York">Eastern (EST/EDT)</SelectItem>
+                  <SelectItem value="America/Phoenix">Arizona (MST, no DST)</SelectItem>
+                  <SelectItem value="America/Puerto_Rico">Atlantic (AST)</SelectItem>
+                  <SelectItem value="Europe/London">London (GMT/BST)</SelectItem>
+                  <SelectItem value="Europe/Paris">Central Europe (CET/CEST)</SelectItem>
+                  <SelectItem value="Europe/Helsinki">Eastern Europe (EET/EEST)</SelectItem>
+                  <SelectItem value="Asia/Dubai">Dubai (GST)</SelectItem>
+                  <SelectItem value="Asia/Kolkata">India (IST)</SelectItem>
+                  <SelectItem value="Asia/Shanghai">China (CST)</SelectItem>
+                  <SelectItem value="Asia/Tokyo">Japan (JST)</SelectItem>
+                  <SelectItem value="Australia/Sydney">Sydney (AEST/AEDT)</SelectItem>
+                  <SelectItem value="Pacific/Auckland">New Zealand (NZST/NZDT)</SelectItem>
+                </SelectContent>
+              </Select>
+              {settings.userTimezone && (
+                <p className="text-xs text-muted-foreground">
+                  Currently set to: <span className="font-medium text-foreground">{settings.userTimezone}</span>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-green-500" />
                 Active Projects
               </CardTitle>

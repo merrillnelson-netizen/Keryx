@@ -70,6 +70,9 @@ function useTimezoneSync() {
   useEffect(() => {
     if (!user) return;
     
+    const manualOverride = sessionStorage.getItem('keryx_tz_manual');
+    if (manualOverride === 'true') return;
+    
     const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (!browserTimezone) return;
     
