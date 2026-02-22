@@ -1,26 +1,24 @@
 import AppLayout from "@/components/app-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { LogEntry } from "@shared/schema";
-import { Calendar, LayoutGrid, Table as TableIcon, Users, ChevronLeft, ChevronRight, Clock, Flame, TrendingUp, Brain, Loader2 } from "lucide-react";
+import { Calendar, Users, ChevronLeft, ChevronRight, Clock, Flame, TrendingUp, Brain, Loader2, X, MessageCircle, CalendarDays, BookOpen, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string; bgColor: string }> = {
   happy: { emoji: "😊", color: "bg-green-500", bgColor: "bg-green-500/20", label: "Happy" },
@@ -40,91 +38,6 @@ const MOOD_CONFIG: Record<string, { emoji: string; color: string; label: string;
   motivated: { emoji: "💪", color: "bg-lime-500", bgColor: "bg-lime-500/20", label: "Motivated" },
 };
 
-function MoodBadge({ mood, score }: { mood?: string | null; score?: number | null }) {
-  if (!mood) return null;
-  const config = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
-  
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="cursor-default text-lg" title={config.label}>
-            {config.emoji}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{config.label}</p>
-          {score !== null && score !== undefined && (
-            <p className="text-xs text-muted-foreground">Score: {score}</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function PeopleBadge({ people }: { people?: string[] | null }) {
-  if (!people || people.length === 0) return null;
-  
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge 
-            variant="outline" 
-            className="cursor-default text-xs bg-sky-500/20 text-sky-400 border-sky-500/30"
-          >
-            <Users className="w-3 h-3 mr-1" />
-            {people.length}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="font-medium">People mentioned:</p>
-          <ul className="text-sm">
-            {people.map((name, i) => (
-              <li key={i}>{name}</li>
-            ))}
-          </ul>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function CalendarBadge({ title, attendees }: { title?: string | null; attendees?: string[] | null }) {
-  if (!title) return null;
-  
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge 
-            variant="outline" 
-            className="cursor-default text-xs bg-purple-500/20 text-purple-400 border-purple-500/30"
-          >
-            <Calendar className="w-3 h-3 mr-1" />
-            {title.length > 20 ? title.substring(0, 20) + "..." : title}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="font-medium">{title}</p>
-          {attendees && attendees.length > 0 && (
-            <>
-              <p className="text-xs text-muted-foreground mt-1">Attendees:</p>
-              <ul className="text-xs">
-                {attendees.slice(0, 5).map((email, i) => (
-                  <li key={i}>{email}</li>
-                ))}
-                {attendees.length > 5 && <li>+{attendees.length - 5} more</li>}
-              </ul>
-            </>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
 function getLocalDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -132,14 +45,279 @@ function getLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+interface DayMessage {
+  id: string;
+  body: string | null;
+  senderName: string | null;
+  direction: string;
+  timestamp: string;
+  conversationId: string;
+  mood: string | null;
+}
+
+interface DayDetailModalProps {
+  open: boolean;
+  onClose: () => void;
+  date: Date;
+  entries: LogEntry[];
+  dateKey: string;
+}
+
+function DayDetailModal({ open, onClose, date, entries, dateKey }: DayDetailModalProps) {
+  const [activeTab, setActiveTab] = useState<"memories" | "messages">("memories");
+
+  useEffect(() => {
+    if (open) setActiveTab("memories");
+  }, [dateKey, open]);
+
+  const { data: messagesData, isLoading: messagesLoading } = useQuery<{ status: string; data: DayMessage[] }>({
+    queryKey: ["/api/messages/by-date", dateKey],
+    queryFn: async () => {
+      const response = await fetch(`/api/messages/by-date?date=${dateKey}`, { credentials: "include" });
+      if (!response.ok) return { status: 'success', data: [] };
+      return response.json();
+    },
+    enabled: open && activeTab === "messages",
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const dayMessages = messagesData?.data || [];
+
+  const calendarEvents = useMemo(() => {
+    const events: { title: string; attendees?: string[] }[] = [];
+    const seen = new Set<string>();
+    entries.forEach(entry => {
+      if (entry.calendarEventTitle && !seen.has(entry.calendarEventTitle)) {
+        seen.add(entry.calendarEventTitle);
+        events.push({
+          title: entry.calendarEventTitle,
+          attendees: entry.calendarEventAttendees || undefined,
+        });
+      }
+    });
+    return events;
+  }, [entries]);
+
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => 
+      new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime()
+    );
+  }, [entries]);
+
+  const formattedDate = date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-4 pb-3 border-b flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base pr-6">
+            <CalendarDays className="w-5 h-5 text-purple-400 flex-shrink-0" />
+            <span className="truncate">{formattedDate}</span>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            View memories and messages for {formattedDate}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex border-b flex-shrink-0">
+          <button
+            onClick={() => setActiveTab("memories")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+              activeTab === "memories"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <BookOpen className="w-4 h-4" />
+            Memories
+            {entries.length > 0 && (
+              <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{entries.length}</Badge>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab("messages")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+              activeTab === "messages"
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <MessageCircle className="w-4 h-4" />
+            Messages
+            {dayMessages.length > 0 && (
+              <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{dayMessages.length}</Badge>
+            )}
+          </button>
+        </div>
+
+        {calendarEvents.length > 0 && (
+          <div className="px-4 pt-3 pb-1 flex-shrink-0">
+            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              Calendar Events
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {calendarEvents.map((event, i) => (
+                <TooltipProvider key={i}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 cursor-default">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {event.title.length > 30 ? event.title.substring(0, 30) + "..." : event.title}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="font-medium">{event.title}</p>
+                      {event.attendees && event.attendees.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {event.attendees.slice(0, 3).join(", ")}
+                          {event.attendees.length > 3 && ` +${event.attendees.length - 3}`}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === "memories" && (
+            <>
+              {sortedEntries.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p className="font-medium">No memories on this day</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedEntries.map((entry) => {
+                    const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
+                    return (
+                      <div
+                        key={entry.id}
+                        className={cn(
+                          "p-3 rounded-xl border border-white/10 transition-colors hover:border-white/20",
+                          mood.bgColor
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-lg flex-shrink-0 mt-0.5">{mood.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-foreground leading-relaxed">{entry.memoryText}</p>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(entry.timestamp!).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] h-5 bg-primary/20 text-primary border-primary/30"
+                              >
+                                {entry.topicTag}
+                              </Badge>
+                              {entry.detectedPeople && entry.detectedPeople.length > 0 && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] h-5 bg-sky-500/10 text-sky-400 border-sky-500/30"
+                                >
+                                  <Users className="w-3 h-3 mr-0.5" />
+                                  {entry.detectedPeople.join(", ")}
+                                </Badge>
+                              )}
+                              {entry.importance && entry.importance >= 8 && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] h-5 bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                >
+                                  Important
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === "messages" && (
+            <>
+              {messagesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : dayMessages.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p className="font-medium">No messages on this day</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {dayMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={cn(
+                        "flex",
+                        msg.direction === "sent" ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-xl px-3 py-2",
+                          msg.direction === "sent"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        )}
+                      >
+                        {msg.direction !== "sent" && msg.senderName && (
+                          <p className={cn(
+                            "text-[10px] font-medium mb-0.5",
+                            msg.direction === "sent" ? "text-primary-foreground/70" : "text-muted-foreground"
+                          )}>
+                            {msg.senderName}
+                          </p>
+                        )}
+                        <p className="text-sm">{msg.body || "(no content)"}</p>
+                        <p className={cn(
+                          "text-[10px] mt-1",
+                          msg.direction === "sent" ? "text-primary-foreground/60" : "text-muted-foreground"
+                        )}>
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface CalendarGridProps {
   entriesByDay: Map<string, LogEntry[]>;
   currentMonth: Date;
-  onDayClick: (date: Date, entries: LogEntry[]) => void;
-  selectedDateKey: string | null;
+  onDayClick: (date: Date, entries: LogEntry[], dateKey: string) => void;
 }
 
-function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey }: CalendarGridProps) {
+function CalendarGrid({ entriesByDay, currentMonth, onDayClick }: CalendarGridProps) {
   const daysInMonth = new Date(
     currentMonth.getFullYear(),
     currentMonth.getMonth() + 1,
@@ -152,7 +330,7 @@ function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey 
     1
   ).getDay();
 
-  const days = [];
+  const days: (number | null)[] = [];
   for (let i = 0; i < firstDayOfMonth; i++) {
     days.push(null);
   }
@@ -164,13 +342,12 @@ function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey 
 
   const maxEntriesInDay = useMemo(() => {
     let max = 0;
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const count = entriesByDay.get(dateKey)?.length || 0;
-      if (count > max) max = count;
-    }
+    const monthPrefix = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+    entriesByDay.forEach((entries, key) => {
+      if (key.startsWith(monthPrefix) && entries.length > max) max = entries.length;
+    });
     return max;
-  }, [entriesByDay, currentMonth, daysInMonth]);
+  }, [entriesByDay, currentMonth]);
 
   const getIntensityClass = (count: number) => {
     if (count === 0) return "";
@@ -186,10 +363,7 @@ function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey 
     <div className="glass-card rounded-2xl p-4 md:p-6">
       <div className="grid grid-cols-7 gap-1 md:gap-2 mb-2">
         {weekDays.map((day) => (
-          <div
-            key={day}
-            className="text-center text-xs md:text-sm font-medium text-muted-foreground py-2"
-          >
+          <div key={day} className="text-center text-xs md:text-sm font-medium text-muted-foreground py-2">
             {day}
           </div>
         ))}
@@ -204,24 +378,21 @@ function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey 
           const dayEntries = entriesByDay.get(dateKey) || [];
           const hasEntries = dayEntries.length > 0;
           const isToday = getLocalDateKey(new Date()) === dateKey;
-          const isSelected = selectedDateKey === dateKey;
 
           return (
             <button
               key={day}
               onClick={() => {
                 const clickedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                onDayClick(clickedDate, dayEntries);
+                onDayClick(clickedDate, dayEntries, dateKey);
               }}
               className={cn(
                 "aspect-square rounded-lg flex flex-col items-center justify-center p-1 transition-all relative border",
                 hasEntries 
                   ? cn(getIntensityClass(dayEntries.length), "hover:brightness-125 cursor-pointer")
                   : "border-transparent hover:bg-white/5 cursor-pointer",
-                isToday && "ring-2 ring-primary",
-                isSelected && "ring-2 ring-white"
+                isToday && "ring-2 ring-primary"
               )}
-              data-testid={`calendar-day-${day}`}
             >
               <span className={cn(
                 "text-sm md:text-base font-medium",
@@ -244,9 +415,10 @@ function CalendarGrid({ entriesByDay, currentMonth, onDayClick, selectedDateKey 
 
 export default function Timeline() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedEntries, setSelectedEntries] = useState<LogEntry[]>([]);
-  const [detailViewMode, setDetailViewMode] = useState<"cards" | "table">("cards");
+  const [selectedDateKey, setSelectedDateKey] = useState("");
   
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery<{
     data: LogEntry[];
@@ -371,32 +543,24 @@ export default function Timeline() {
     return { currentStreak, longestStreak };
   }, [entriesByDay]);
 
-  const handleDayClick = (date: Date, entries: LogEntry[]) => {
+  const handleDayClick = (date: Date, entries: LogEntry[], dateKey: string) => {
     setSelectedDate(date);
-    setSelectedEntries(entries.sort((a, b) => 
-      new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime()
-    ));
+    setSelectedEntries(entries);
+    setSelectedDateKey(dateKey);
+    setModalOpen(true);
   };
 
   const goToPreviousMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-    setSelectedDate(null);
-    setSelectedEntries([]);
   };
 
   const goToNextMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-    setSelectedDate(null);
-    setSelectedEntries([]);
   };
 
   const goToToday = () => {
     setCurrentMonth(new Date());
-    setSelectedDate(null);
-    setSelectedEntries([]);
   };
-
-  const selectedDateKey = selectedDate ? getLocalDateKey(selectedDate) : null;
 
   if (isLoading) {
     return (
@@ -499,38 +663,18 @@ export default function Timeline() {
         ) : (
           <div className="space-y-4">
             <div className="glass-card rounded-2xl p-4 flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToPreviousMonth}
-                data-testid="button-previous-month"
-                aria-label="Previous month"
-              >
+              <Button variant="ghost" size="icon" onClick={goToPreviousMonth} aria-label="Previous month">
                 <ChevronLeft className="w-5 h-5" />
               </Button>
               <div className="flex items-center gap-4">
                 <h3 className="text-lg font-semibold">
-                  {currentMonth.toLocaleDateString("en-US", {
-                    month: "long",
-                    year: "numeric",
-                  })}
+                  {currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                 </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToToday}
-                  data-testid="button-today"
-                >
+                <Button variant="outline" size="sm" onClick={goToToday}>
                   Today
                 </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToNextMonth}
-                data-testid="button-next-month"
-                aria-label="Next month"
-              >
+              <Button variant="ghost" size="icon" onClick={goToNextMonth} aria-label="Next month">
                 <ChevronRight className="w-5 h-5" />
               </Button>
             </div>
@@ -539,7 +683,6 @@ export default function Timeline() {
               entriesByDay={entriesByDay}
               currentMonth={currentMonth}
               onDayClick={handleDayClick}
-              selectedDateKey={selectedDateKey}
             />
 
             {!loadedAll && (
@@ -549,144 +692,19 @@ export default function Timeline() {
               </div>
             )}
 
-            {selectedDate && (
-              <Card className="glass-card border-white/20">
-                <CardHeader>
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-                      <Calendar className="w-5 h-5 text-purple-500" />
-                      {selectedDate.toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                      <Badge variant="outline" className="ml-2">
-                        {selectedEntries.length} {selectedEntries.length === 1 ? "memory" : "memories"}
-                      </Badge>
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={detailViewMode === "cards" ? "default" : "outline"}
-                        size="icon"
-                        onClick={() => setDetailViewMode("cards")}
-                        data-testid="button-detail-cards"
-                        title="Card view"
-                        aria-label="Switch to card view"
-                      >
-                        <LayoutGrid className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant={detailViewMode === "table" ? "default" : "outline"}
-                        size="icon"
-                        onClick={() => setDetailViewMode("table")}
-                        data-testid="button-detail-table"
-                        title="Table view"
-                        aria-label="Switch to table view"
-                      >
-                        <TableIcon className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {selectedEntries.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">No memories recorded on this day</p>
-                  ) : detailViewMode === "cards" ? (
-                    <div className="space-y-3">
-                      {selectedEntries.map((entry) => {
-                        const mood = MOOD_CONFIG[entry.mood || "neutral"] || MOOD_CONFIG.neutral;
-                        return (
-                          <div
-                            key={entry.id}
-                            className={cn(
-                              "p-4 rounded-xl border border-white/10",
-                              mood.bgColor
-                            )}
-                            data-testid={`selected-entry-${entry.id}`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <span className="text-xl">{mood.emoji}</span>
-                              <div className="flex-1">
-                                <p className="text-foreground">{entry.memoryText}</p>
-                                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                  <Badge variant="outline" className="text-xs border-white/20">
-                                    {new Date(entry.timestamp!).toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </Badge>
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs bg-primary/20 text-primary border-primary/30"
-                                  >
-                                    {entry.topicTag}
-                                  </Badge>
-                                  <CalendarBadge
-                                    title={entry.calendarEventTitle}
-                                    attendees={entry.calendarEventAttendees}
-                                  />
-                                  <PeopleBadge people={entry.detectedPeople} />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg overflow-hidden border border-white/10">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-white/10 hover:bg-white/5">
-                            <TableHead className="text-muted-foreground">Time</TableHead>
-                            <TableHead className="text-muted-foreground w-[40%]">Memory</TableHead>
-                            <TableHead className="text-muted-foreground">Topic</TableHead>
-                            <TableHead className="text-muted-foreground text-center">Mood</TableHead>
-                            <TableHead className="text-muted-foreground text-center">People</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {selectedEntries.map((entry) => (
-                            <TableRow
-                              key={entry.id}
-                              className="border-white/10 hover:bg-white/5"
-                              data-testid={`selected-row-${entry.id}`}
-                            >
-                              <TableCell className="text-muted-foreground">
-                                {new Date(entry.timestamp!).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </TableCell>
-                              <TableCell>
-                                <p className="line-clamp-2">{entry.memoryText}</p>
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-primary/20 text-primary border-primary/30"
-                                >
-                                  {entry.topicTag}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <MoodBadge mood={entry.mood} score={entry.moodScore} />
-                              </TableCell>
-                              <TableCell className="text-center">
-                                <PeopleBadge people={entry.detectedPeople} />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <p className="text-center text-xs text-muted-foreground">
+              Tap any date to see your memories and messages for that day
+            </p>
           </div>
         )}
+
+        <DayDetailModal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          date={selectedDate}
+          entries={selectedEntries}
+          dateKey={selectedDateKey}
+        />
       </div>
     </AppLayout>
   );

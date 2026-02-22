@@ -5903,9 +5903,24 @@ Respond with JSON only.`
       if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return sendErrorResponse(res, 400, "Date parameter required in YYYY-MM-DD format");
       }
-      const startDate = new Date(dateStr + 'T00:00:00.000Z');
-      const endDate = new Date(dateStr + 'T23:59:59.999Z');
-      const msgs = await storage.getMessagesByDateRange(user.id, startDate, endDate, 50);
+      const parsed = new Date(dateStr + 'T12:00:00');
+      if (isNaN(parsed.getTime())) {
+        return sendErrorResponse(res, 400, "Invalid date value");
+      }
+
+      const settings = await storage.getSettings(user.id);
+      const userTz = settings?.userTimezone || 'America/Denver';
+
+      const localStart = new Date(dateStr + 'T00:00:00');
+      const localEnd = new Date(dateStr + 'T23:59:59.999');
+      const offsetMs = localStart.getTime() - new Date(
+        localStart.toLocaleString('en-US', { timeZone: userTz })
+      ).getTime();
+      const startDate = new Date(localStart.getTime() + offsetMs);
+      const endDate = new Date(localEnd.getTime() + offsetMs);
+
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+      const msgs = await storage.getMessagesByDateRange(user.id, startDate, endDate, limit);
       const sanitized = msgs.map(({ embeddingVector: _, ...rest }) => rest);
       res.json({ status: 'success', data: sanitized });
     } catch (error) {
