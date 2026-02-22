@@ -2232,15 +2232,20 @@ Respond with JSON only.`
       const user = req.user as User;
       const memories = await storage.getOnThisDayMemories(user.id);
       
-      const today = new Date();
+      // Use user's timezone for correct "today" date
+      const userSettings = await storage.getSettings(user.id);
+      const userTimezone = userSettings?.userTimezone || 'America/Denver';
+      const now = new Date();
+      const localMonth = parseInt(now.toLocaleString('en-US', { timeZone: userTimezone, month: 'numeric' }));
+      const localDay = parseInt(now.toLocaleString('en-US', { timeZone: userTimezone, day: 'numeric' }));
       
       res.json({
         status: 'success',
         data: memories,
         count: memories.length,
         date: {
-          month: today.getMonth() + 1,
-          day: today.getDate(),
+          month: localMonth,
+          day: localDay,
         },
         message: memories.length > 0 
           ? `Found ${memories.length} memories from this day in previous years`
@@ -2302,6 +2307,10 @@ Respond with JSON only.`
           status: g.status,
         }));
 
+      // Get user timezone from settings
+      const userSettings = await storage.getSettings(user.id);
+      const userTimezone = userSettings?.userTimezone || 'America/Denver';
+
       // Generate insights - filter and type-guard the light memories
       const insights = await generateThematicInsights(
         filteredMemories
@@ -2314,7 +2323,8 @@ Respond with JSON only.`
             topicTag: m.topicTag!,
           })),
         question,
-        activeGoals.length > 0 ? activeGoals : undefined
+        activeGoals.length > 0 ? activeGoals : undefined,
+        userTimezone
       );
       
       res.json({
@@ -2347,10 +2357,14 @@ Respond with JSON only.`
       const user = req.user as User;
       const localHour = parseInt(req.query.localHour as string) || new Date().getHours();
       const forceRefresh = req.query.refresh === 'true';
+      const queryTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : undefined;
       
-      // Cache key based on date (daily briefing)
-      const today = new Date().toISOString().split('T')[0];
-      const cacheKey = `${today}`;
+      // Cache key based on user's LOCAL date (not UTC) to avoid wrong day boundary
+      const { formatDateForTimezone } = await import('./ai-service');
+      const settingsForCache = await storage.getSettings(user.id);
+      const briefingTimezone = queryTimezone || settingsForCache?.userTimezone || 'America/Denver';
+      const today = formatDateForTimezone(new Date(), briefingTimezone);
+      const cacheKey = `${today}-${briefingTimezone}`;
       
       // Check cache first (unless force refresh)
       if (!forceRefresh) {
@@ -2544,6 +2558,8 @@ Respond with JSON only.`
         });
       }
 
+      const userTimezone = queryTimezone || userSettings?.userTimezone || 'America/Denver';
+      
       const briefing = await generateMorningBriefing(
         briefingMemories,
         user.username,
@@ -2554,7 +2570,8 @@ Respond with JSON only.`
         knownPeople.length > 0 ? knownPeople : undefined,
         locationContext,
         activeGoals.length > 0 ? activeGoals : undefined,
-        activeReminders.length > 0 ? activeReminders : undefined
+        activeReminders.length > 0 ? activeReminders : undefined,
+        userTimezone
       );
 
       // Cache the result (30 minute TTL)
@@ -3172,7 +3189,11 @@ Respond with JSON only.`
         }
       }
       
-      const alerts = await detectPatternAlerts(alertMemories);
+      // Get user timezone from settings
+      const userSettings = await storage.getSettings(user.id);
+      const userTimezone = userSettings?.userTimezone || 'America/Denver';
+      
+      const alerts = await detectPatternAlerts(alertMemories, userTimezone);
 
       // Cache the result (30 minute TTL)
       const memoriesHash = recentMemories.filter(m => m.id).map(m => m.id).join(',');

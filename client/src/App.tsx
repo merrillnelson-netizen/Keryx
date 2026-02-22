@@ -64,8 +64,29 @@ function HomeRoute() {
   return user ? <Dashboard /> : <LandingPage />;
 }
 
+function useTimezoneSync() {
+  const { user } = useAuth();
+  
+  useEffect(() => {
+    if (!user) return;
+    
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!browserTimezone) return;
+    
+    const lastSynced = sessionStorage.getItem('keryx_tz_synced');
+    if (lastSynced === browserTimezone) return;
+    
+    apiRequest("PUT", "/api/settings", { userTimezone: browserTimezone })
+      .then(() => {
+        sessionStorage.setItem('keryx_tz_synced', browserTimezone);
+      })
+      .catch(() => {});
+  }, [user]);
+}
+
 function Router() {
   useAnalytics();
+  useTimezoneSync();
   
   return (
     <Switch>

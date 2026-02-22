@@ -235,6 +235,7 @@ export const settings = pgTable("settings", {
   plaidEnabled: boolean("plaid_enabled").default(false), // Master toggle for financial features
   plaidIncludeInBriefings: boolean("plaid_include_in_briefings").default(true), // Include spending insights in morning briefings
   plaidTransactionDaysToShow: integer("plaid_transaction_days_to_show").default(7), // Days of transactions to display
+  userTimezone: text("user_timezone").default("America/Denver"), // IANA timezone (e.g., 'America/Denver')
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

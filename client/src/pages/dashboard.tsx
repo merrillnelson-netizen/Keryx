@@ -98,11 +98,13 @@ interface AlertsResponse {
 
 export default function Dashboard() {
   // Custom queryFn to preserve full response with metadata
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   const { data: briefingData, isLoading: briefingLoading, isFetching: briefingFetching, refetch: refetchBriefing } = useQuery<BriefingResponse>({
-    queryKey: ["/api/briefing"],
+    queryKey: ["/api/briefing", userTimezone],
     queryFn: async () => {
       const localHour = new Date().getHours();
-      const response = await fetch(`/api/briefing?localHour=${localHour}`, { credentials: "include" });
+      const response = await fetch(`/api/briefing?localHour=${localHour}&timezone=${encodeURIComponent(userTimezone)}`, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
         throw new Error(`${response.status}: ${text}`);

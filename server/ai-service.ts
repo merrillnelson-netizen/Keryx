@@ -1,5 +1,33 @@
 import OpenAI from "openai";
 
+/**
+ * Convert a UTC Date to a formatted date string in the user's timezone
+ * Prevents the common bug where a memory at 11 PM Mountain shows as the next day in UTC
+ */
+export function formatDateForTimezone(date: Date, timezone: string): string {
+  return date.toLocaleDateString('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'); // MM/DD/YYYY -> YYYY-MM-DD
+}
+
+/**
+ * Convert a UTC Date to a full datetime string in the user's timezone
+ */
+export function formatDateTimeForTimezone(date: Date, timezone: string): string {
+  return date.toLocaleString('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 // Using gpt-4o-mini for fast, cost-effective AI processing
 // Supports both Replit AI Integration and direct OpenAI API key
 const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -477,16 +505,19 @@ export interface ThematicInsight {
 export async function generateThematicInsights(
   memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; importance?: number }>,
   question?: string,
-  activeGoals?: GoalContext[]
+  activeGoals?: GoalContext[],
+  userTimezone: string = 'America/Denver'
 ): Promise<ThematicInsight> {
   try {
     // Sort by importance (highest first) to prioritize critical memories
     const sortedMemories = [...memories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
     
     // Prepare memory summary for context with importance labels
+    // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
     const memorySummary = sortedMemories.map((m, i) => {
       const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
-      return `${importanceLabel}[${i + 1}] ${m.timestamp.toISOString().split('T')[0]} | Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
+      const localDate = formatDateForTimezone(m.timestamp, userTimezone);
+      return `${importanceLabel}[${i + 1}] ${localDate} | Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
     }).join('\n\n');
 
     // Format goals context if available
@@ -656,7 +687,8 @@ export async function generateMorningBriefing(
   knownPeople?: PersonContext[],
   locationContext?: string,
   activeGoals?: GoalContext[],
-  activeReminders?: ReminderContext[]
+  activeReminders?: ReminderContext[],
+  userTimezone: string = 'America/Denver'
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -665,9 +697,11 @@ export async function generateMorningBriefing(
     // Sort by importance (highest first) to prioritize critical memories in briefings
     const sortedMemories = [...recentMemories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
     
+    // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
     const memorySummary = sortedMemories.map((m, i) => {
       const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
-      return `${importanceLabel}[${m.timestamp.toISOString().split('T')[0]}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
+      const localDate = formatDateForTimezone(m.timestamp, userTimezone);
+      return `${importanceLabel}[${localDate}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
     }).join('\n\n');
 
     // Extract people and topics from memories for email matching
@@ -832,16 +866,19 @@ export interface PatternAlert {
  * @returns Promise<PatternAlert[]>
  */
 export async function detectPatternAlerts(
-  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>
+  memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>,
+  userTimezone: string = 'America/Denver'
 ): Promise<PatternAlert[]> {
   try {
     if (memories.length < 5) {
       return []; // Need sufficient data for pattern detection
     }
 
-    const memorySummary = memories.map((m) => 
-      `[${m.timestamp.toISOString().split('T')[0]}] ${m.mood || 'neutral'} (${m.moodScore || 0}) | ${m.topicTag}: "${m.memoryText}"`
-    ).join('\n');
+    // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
+    const memorySummary = memories.map((m) => {
+      const localDate = formatDateForTimezone(m.timestamp, userTimezone);
+      return `[${localDate}] ${m.mood || 'neutral'} (${m.moodScore || 0}) | ${m.topicTag}: "${m.memoryText}"`;
+    }).join('\n');
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -1150,9 +1187,11 @@ export async function generatePersonalNewsFeed(
     // Sort by importance (highest first) to prioritize critical memories in news feed
     const sortedMemories = [...recentMemories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
     
+    // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
     const memorySummary = sortedMemories.map((m, i) => {
       const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
-      return `${importanceLabel}[${m.timestamp.toISOString().split('T')[0]}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
+      const localDate = formatDateForTimezone(m.timestamp, userTimezone);
+      return `${importanceLabel}[${localDate}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
     }).join('\n\n');
 
     const nowInUserTz = new Date().toLocaleString('en-US', { timeZone: userTimezone });
@@ -1231,7 +1270,7 @@ export async function generatePersonalNewsFeed(
           role: "system",
           content: `You are a personal news editor creating a "Local News" feed about a user's life${userName ? ` (${userName})` : ''}. 
           
-The user's timezone is ${userTimezone}. All times shown in the data are already converted to their local timezone.
+The user's timezone is ${userTimezone}. All dates shown in memory data are in the user's local timezone (${userTimezone}). Calendar event times are also converted to local time.
 
 Think of this as a personalized newspaper about their ecosystem - their memories, calendars, emails, and finances are your "news sources."
 
