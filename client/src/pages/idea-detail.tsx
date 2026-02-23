@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
@@ -140,7 +140,7 @@ export default function IdeaDetailPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: idea, isLoading, refetch } = useQuery<Idea>({
+  const { data: idea, isLoading } = useQuery<Idea>({
     queryKey: ['/api/ideas', id],
     staleTime: 1000 * 60 * 2,
   });
@@ -181,16 +181,30 @@ export default function IdeaDetailPage() {
       if (!response.ok) throw new Error("Failed to update list");
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
-      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+    onMutate: async (newListItems: ListItem[]) => {
+      await queryClient.cancelQueries({ queryKey: ['/api/ideas', id] });
+      const previousIdea = queryClient.getQueryData<Idea>(['/api/ideas', id]);
+      if (previousIdea) {
+        queryClient.setQueryData<Idea>(['/api/ideas', id], {
+          ...previousIdea,
+          listItems: newListItems,
+        });
+      }
+      return { previousIdea };
     },
-    onError: () => {
+    onError: (_err, _vars, context) => {
+      if (context?.previousIdea) {
+        queryClient.setQueryData(['/api/ideas', id], context.previousIdea);
+      }
       toast({
         title: "Failed to update list",
         description: "Please try again",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
     },
   });
 
@@ -275,7 +289,8 @@ export default function IdeaDetailPage() {
     setEditingItemText("");
   };
 
-  const getFilteredAndSortedItems = (items: ListItem[]) => {
+  const filteredAndSortedItems = useMemo(() => {
+    const items = idea?.listItems || [];
     let filtered = items;
     if (listSearchQuery.trim()) {
       const q = listSearchQuery.toLowerCase();
@@ -305,7 +320,7 @@ export default function IdeaDetailPage() {
         sorted.sort((a, b) => a.order - b.order);
     }
     return sorted;
-  };
+  }, [idea?.listItems, listSearchQuery, listSortMode]);
 
   const handleContentChange = useCallback((value: string) => {
     setEditingContent(value);
@@ -718,7 +733,7 @@ export default function IdeaDetailPage() {
 
               {listSearchQuery && (
                 <p className="text-xs text-muted-foreground">
-                  {getFilteredAndSortedItems(listItems).length} of {listItems.length} items match
+                  {filteredAndSortedItems.length} of {listItems.length} items match
                 </p>
               )}
               
@@ -728,14 +743,14 @@ export default function IdeaDetailPage() {
                   <p>No items yet</p>
                   <p className="text-sm mt-1">Add your first item above</p>
                 </div>
-              ) : getFilteredAndSortedItems(listItems).length === 0 ? (
+              ) : filteredAndSortedItems.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No items match "{listSearchQuery}"</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {getFilteredAndSortedItems(listItems).map((item) => (
+                  {filteredAndSortedItems.map((item) => (
                     <div 
                       key={item.id}
                       className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
