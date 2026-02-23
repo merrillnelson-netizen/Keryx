@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
@@ -31,7 +31,15 @@ import {
   Save,
   X,
   Search,
-  Pencil
+  Pencil,
+  Bold,
+  Italic,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Minus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -125,6 +133,9 @@ export default function IdeaDetailPage() {
   const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const [pendingContentEdit, setPendingContentEdit] = useState<string | null>(null);
   const [pendingListEdit, setPendingListEdit] = useState<Array<{text: string; isChecked: boolean}> | null>(null);
+  const [contentSearchQuery, setContentSearchQuery] = useState("");
+  const [contentSearchVisible, setContentSearchVisible] = useState(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -183,6 +194,8 @@ export default function IdeaDetailPage() {
     },
   });
 
+  const isAutoSaveRef = useRef(false);
+
   const updateContentMutation = useMutation({
     mutationFn: async (content: string) => {
       const response = await apiRequest("PATCH", `/api/ideas/${id}`, { content });
@@ -193,12 +206,16 @@ export default function IdeaDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/ideas', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
       setHasUnsavedContent(false);
-      toast({
-        title: "Saved",
-        description: "Your content has been saved",
-      });
+      if (!isAutoSaveRef.current) {
+        toast({
+          title: "Saved",
+          description: "Your content has been saved",
+        });
+      }
+      isAutoSaveRef.current = false;
     },
     onError: () => {
+      isAutoSaveRef.current = false;
       toast({
         title: "Failed to save",
         description: "Please try again",
@@ -290,15 +307,70 @@ export default function IdeaDetailPage() {
     return sorted;
   };
 
-  const handleContentChange = (value: string) => {
+  const handleContentChange = useCallback((value: string) => {
     setEditingContent(value);
     setHasUnsavedContent(true);
-  };
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      isAutoSaveRef.current = true;
+      updateContentMutation.mutate(value);
+    }, 2000);
+  }, [updateContentMutation]);
+
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, []);
 
   const saveContent = () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     if (editingContent !== null) {
       updateContentMutation.mutate(editingContent);
     }
+  };
+
+  const insertMarkdown = (prefix: string, suffix: string = '') => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = editingContent || '';
+    const selected = text.substring(start, end);
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+
+    let newText: string;
+    let newCursorPos: number;
+
+    if (selected) {
+      newText = before + prefix + selected + suffix + after;
+      newCursorPos = start + prefix.length + selected.length + suffix.length;
+    } else {
+      newText = before + prefix + suffix + after;
+      newCursorPos = start + prefix.length;
+    }
+
+    handleContentChange(newText);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const getWordCount = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return { words: 0, chars: 0 };
+    return {
+      words: trimmed.split(/\s+/).length,
+      chars: trimmed.length,
+    };
+  };
+
+  const getSearchMatchCount = (text: string, query: string) => {
+    if (!query.trim()) return 0;
+    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return (text.match(regex) || []).length;
   };
 
   const chatMutation = useMutation({
@@ -544,21 +616,6 @@ export default function IdeaDetailPage() {
               </Select>
             )}
             
-            {(ideaType === 'note' || ideaType === 'document') && hasUnsavedContent && (
-              <Button 
-                onClick={saveContent}
-                disabled={updateContentMutation.isPending}
-                className="gap-2"
-              >
-                {updateContentMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                Save
-              </Button>
-            )}
-            
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
@@ -758,25 +815,140 @@ export default function IdeaDetailPage() {
                     Document
                   </>
                 )}
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setContentSearchVisible(!contentSearchVisible)}
+                    title="Search in content"
+                  >
+                    <Search className="w-4 h-4" />
+                  </Button>
+                  {hasUnsavedContent && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={saveContent}
+                      disabled={updateContentMutation.isPending}
+                      className="h-8 gap-1 text-xs"
+                    >
+                      {updateContentMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Save className="w-3 h-3" />
+                      )}
+                      Save
+                    </Button>
+                  )}
+                </div>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
+              {contentSearchVisible && (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    value={contentSearchQuery}
+                    onChange={(e) => setContentSearchQuery(e.target.value)}
+                    placeholder="Find in text..."
+                    className="pl-9 h-9 pr-20"
+                    autoFocus
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {contentSearchQuery && (
+                      <span className="text-xs text-muted-foreground">
+                        {getSearchMatchCount(editingContent || '', contentSearchQuery)} found
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => { setContentSearchQuery(""); setContentSearchVisible(false); }}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {ideaType === 'document' && (
+                <div className="flex flex-wrap gap-1 p-2 rounded-lg border bg-muted/30">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('**', '**')} title="Bold">
+                    <Bold className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('*', '*')} title="Italic">
+                    <Italic className="w-4 h-4" />
+                  </Button>
+                  <div className="w-px h-6 bg-border self-center mx-1" />
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('# ')} title="Heading 1">
+                    <Heading1 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('## ')} title="Heading 2">
+                    <Heading2 className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('### ')} title="Heading 3">
+                    <Heading3 className="w-4 h-4" />
+                  </Button>
+                  <div className="w-px h-6 bg-border self-center mx-1" />
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('- ')} title="Bullet list">
+                    <List className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('1. ')} title="Numbered list">
+                    <ListOrdered className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('\n---\n')} title="Horizontal rule">
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+
               <Textarea
                 ref={contentRef}
                 value={editingContent || ''}
                 onChange={(e) => handleContentChange(e.target.value)}
                 placeholder={ideaType === 'note' 
                   ? "Write your note here..."
-                  : "Write your document content here..."
+                  : "Write your document content here. Use the toolbar above for formatting..."
                 }
-                className="min-h-[400px] resize-y"
+                className={cn(
+                  "resize-y font-mono",
+                  ideaType === 'document' ? "min-h-[500px]" : "min-h-[300px]"
+                )}
               />
-              {hasUnsavedContent && (
-                <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                  Unsaved changes
-                </p>
-              )}
+
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const counts = getWordCount(editingContent || '');
+                    return (
+                      <>
+                        <span>{counts.words} {counts.words === 1 ? 'word' : 'words'}</span>
+                        <span>{counts.chars} {counts.chars === 1 ? 'character' : 'characters'}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-1">
+                  {updateContentMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : hasUnsavedContent ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      <span>Auto-saves in 2s</span>
+                    </>
+                  ) : editingContent !== null ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      <span>Saved</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
