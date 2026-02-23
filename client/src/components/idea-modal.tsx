@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +50,16 @@ import {
   FileEdit,
   Save,
   X,
+  Search,
+  Pencil,
+  Bold,
+  Italic,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Minus,
 } from "lucide-react";
 
 interface IdeaChatMessage {
@@ -119,13 +129,23 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newListItem, setNewListItem] = useState("");
+  const [listSearchQuery, setListSearchQuery] = useState("");
+  const [listSortMode, setListSortMode] = useState<'manual' | 'az' | 'za' | 'checked-last' | 'checked-first'>('manual');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemText, setEditingItemText] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
   const [editingContent, setEditingContent] = useState<string | null>(null);
   const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const [activeTab, setActiveTab] = useState<'main' | 'chat'>('main');
   const [pendingContentEdit, setPendingContentEdit] = useState<string | null>(null);
   const [pendingListEdit, setPendingListEdit] = useState<Array<{text: string; isChecked: boolean}> | null>(null);
+  const [contentSearchQuery, setContentSearchQuery] = useState("");
+  const [contentSearchVisible, setContentSearchVisible] = useState(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoSaveRef = useRef(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: idea, isLoading } = useQuery<Idea>({
     queryKey: ['/api/ideas', ideaId],
@@ -148,11 +168,18 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       setNewTaskTitle("");
       setIsAddingTask(false);
       setNewListItem("");
+      setListSearchQuery("");
+      setListSortMode('manual');
+      setEditingItemId(null);
+      setEditingItemText("");
       setEditingContent(null);
       setHasUnsavedContent(false);
       setActiveTab('main');
       setPendingContentEdit(null);
       setPendingListEdit(null);
+      setContentSearchQuery("");
+      setContentSearchVisible(false);
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     }
   }, [open]);
 
@@ -174,16 +201,30 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       if (!response.ok) throw new Error("Failed to update list");
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/ideas', ideaId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
+    onMutate: async (newListItems: ListItem[]) => {
+      await queryClient.cancelQueries({ queryKey: ['/api/ideas', ideaId] });
+      const previousIdea = queryClient.getQueryData<Idea>(['/api/ideas', ideaId]);
+      if (previousIdea) {
+        queryClient.setQueryData<Idea>(['/api/ideas', ideaId], {
+          ...previousIdea,
+          listItems: newListItems,
+        });
+      }
+      return { previousIdea };
     },
-    onError: () => {
+    onError: (_err, _vars, context) => {
+      if (context?.previousIdea) {
+        queryClient.setQueryData(['/api/ideas', ideaId], context.previousIdea);
+      }
       toast({
         title: "Failed to update list",
         description: "Please try again",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas', ideaId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
     },
   });
 
@@ -197,12 +238,16 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       queryClient.invalidateQueries({ queryKey: ['/api/ideas', ideaId] });
       queryClient.invalidateQueries({ queryKey: ['/api/ideas'] });
       setHasUnsavedContent(false);
-      toast({
-        title: "Saved",
-        description: "Your content has been saved",
-      });
+      if (!isAutoSaveRef.current) {
+        toast({
+          title: "Saved",
+          description: "Your content has been saved",
+        });
+      }
+      isAutoSaveRef.current = false;
     },
     onError: () => {
+      isAutoSaveRef.current = false;
       toast({
         title: "Failed to save",
         description: "Please try again",
@@ -367,15 +412,105 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
     updateListItemsMutation.mutate(updatedItems);
   };
 
-  const handleContentChange = (value: string) => {
-    setEditingContent(value);
-    setHasUnsavedContent(true);
+  const startEditingItem = (item: ListItem) => {
+    setEditingItemId(item.id);
+    setEditingItemText(item.text);
+    setTimeout(() => editInputRef.current?.focus(), 50);
   };
 
+  const saveEditingItem = () => {
+    if (!idea || !editingItemId || !editingItemText.trim()) {
+      setEditingItemId(null);
+      return;
+    }
+    const updatedItems = (idea.listItems || []).map(item =>
+      item.id === editingItemId ? { ...item, text: editingItemText.trim() } : item
+    );
+    updateListItemsMutation.mutate(updatedItems);
+    setEditingItemId(null);
+    setEditingItemText("");
+  };
+
+  const cancelEditingItem = () => {
+    setEditingItemId(null);
+    setEditingItemText("");
+  };
+
+  const filteredAndSortedItems = useMemo(() => {
+    const items = idea?.listItems || [];
+    let filtered = items;
+    if (listSearchQuery.trim()) {
+      const q = listSearchQuery.toLowerCase();
+      filtered = items.filter(item => item.text.toLowerCase().includes(q));
+    }
+    const sorted = [...filtered];
+    switch (listSortMode) {
+      case 'az':
+        sorted.sort((a, b) => a.text.localeCompare(b.text));
+        break;
+      case 'za':
+        sorted.sort((a, b) => b.text.localeCompare(a.text));
+        break;
+      case 'checked-last':
+        sorted.sort((a, b) => {
+          if (a.isChecked === b.isChecked) return a.order - b.order;
+          return a.isChecked ? 1 : -1;
+        });
+        break;
+      case 'checked-first':
+        sorted.sort((a, b) => {
+          if (a.isChecked === b.isChecked) return a.order - b.order;
+          return a.isChecked ? -1 : 1;
+        });
+        break;
+      default:
+        sorted.sort((a, b) => a.order - b.order);
+    }
+    return sorted;
+  }, [idea?.listItems, listSearchQuery, listSortMode]);
+
+  const handleContentChange = useCallback((value: string) => {
+    setEditingContent(value);
+    setHasUnsavedContent(true);
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      isAutoSaveRef.current = true;
+      updateContentMutation.mutate(value);
+    }, 2000);
+  }, [updateContentMutation]);
+
   const saveContent = () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     if (editingContent !== null) {
       updateContentMutation.mutate(editingContent);
     }
+  };
+
+  const getWordCount = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  };
+
+  const getSearchMatchCount = (text: string, query: string) => {
+    if (!query.trim() || !text) return 0;
+    const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return (text.match(regex) || []).length;
+  };
+
+  const insertMarkdown = (prefix: string, suffix: string = '') => {
+    const textarea = contentRef.current;
+    if (!textarea || editingContent === null) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = editingContent.substring(start, end);
+    const newText = editingContent.substring(0, start) + prefix + selected + suffix + editingContent.substring(end);
+    handleContentChange(newText);
+    setTimeout(() => {
+      textarea.focus();
+      const cursorPos = start + prefix.length + selected.length + suffix.length;
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    }, 0);
   };
 
   const handleSendMessage = () => {
@@ -467,6 +602,17 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {(ideaType === 'note' || ideaType === 'document') && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setContentSearchVisible(!contentSearchVisible)}
+                      title="Search in content"
+                    >
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  )}
                   {(ideaType === 'note' || ideaType === 'document') && hasUnsavedContent && (
                     <Button 
                       onClick={saveContent}
@@ -541,7 +687,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
             <div className="flex-1 overflow-hidden flex flex-col">
               {ideaType === 'list' && activeTab === 'main' && (
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  <div className="flex gap-2 sticky top-0 bg-background pb-2">
+                  <div className="flex gap-2 sticky top-0 bg-background pb-2 z-10">
                     <Input
                       value={newListItem}
                       onChange={(e) => setNewListItem(e.target.value)}
@@ -560,6 +706,51 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
+
+                  {listItems.length >= 3 && (
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                        <Input
+                          value={listSearchQuery}
+                          onChange={(e) => setListSearchQuery(e.target.value)}
+                          placeholder="Search items..."
+                          className="h-8 pl-8 text-sm"
+                        />
+                        {listSearchQuery && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                            onClick={() => setListSearchQuery("")}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                      <Select
+                        value={listSortMode}
+                        onValueChange={(v) => setListSortMode(v as typeof listSortMode)}
+                      >
+                        <SelectTrigger className="w-[130px] h-8 text-xs">
+                          <SelectValue placeholder="Sort" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manual">Original order</SelectItem>
+                          <SelectItem value="az">A → Z</SelectItem>
+                          <SelectItem value="za">Z → A</SelectItem>
+                          <SelectItem value="checked-last">Checked last</SelectItem>
+                          <SelectItem value="checked-first">Checked first</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {listSearchQuery && (
+                    <p className="text-xs text-muted-foreground">
+                      {filteredAndSortedItems.length} of {listItems.length} items match
+                    </p>
+                  )}
                   
                   {listItems.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
@@ -567,11 +758,14 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                       <p className="font-medium">No items yet</p>
                       <p className="text-sm mt-1">Add your first item above</p>
                     </div>
+                  ) : filteredAndSortedItems.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No items match "{listSearchQuery}"</p>
+                    </div>
                   ) : (
                     <div className="space-y-2">
-                      {listItems
-                        .sort((a, b) => a.order - b.order)
-                        .map((item) => (
+                      {filteredAndSortedItems.map((item) => (
                         <div 
                           key={item.id}
                           className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
@@ -580,20 +774,53 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                             checked={item.isChecked}
                             onCheckedChange={() => toggleListItem(item.id)}
                           />
-                          <span className={cn(
-                            "flex-1 text-sm",
-                            item.isChecked && "line-through text-muted-foreground"
-                          )}>
-                            {item.text}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => deleteListItem(item.id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                          </Button>
+                          {editingItemId === item.id ? (
+                            <div className="flex-1 flex items-center gap-2">
+                              <Input
+                                ref={editInputRef}
+                                value={editingItemText}
+                                onChange={(e) => setEditingItemText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEditingItem();
+                                  if (e.key === 'Escape') cancelEditingItem();
+                                }}
+                                onBlur={saveEditingItem}
+                                className="h-8 flex-1"
+                                autoFocus
+                              />
+                            </div>
+                          ) : (
+                            <span 
+                              className={cn(
+                                "flex-1 text-sm cursor-pointer",
+                                item.isChecked && "line-through text-muted-foreground"
+                              )}
+                              onClick={() => startEditingItem(item)}
+                              title="Tap to edit"
+                            >
+                              {item.text}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1">
+                            {editingItemId !== item.id && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => startEditingItem(item)}
+                              >
+                                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => deleteListItem(item.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -603,7 +830,61 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
 
               {(ideaType === 'note' || ideaType === 'document') && activeTab === 'main' && (
                 <div className="flex-1 overflow-hidden flex flex-col p-4">
+                  {contentSearchVisible && (
+                    <div className="relative mb-2">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        value={contentSearchQuery}
+                        onChange={(e) => setContentSearchQuery(e.target.value)}
+                        placeholder="Search in content..."
+                        className="h-8 pl-8 pr-16 text-sm"
+                        autoFocus
+                      />
+                      <span className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        {contentSearchQuery ? `${getSearchMatchCount(editingContent || '', contentSearchQuery)} found` : ''}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                        onClick={() => { setContentSearchVisible(false); setContentSearchQuery(""); }}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                  {ideaType === 'document' && (
+                    <div className="flex items-center gap-1 mb-2 pb-2 border-b flex-wrap">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('**', '**')} title="Bold">
+                        <Bold className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('*', '*')} title="Italic">
+                        <Italic className="w-3.5 h-3.5" />
+                      </Button>
+                      <div className="w-px h-5 bg-border mx-0.5" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('# ')} title="Heading 1">
+                        <Heading1 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('## ')} title="Heading 2">
+                        <Heading2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('### ')} title="Heading 3">
+                        <Heading3 className="w-3.5 h-3.5" />
+                      </Button>
+                      <div className="w-px h-5 bg-border mx-0.5" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('- ')} title="Bullet list">
+                        <List className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('1. ')} title="Numbered list">
+                        <ListOrdered className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('\n---\n')} title="Horizontal rule">
+                        <Minus className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )}
                   <Textarea
+                    ref={contentRef}
                     value={editingContent || ''}
                     onChange={(e) => handleContentChange(e.target.value)}
                     placeholder={ideaType === 'note' 
@@ -612,12 +893,26 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                     }
                     className="flex-1 min-h-0 resize-none"
                   />
-                  {hasUnsavedContent && (
-                    <p className="text-sm text-muted-foreground mt-2 flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                      Unsaved changes
-                    </p>
-                  )}
+                  <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                    <span>
+                      {getWordCount(editingContent || '')} words · {(editingContent || '').length} chars
+                    </span>
+                    <span className="flex items-center gap-1">
+                      {updateContentMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Saving...
+                        </>
+                      ) : hasUnsavedContent ? (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                          Auto-saves in 2s
+                        </>
+                      ) : editingContent !== null && editingContent !== (idea?.content || '') ? null : (
+                        editingContent !== null ? 'Saved' : null
+                      )}
+                    </span>
+                  </div>
                 </div>
               )}
 
