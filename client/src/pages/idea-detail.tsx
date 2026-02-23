@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
+const ReactMarkdown = lazy(() => import('react-markdown'));
 import { Link, useParams, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
@@ -32,14 +33,8 @@ import {
   X,
   Search,
   Pencil,
-  Bold,
-  Italic,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Minus
+  Eye,
+  PenLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -135,6 +130,7 @@ export default function IdeaDetailPage() {
   const [pendingListEdit, setPendingListEdit] = useState<Array<{text: string; isChecked: boolean}> | null>(null);
   const [contentSearchQuery, setContentSearchQuery] = useState("");
   const [contentSearchVisible, setContentSearchVisible] = useState(false);
+  const [documentPreviewMode, setDocumentPreviewMode] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -345,33 +341,6 @@ export default function IdeaDetailPage() {
     }
   };
 
-  const insertMarkdown = (prefix: string, suffix: string = '') => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = editingContent || '';
-    const selected = text.substring(start, end);
-    const before = text.substring(0, start);
-    const after = text.substring(end);
-
-    let newText: string;
-    let newCursorPos: number;
-
-    if (selected) {
-      newText = before + prefix + selected + suffix + after;
-      newCursorPos = start + prefix.length + selected.length + suffix.length;
-    } else {
-      newText = before + prefix + suffix + after;
-      newCursorPos = start + prefix.length;
-    }
-
-    handleContentChange(newText);
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
 
   const getWordCount = (text: string) => {
     const trimmed = text.trim();
@@ -889,49 +858,56 @@ export default function IdeaDetailPage() {
               )}
 
               {ideaType === 'document' && (
-                <div className="flex flex-wrap gap-1 p-2 rounded-lg border bg-muted/30">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('**', '**')} title="Bold">
-                    <Bold className="w-4 h-4" />
+                <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
+                  <Button
+                    variant={documentPreviewMode ? "ghost" : "secondary"}
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setDocumentPreviewMode(false)}
+                  >
+                    <PenLine className="w-4 h-4" />
+                    Edit
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('*', '*')} title="Italic">
-                    <Italic className="w-4 h-4" />
+                  <Button
+                    variant={documentPreviewMode ? "secondary" : "ghost"}
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => setDocumentPreviewMode(true)}
+                  >
+                    <Eye className="w-4 h-4" />
+                    Preview
                   </Button>
-                  <div className="w-px h-6 bg-border self-center mx-1" />
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('# ')} title="Heading 1">
-                    <Heading1 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('## ')} title="Heading 2">
-                    <Heading2 className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('### ')} title="Heading 3">
-                    <Heading3 className="w-4 h-4" />
-                  </Button>
-                  <div className="w-px h-6 bg-border self-center mx-1" />
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('- ')} title="Bullet list">
-                    <List className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('1. ')} title="Numbered list">
-                    <ListOrdered className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => insertMarkdown('\n---\n')} title="Horizontal rule">
-                    <Minus className="w-4 h-4" />
-                  </Button>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    Supports markdown formatting
+                  </span>
                 </div>
               )}
 
-              <Textarea
-                ref={contentRef}
-                value={editingContent || ''}
-                onChange={(e) => handleContentChange(e.target.value)}
-                placeholder={ideaType === 'note' 
-                  ? "Write your note here..."
-                  : "Write your document content here. Use the toolbar above for formatting..."
-                }
-                className={cn(
-                  "resize-y font-mono",
-                  ideaType === 'document' ? "min-h-[500px]" : "min-h-[300px]"
-                )}
-              />
+              {ideaType === 'document' && documentPreviewMode ? (
+                <div className="rounded-md border p-6 prose prose-sm dark:prose-invert max-w-none min-h-[500px]">
+                  {(editingContent || '').trim() ? (
+                    <Suspense fallback={<Loader2 className="w-4 h-4 animate-spin" />}>
+                      <ReactMarkdown>{editingContent || ''}</ReactMarkdown>
+                    </Suspense>
+                  ) : (
+                    <p className="text-muted-foreground italic">Nothing to preview yet</p>
+                  )}
+                </div>
+              ) : (
+                <Textarea
+                  ref={contentRef}
+                  value={editingContent || ''}
+                  onChange={(e) => handleContentChange(e.target.value)}
+                  placeholder={ideaType === 'note' 
+                    ? "Write your note here..."
+                    : "Write using markdown: **bold**, *italic*, # heading, - list..."
+                  }
+                  className={cn(
+                    "resize-y",
+                    ideaType === 'document' ? "min-h-[500px] font-mono text-sm" : "min-h-[300px]"
+                  )}
+                />
+              )}
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <div className="flex items-center gap-3">

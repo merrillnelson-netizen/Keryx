@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from "react";
+const ReactMarkdown = lazy(() => import('react-markdown'));
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -52,14 +53,8 @@ import {
   X,
   Search,
   Pencil,
-  Bold,
-  Italic,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Minus,
+  Eye,
+  PenLine,
 } from "lucide-react";
 
 interface IdeaChatMessage {
@@ -141,6 +136,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
   const [pendingListEdit, setPendingListEdit] = useState<Array<{text: string; isChecked: boolean}> | null>(null);
   const [contentSearchQuery, setContentSearchQuery] = useState("");
   const [contentSearchVisible, setContentSearchVisible] = useState(false);
+  const [documentPreviewMode, setDocumentPreviewMode] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoSaveRef = useRef(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -179,6 +175,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       setPendingListEdit(null);
       setContentSearchQuery("");
       setContentSearchVisible(false);
+      setDocumentPreviewMode(false);
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     }
   }, [open]);
@@ -498,20 +495,6 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
     return (text.match(regex) || []).length;
   };
 
-  const insertMarkdown = (prefix: string, suffix: string = '') => {
-    const textarea = contentRef.current;
-    if (!textarea || editingContent === null) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = editingContent.substring(start, end);
-    const newText = editingContent.substring(0, start) + prefix + selected + suffix + editingContent.substring(end);
-    handleContentChange(newText);
-    setTimeout(() => {
-      textarea.focus();
-      const cursorPos = start + prefix.length + selected.length + suffix.length;
-      textarea.setSelectionRange(cursorPos, cursorPos);
-    }, 0);
-  };
 
   const handleSendMessage = () => {
     if (!message.trim() || chatMutation.isPending) return;
@@ -854,45 +837,52 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                     </div>
                   )}
                   {ideaType === 'document' && (
-                    <div className="flex items-center gap-1 mb-2 pb-2 border-b flex-wrap">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('**', '**')} title="Bold">
-                        <Bold className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-1 mb-2 pb-2 border-b">
+                      <Button
+                        variant={documentPreviewMode ? "ghost" : "secondary"}
+                        size="sm"
+                        className="gap-1.5 h-7 text-xs"
+                        onClick={() => setDocumentPreviewMode(false)}
+                      >
+                        <PenLine className="w-3.5 h-3.5" />
+                        Edit
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('*', '*')} title="Italic">
-                        <Italic className="w-3.5 h-3.5" />
+                      <Button
+                        variant={documentPreviewMode ? "secondary" : "ghost"}
+                        size="sm"
+                        className="gap-1.5 h-7 text-xs"
+                        onClick={() => setDocumentPreviewMode(true)}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Preview
                       </Button>
-                      <div className="w-px h-5 bg-border mx-0.5" />
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('# ')} title="Heading 1">
-                        <Heading1 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('## ')} title="Heading 2">
-                        <Heading2 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('### ')} title="Heading 3">
-                        <Heading3 className="w-3.5 h-3.5" />
-                      </Button>
-                      <div className="w-px h-5 bg-border mx-0.5" />
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('- ')} title="Bullet list">
-                        <List className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('1. ')} title="Numbered list">
-                        <ListOrdered className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => insertMarkdown('\n---\n')} title="Horizontal rule">
-                        <Minus className="w-3.5 h-3.5" />
-                      </Button>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        Supports markdown formatting
+                      </span>
                     </div>
                   )}
-                  <Textarea
-                    ref={contentRef}
-                    value={editingContent || ''}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    placeholder={ideaType === 'note' 
-                      ? "Write your note here..."
-                      : "Write your document content here..."
-                    }
-                    className="flex-1 min-h-0 resize-none"
-                  />
+                  {ideaType === 'document' && documentPreviewMode ? (
+                    <div className="flex-1 min-h-0 overflow-y-auto rounded-md border p-4 prose prose-sm dark:prose-invert max-w-none">
+                      {(editingContent || '').trim() ? (
+                        <Suspense fallback={<Loader2 className="w-4 h-4 animate-spin" />}>
+                          <ReactMarkdown>{editingContent || ''}</ReactMarkdown>
+                        </Suspense>
+                      ) : (
+                        <p className="text-muted-foreground italic">Nothing to preview yet</p>
+                      )}
+                    </div>
+                  ) : (
+                    <Textarea
+                      ref={contentRef}
+                      value={editingContent || ''}
+                      onChange={(e) => handleContentChange(e.target.value)}
+                      placeholder={ideaType === 'note' 
+                        ? "Write your note here..."
+                        : "Write using markdown: **bold**, *italic*, # heading, - list..."
+                      }
+                      className={cn("flex-1 min-h-0 resize-none", ideaType === 'document' && "font-mono text-sm")}
+                    />
+                  )}
                   <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                     <span>
                       {getWordCount(editingContent || '')} words · {(editingContent || '').length} chars
