@@ -29,7 +29,9 @@ import {
   CheckSquare,
   FileEdit,
   Save,
-  X
+  X,
+  Search,
+  Pencil
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -114,6 +116,11 @@ export default function IdeaDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newListItem, setNewListItem] = useState("");
+  const [listSearchQuery, setListSearchQuery] = useState("");
+  const [listSortMode, setListSortMode] = useState<'manual' | 'az' | 'za' | 'checked-last' | 'checked-first'>('manual');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemText, setEditingItemText] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
   const [editingContent, setEditingContent] = useState<string | null>(null);
   const [hasUnsavedContent, setHasUnsavedContent] = useState(false);
   const [pendingContentEdit, setPendingContentEdit] = useState<string | null>(null);
@@ -225,6 +232,62 @@ export default function IdeaDetailPage() {
     if (!idea) return;
     const updatedItems = (idea.listItems || []).filter(item => item.id !== itemId);
     updateListItemsMutation.mutate(updatedItems);
+  };
+
+  const startEditingItem = (item: ListItem) => {
+    setEditingItemId(item.id);
+    setEditingItemText(item.text);
+    setTimeout(() => editInputRef.current?.focus(), 50);
+  };
+
+  const saveEditingItem = () => {
+    if (!idea || !editingItemId || !editingItemText.trim()) {
+      setEditingItemId(null);
+      return;
+    }
+    const updatedItems = (idea.listItems || []).map(item =>
+      item.id === editingItemId ? { ...item, text: editingItemText.trim() } : item
+    );
+    updateListItemsMutation.mutate(updatedItems);
+    setEditingItemId(null);
+    setEditingItemText("");
+  };
+
+  const cancelEditingItem = () => {
+    setEditingItemId(null);
+    setEditingItemText("");
+  };
+
+  const getFilteredAndSortedItems = (items: ListItem[]) => {
+    let filtered = items;
+    if (listSearchQuery.trim()) {
+      const q = listSearchQuery.toLowerCase();
+      filtered = items.filter(item => item.text.toLowerCase().includes(q));
+    }
+    const sorted = [...filtered];
+    switch (listSortMode) {
+      case 'az':
+        sorted.sort((a, b) => a.text.localeCompare(b.text));
+        break;
+      case 'za':
+        sorted.sort((a, b) => b.text.localeCompare(a.text));
+        break;
+      case 'checked-last':
+        sorted.sort((a, b) => {
+          if (a.isChecked === b.isChecked) return a.order - b.order;
+          return a.isChecked ? 1 : -1;
+        });
+        break;
+      case 'checked-first':
+        sorted.sort((a, b) => {
+          if (a.isChecked === b.isChecked) return a.order - b.order;
+          return a.isChecked ? -1 : 1;
+        });
+        break;
+      default:
+        sorted.sort((a, b) => a.order - b.order);
+    }
+    return sorted;
   };
 
   const handleContentChange = (value: string) => {
@@ -530,6 +593,11 @@ export default function IdeaDetailPage() {
               <CardTitle className="flex items-center gap-2 text-lg">
                 <CheckSquare className="w-5 h-5 text-blue-500" />
                 Items
+                {listItems.length > 0 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-auto">
+                    {listItems.filter(i => i.isChecked).length}/{listItems.length} done
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -551,6 +619,51 @@ export default function IdeaDetailPage() {
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
+
+              {listItems.length > 3 && (
+                <div className="flex gap-2 items-center">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      value={listSearchQuery}
+                      onChange={(e) => setListSearchQuery(e.target.value)}
+                      placeholder="Search items..."
+                      className="pl-9 h-9"
+                    />
+                    {listSearchQuery && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                        onClick={() => setListSearchQuery("")}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <Select
+                    value={listSortMode}
+                    onValueChange={(v) => setListSortMode(v as typeof listSortMode)}
+                  >
+                    <SelectTrigger className="w-[140px] h-9">
+                      <SelectValue placeholder="Sort" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Original order</SelectItem>
+                      <SelectItem value="az">A → Z</SelectItem>
+                      <SelectItem value="za">Z → A</SelectItem>
+                      <SelectItem value="checked-last">Checked last</SelectItem>
+                      <SelectItem value="checked-first">Checked first</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {listSearchQuery && (
+                <p className="text-xs text-muted-foreground">
+                  {getFilteredAndSortedItems(listItems).length} of {listItems.length} items match
+                </p>
+              )}
               
               {listItems.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -558,11 +671,14 @@ export default function IdeaDetailPage() {
                   <p>No items yet</p>
                   <p className="text-sm mt-1">Add your first item above</p>
                 </div>
+              ) : getFilteredAndSortedItems(listItems).length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Search className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No items match "{listSearchQuery}"</p>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {listItems
-                    .sort((a, b) => a.order - b.order)
-                    .map((item) => (
+                  {getFilteredAndSortedItems(listItems).map((item) => (
                     <div 
                       key={item.id}
                       className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors group"
@@ -571,20 +687,53 @@ export default function IdeaDetailPage() {
                         checked={item.isChecked}
                         onCheckedChange={() => toggleListItem(item.id)}
                       />
-                      <span className={cn(
-                        "flex-1",
-                        item.isChecked && "line-through text-muted-foreground"
-                      )}>
-                        {item.text}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => deleteListItem(item.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                      </Button>
+                      {editingItemId === item.id ? (
+                        <div className="flex-1 flex items-center gap-2">
+                          <Input
+                            ref={editInputRef}
+                            value={editingItemText}
+                            onChange={(e) => setEditingItemText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditingItem();
+                              if (e.key === 'Escape') cancelEditingItem();
+                            }}
+                            onBlur={saveEditingItem}
+                            className="h-8 flex-1"
+                            autoFocus
+                          />
+                        </div>
+                      ) : (
+                        <span 
+                          className={cn(
+                            "flex-1 cursor-pointer",
+                            item.isChecked && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => startEditingItem(item)}
+                          title="Tap to edit"
+                        >
+                          {item.text}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1">
+                        {editingItemId !== item.id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                            onClick={() => startEditingItem(item)}
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                          onClick={() => deleteListItem(item.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
