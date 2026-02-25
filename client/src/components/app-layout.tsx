@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { Menu, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle } from "lucide-react";
+import { Menu, X, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
@@ -147,14 +147,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     size="sm" 
                     className="p-2 hover:bg-white/10"
                   >
-                    <Menu className="w-5 h-5" />
+                    {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-80 p-0 glass-card-strong border-white/20">
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <div className="flex flex-col h-full">
-                    {/* Mobile Menu Header */}
-                    <div className="p-6 border-b border-white/10">
+                    {/* Mobile Menu Header — pt-20 clears the fixed header bar */}
+                    <div className="pt-20 pb-6 px-6 border-b border-white/10">
                       <KeryxStoryModal>
                         <div className="flex items-center space-x-3">
                           <KeryxLogoIcon size="md" />
@@ -232,11 +232,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </SheetContent>
               </Sheet>
               
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  {currentPage?.name || "Keryx"}
-                </h2>
-              </div>
+              <Link href="/dashboard">
+                <div className="flex items-center gap-2 cursor-pointer">
+                  <KeryxLogoIcon size="sm" />
+                  <h2 className="text-base font-semibold text-foreground">
+                    {currentPage?.name || "Keryx"}
+                  </h2>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
