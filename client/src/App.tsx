@@ -1,6 +1,6 @@
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
 import { initGA } from "./lib/analytics";
 import { useAnalytics } from "./hooks/use-analytics";
+import { useAppBadge } from "./hooks/useAppBadge";
 
 import VoiceControl from "@/pages/voice-control";
 import History from "@/pages/history";
@@ -31,6 +32,7 @@ import Goals from "@/pages/goals";
 import Reminders from "@/pages/reminders";
 import ShowcasePage from "@/pages/showcase";
 import Messages from "@/pages/messages";
+import ShareImport from "@/pages/share-import";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -87,9 +89,46 @@ function useTimezoneSync() {
   }, [user]);
 }
 
+function useBadgeSync() {
+  const { user } = useAuth();
+  const { setBadge, clearBadge } = useAppBadge();
+
+  const { data: reminders = [] } = useQuery<{ id: string; status: string; triggerTime: string | null }[]>({
+    queryKey: ['/api/reminders'],
+    enabled: !!user,
+    staleTime: 60000,
+    select: (data) => data.filter((r) => r.status === 'triggered' || r.status === 'pending'),
+  });
+
+  useEffect(() => {
+    if (!user) {
+      clearBadge();
+      return;
+    }
+    const overdueCount = reminders.filter((r) => {
+      if (r.status === 'triggered') return true;
+      if (r.triggerTime && new Date(r.triggerTime) <= new Date()) return true;
+      return false;
+    }).length;
+    setBadge(overdueCount);
+  }, [reminders, user, setBadge, clearBadge]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'SYNC_COMPLETE') {
+        queryClient.invalidateQueries({ queryKey: ['/api/log-entries'] });
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
+}
+
 function Router() {
   useAnalytics();
   useTimezoneSync();
+  useBadgeSync();
   
   return (
     <Switch>
@@ -143,6 +182,9 @@ function Router() {
       </Route>
       <Route path="/messages/:conversationId">
         {() => <ProtectedRoute component={Messages} />}
+      </Route>
+      <Route path="/share-import">
+        {() => <ProtectedRoute component={ShareImport} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useHaptic } from "@/hooks/useHaptic";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,9 +213,19 @@ function ReminderCard({
 
 export default function RemindersPage() {
   const { toast } = useToast();
+  const { vibrate } = useHaptic();
+  const [location] = useLocation();
   const [activeTab, setActiveTab] = useState<string>("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteReminderId, setDeleteReminderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "true") {
+      setIsCreateOpen(true);
+      window.history.replaceState({}, "", "/reminders");
+    }
+  }, [location]);
   
   const [newReminder, setNewReminder] = useState({
     content: "",
@@ -275,6 +287,7 @@ export default function RemindersPage() {
       return res.json();
     },
     onSuccess: () => {
+      vibrate("success");
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       toast({ title: "Completed", description: "Reminder marked as done" });
     },
@@ -297,6 +310,7 @@ export default function RemindersPage() {
       return res.json();
     },
     onSuccess: () => {
+      vibrate("tap");
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       toast({ title: "Dismissed", description: "Reminder dismissed" });
     },

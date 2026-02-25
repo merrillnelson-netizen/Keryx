@@ -9,6 +9,53 @@
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "categories": ["productivity", "lifestyle", "utilities"],
+  "shortcuts": [
+    {
+      "name": "New Memory",
+      "short_name": "Memory",
+      "description": "Log a new memory or thought",
+      "url": "/voice",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Voice Record",
+      "short_name": "Record",
+      "description": "Start voice recording immediately",
+      "url": "/voice?autostart=true",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "New Reminder",
+      "short_name": "Reminder",
+      "description": "Set a new reminder",
+      "url": "/reminders?new=true",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            "application/json",
+            "application/zip",
+            "application/x-ndjson",
+            "text/plain",
+            ".json",
+            ".zip",
+            ".ndjson"
+          ]
+        }
+      ]
+    }
+  },
   "icons": [
     {
       "src": "/icons/icon-72.png",
