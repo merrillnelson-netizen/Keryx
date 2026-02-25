@@ -1,4 +1,4 @@
-var CACHE_NAME = 'keryx-v2';
+var CACHE_NAME = 'keryx-v3';
 var SHARE_CACHE = 'keryx-share-v1';
 var OFFLINE_QUEUE_KEY = 'keryx-offline-queue';
 
