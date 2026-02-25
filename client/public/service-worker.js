@@ -301,10 +301,6 @@ self.addEventListener('notificationclick', function(event) {
     return;
   }
 
-  if (action === 'view' || action === 'review') {
-    urlToOpen = data.url || '/dashboard';
-  }
-
   var isExternal = urlToOpen.startsWith('http://') || urlToOpen.startsWith('https://');
 
   if (isExternal) {
@@ -328,5 +324,3 @@ self.addEventListener('notificationclick', function(event) {
   );
 });
 
-self.addEventListener('notificationclose', function(event) {
-});
