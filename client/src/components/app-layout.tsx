@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Menu, X, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
@@ -139,19 +139,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <div className="glass-card-strong px-4 py-3 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {isOpen && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-2 hover:bg-white/10"
-                  onClick={() => setIsOpen(false)}
-                  aria-label="Close menu"
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              )}
               <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                {!isOpen && (
+                {isOpen ? (
+                  <SheetClose asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="p-2 hover:bg-white/10"
+                      aria-label="Close menu"
+                    >
+                      <X className="w-5 h-5" />
+                    </Button>
+                  </SheetClose>
+                ) : (
                   <SheetTrigger asChild>
                     <Button 
                       data-testid="button-menu"
