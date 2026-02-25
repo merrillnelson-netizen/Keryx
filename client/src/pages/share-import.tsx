@@ -78,32 +78,44 @@ export default function ShareImport() {
 
     try {
       if (importType === "sms") {
-        const blob = new Blob([fileBuffer], { type: fileMeta.type || "application/octet-stream" });
-        const text = await blob.text();
+        let fileContent: string;
 
-        let parsed: unknown;
-        try {
-          if (fileMeta.name.endsWith(".ndjson")) {
-            parsed = text.trim().split("\n").map((line) => JSON.parse(line));
-          } else {
-            parsed = JSON.parse(text);
+        if (fileMeta.name.endsWith(".zip")) {
+          const { BlobReader, ZipReader, TextWriter } = await import("@zip.js/zip.js");
+          const blob = new Blob([fileBuffer], { type: "application/zip" });
+          const reader = new ZipReader(new BlobReader(blob));
+          const entries = await reader.getEntries();
+          const dataEntry = entries.find((e: { filename: string }) =>
+            e.filename.endsWith(".ndjson") || e.filename.endsWith(".json") || e.filename.endsWith(".txt")
+          );
+          if (!dataEntry || !("getData" in dataEntry) || typeof (dataEntry as { getData?: unknown }).getData !== "function") {
+            await reader.close();
+            throw new Error("No data file found in ZIP archive. Files found: " + entries.map((e: { filename: string }) => e.filename).join(", "));
           }
-        } catch {
-          parsed = text.trim().split("\n").filter(Boolean).map((line) => {
-            try { return JSON.parse(line); } catch { return null; }
-          }).filter(Boolean);
+          fileContent = await (dataEntry as { getData: (writer: unknown) => Promise<string> }).getData(new TextWriter());
+          await reader.close();
+        } else {
+          const blob = new Blob([fileBuffer], { type: fileMeta.type || "application/octet-stream" });
+          fileContent = await blob.text();
         }
 
-        const res = await apiRequest("POST", "/api/messages/import", { messages: parsed });
+        const res = await apiRequest("POST", "/api/messages/import", {
+          fileContent,
+          fileName: fileMeta.name,
+        });
         const data = await res.json();
-        const count = data.imported ?? data.count ?? "some";
-        setResultMessage(`Successfully imported ${count} message conversations.`);
+        if (!data.success && data.message) throw new Error(data.message);
+        const convCount = data.conversations ?? "some";
+        const msgCount = data.newMessages ?? data.imported ?? "";
+        setResultMessage(
+          `Imported ${convCount} conversation${convCount !== 1 ? "s" : ""}${msgCount ? ` (${msgCount} new messages)` : ""}.`
+        );
       } else if (importType === "locations") {
         const blob = new Blob([fileBuffer], { type: fileMeta.type || "application/json" });
-        const text = await blob.text();
-        const parsed = JSON.parse(text);
-        const res = await apiRequest("POST", "/api/locations/import", parsed);
+        const jsonContent = await blob.text();
+        const res = await apiRequest("POST", "/api/locations/import", { jsonContent });
         const data = await res.json();
+        if (!data.success && data.message) throw new Error(data.message);
         const count = data.locationsImported ?? data.count ?? "some";
         setResultMessage(`Successfully imported ${count} location records.`);
       }
@@ -113,7 +125,9 @@ export default function ShareImport() {
 
       setPageState("success");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Import failed";
+      const errMsg = err instanceof Error ? err.message : "Import failed";
+      const jsonMatch = errMsg.match(/\{"message"\s*:\s*"([^"]+)"/);
+      const msg = jsonMatch ? jsonMatch[1] : errMsg;
       setErrorDetail(msg);
       setPageState("error");
       toast({ title: "Import failed", description: msg, variant: "destructive" });
