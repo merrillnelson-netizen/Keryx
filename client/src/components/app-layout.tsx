@@ -139,17 +139,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <div className="glass-card-strong px-4 py-3 rounded-2xl shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              {isOpen && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-2 hover:bg-white/10"
+                  onClick={() => setIsOpen(false)}
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </Button>
+              )}
               <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                <SheetTrigger asChild>
-                  <Button 
-                    data-testid="button-menu"
-                    variant="ghost" 
-                    size="sm" 
-                    className="p-2 hover:bg-white/10"
-                  >
-                    {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-                  </Button>
-                </SheetTrigger>
+                {!isOpen && (
+                  <SheetTrigger asChild>
+                    <Button 
+                      data-testid="button-menu"
+                      variant="ghost" 
+                      size="sm" 
+                      className="p-2 hover:bg-white/10"
+                    >
+                      <Menu className="w-5 h-5" />
+                    </Button>
+                  </SheetTrigger>
+                )}
                 <SheetContent side="left" className="w-80 p-0 glass-card-strong border-white/20">
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <div className="flex flex-col h-full">
