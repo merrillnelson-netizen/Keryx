@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSpeechSynthesis } from "./use-speech-synthesis";
 import { useGeolocation } from "./use-geolocation";
+import { toast } from "./use-toast";
 import { Settings } from "@shared/schema";
 import { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech";
 
@@ -208,15 +209,29 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
 
         isProcessingRef.current = false;
 
+        // Handle offline-queued response from service worker
+        if (data?.queued && data?.offline) {
+          const offlineMessage = "Saved offline — will sync when reconnected";
+          setLastResponse(offlineMessage);
+          setResponseData({ type: "log", message: offlineMessage });
+          setShowResponseModal(false);
+          toast({ title: "Saved offline", description: "Your memory will sync automatically when you're back online." });
+          return;
+        }
+
+        // Haptic feedback on successful save
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
+
         const topicTag = data?.data?.topicTag || data?.topicTag || 'General';
         const successMessage = `Memory saved as ${topicTag}`;
         
         // AI action detection runs in background - invalidate pending actions after a delay
-        // to allow backend to process and create any pending actions
         if (data?.actionDetectionInitiated) {
           setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
-          }, 3000); // Check after 3 seconds for new pending actions
+          }, 3000);
         }
         
         setLastResponse(successMessage);
@@ -226,7 +241,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           type: "log",
           message: successMessage,
         });
-        // Don't show modal for log operations - keep inline display
         setShowResponseModal(false);
         
         // Store saved memory data for calendar event detection and life purpose suggestion
@@ -245,7 +259,6 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
         }, 1000);
       } catch (onSuccessError) {
         console.error('[saveMutation] Error in onSuccess handler:', onSuccessError);
-        // Still mark as successful since save actually worked
         isProcessingRef.current = false;
         setLastResponse('Memory saved successfully');
       }

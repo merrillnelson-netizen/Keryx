@@ -1,4 +1,4 @@
-var CACHE_NAME = 'keryx-v3';
+var CACHE_NAME = 'keryx-v4';
 var SHARE_CACHE = 'keryx-share-v1';
 var OFFLINE_QUEUE_KEY = 'keryx-offline-queue';
 
@@ -139,8 +139,8 @@ self.addEventListener('fetch', function(event) {
   }
 
   if (request.method !== 'GET') {
-    // Intercept POST to /api/log-entries for offline queuing
-    if (request.method === 'POST' && url.pathname === '/api/log-entries') {
+    // Intercept POST to /api/memories for offline queuing
+    if (request.method === 'POST' && url.pathname === '/api/memories') {
       event.respondWith(
         fetch(request.clone()).catch(function() {
           return request.clone().json().then(function(body) {

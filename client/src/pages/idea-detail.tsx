@@ -56,6 +56,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useHaptic } from "@/hooks/useHaptic";
 
 interface IdeaChatMessage {
   role: 'user' | 'assistant';
@@ -115,6 +116,7 @@ export default function IdeaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { vibrate } = useHaptic();
   const [message, setMessage] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -249,6 +251,7 @@ export default function IdeaDetailPage() {
 
   const toggleListItem = (itemId: string) => {
     if (!idea) return;
+    vibrate("tap");
     const updatedItems = (idea.listItems || []).map(item =>
       item.id === itemId ? { ...item, isChecked: !item.isChecked } : item
     );
@@ -1252,12 +1255,13 @@ export default function IdeaDetailPage() {
                     >
                       <Checkbox
                         checked={task.isCompleted}
-                        onCheckedChange={(checked) => 
+                        onCheckedChange={(checked) => {
+                          vibrate("tap");
                           updateTaskMutation.mutate({ 
                             taskId: task.id, 
                             updates: { isCompleted: !!checked } 
-                          })
-                        }
+                          });
+                        }}
                         className="mt-0.5"
                       />
                       <div className="flex-1 min-w-0">

@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { cn } from "@/lib/utils";
 import { Mic, MicOff, Square, Volume2, Send, Keyboard, Sparkles } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useState, useEffect, type KeyboardEvent } from "react";
 import CalendarEventSuggestion from "./calendar-event-suggestion";
 import LifePurposeSuggestion from "./life-purpose-suggestion";
 import { HintChips } from "./keryx-capabilities-modal";
@@ -30,6 +30,17 @@ export default function VoiceActivation() {
     setShowResponseModal,
     clearResponseData,
   } = useSpeechRecognition();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("autostart") === "true") {
+      window.history.replaceState({}, "", "/voice");
+      const timer = setTimeout(() => {
+        startListeningUnified();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [startListeningUnified]);
 
   const handleUnifiedVoice = () => {
     startListeningUnified();
