@@ -1,0 +1,122 @@
+# Database Performance Report
+
+**Database:** Keryx  
+**Type:** POSTGRESQL  
+**Analysis Date:** 2026-03-03 23:30 UTC  
+**Health Grade:** D  
+**Summary:** Serious issues with high sequential scan ratios and missing indexes, particularly affecting the users and log_entries tables.  
+**Data Sources:** pg_stat_user_indexes + pg_stat_user_tables  
+
+## Critical Findings
+
+- High sequential scan ratio on users table with 52303 seq_scans and only 3 index_scans.
+- High sequential scan ratio on log_entries table with 37183 seq_scans and 1374 index_scans.
+- Unindexed FK column: reminders.trigger_location_id → frequent_places(id).
+
+## Action Items
+
+### 1. [HIGH] Indexes — Add index on reminders.trigger_location_id
+
+**Reason:** The foreign key column reminders.trigger_location_id lacks an index, causing inefficient joins and full table scans.
+
+**SQL:**
+```sql
+CREATE INDEX ON reminders(trigger_location_id);
+```
+
+---
+
+### 2. [HIGH] Indexes — Add index to improve users table access
+
+**Reason:** The users table has a high sequential scan ratio with 52303 seq_scans and only 3 index_scans, indicating missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON users(<column_name>);
+```
+
+---
+
+### 3. [HIGH] Indexes — Add index to improve log_entries table access
+
+**Reason:** The log_entries table shows a high sequential scan ratio with 37183 seq_scans and 1374 index_scans, suggesting missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON log_entries(<column_name>);
+```
+
+---
+
+### 4. [MEDIUM] Indexes — Review and drop never-used secondary indexes
+
+**Reason:** 35 secondary indexes have never been used, including reminders.reminders_source_memory_id_idx and categories.categories_user_id_idx, indicating potential for cleanup.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS reminders.reminders_source_memory_id_idx;
+```
+
+---
+
+### 5. [MEDIUM] Indexes — Add index to improve settings table access
+
+**Reason:** The settings table has a high sequential scan ratio with 3205 seq_scans and 0 index_scans, indicating missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON settings(<column_name>);
+```
+
+---
+
+### 6. [MEDIUM] Indexes — Add index to improve ai_actions table access
+
+**Reason:** The ai_actions table shows a high sequential scan ratio with 2316 seq_scans and 85 index_scans, suggesting missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON ai_actions(<column_name>);
+```
+
+---
+
+### 7. [MEDIUM] Indexes — Add index to improve ideas table access
+
+**Reason:** The ideas table has a high sequential scan ratio with 1038 seq_scans and 193 index_scans, indicating missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON ideas(<column_name>);
+```
+
+---
+
+### 8. [MEDIUM] Indexes — Add index to improve frequent_places table access
+
+**Reason:** The frequent_places table shows a high sequential scan ratio with 926 seq_scans and 82 index_scans, suggesting missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON frequent_places(<column_name>);
+```
+
+---
+
+### 9. [MEDIUM] Indexes — Add index to improve categories table access
+
+**Reason:** The categories table has a high sequential scan ratio with 593 seq_scans and 26 index_scans, indicating missing indexes for frequent queries.
+
+**SQL:**
+```sql
+CREATE INDEX ON categories(<column_name>);
+```
+
+---
+
+## Dev Sync Instructions
+
+The SQL blocks above are ready to run against your development database to bring it in line with the performance improvements recommended for production.
+
+**Suggested prompt for AI:**
+> Review the action items in this report. For each item with SQL, confirm the SQL is safe to run on a development database, note any risks, and group the changes by priority so I can apply them in order.
