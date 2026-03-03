@@ -297,6 +297,50 @@ self.addEventListener('notificationclick', function(event) {
   var data = event.notification.data || {};
   var urlToOpen = data.url || '/dashboard';
 
+  // ─── Reminder action buttons (Done ✓ / Snooze 30m) ──────────────────────
+  if (data.type === 'reminder' && data.reminderId) {
+    var reminderId = data.reminderId;
+
+    if (action === 'done') {
+      event.waitUntil(
+        fetch('/api/reminders/' + reminderId + '/complete', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(function() {})
+      );
+      return;
+    }
+
+    if (action === 'snooze') {
+      event.waitUntil(
+        fetch('/api/reminders/' + reminderId + '/snooze', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ minutes: 30 }),
+        }).catch(function() {})
+      );
+      return;
+    }
+
+    // Default tap — open reminders page
+    event.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+        for (var i = 0; i < clientList.length; i++) {
+          var client = clientList[i];
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            client.navigate('/reminders');
+            return client.focus();
+          }
+        }
+        return clients.openWindow('/reminders');
+      })
+    );
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (action === 'dismiss' || action === 'later') {
     return;
   }

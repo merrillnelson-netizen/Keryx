@@ -23,7 +23,7 @@ import {
   type MessageImport, type InsertMessageImport
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, isNull, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -164,7 +164,11 @@ export interface IStorage {
   triggerReminder(id: string, userId: string): Promise<Reminder | undefined>;
   completeReminder(id: string, userId: string): Promise<Reminder | undefined>;
   snoozeReminder(id: string, userId: string, until: Date): Promise<Reminder | undefined>;
+  unsnoozeReminder(id: string, userId: string): Promise<Reminder | undefined>;
   dismissReminder(id: string, userId: string): Promise<Reminder | undefined>;
+  getAllDueReminders(now: Date): Promise<Reminder[]>;
+  getAdvanceWarningReminders(now: Date, windowMinutes: number): Promise<Reminder[]>;
+  markAdvanceNotified(id: string): Promise<void>;
 
   // Message Conversations (user-scoped)
   getMessageConversations(userId: string, limit?: number, offset?: number): Promise<MessageConversation[]>;
@@ -2288,6 +2292,74 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to dismiss reminder:', error);
       throw new Error('Database error while dismissing reminder');
+    }
+  }
+
+  async unsnoozeReminder(id: string, userId: string): Promise<Reminder | undefined> {
+    try {
+      const [updated] = await db
+        .update(reminders)
+        .set({ status: 'pending', snoozedUntil: null })
+        .where(and(eq(reminders.id, id), eq(reminders.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to unsnooze reminder:', error);
+      throw new Error('Database error while unsnoozing reminder');
+    }
+  }
+
+  async getAllDueReminders(now: Date): Promise<Reminder[]> {
+    try {
+      return await db
+        .select()
+        .from(reminders)
+        .where(or(
+          and(
+            eq(reminders.triggerType, 'time'),
+            eq(reminders.status, 'pending'),
+            lte(reminders.triggerTime, now)
+          ),
+          and(
+            eq(reminders.status, 'snoozed'),
+            lte(reminders.snoozedUntil, now)
+          )
+        ))
+        .orderBy(reminders.triggerTime);
+    } catch (error) {
+      console.error('Failed to get all due reminders:', error);
+      return [];
+    }
+  }
+
+  async getAdvanceWarningReminders(now: Date, windowMinutes: number): Promise<Reminder[]> {
+    try {
+      const windowEnd = new Date(now.getTime() + windowMinutes * 60 * 1000);
+      return await db
+        .select()
+        .from(reminders)
+        .where(and(
+          eq(reminders.triggerType, 'time'),
+          eq(reminders.status, 'pending'),
+          gte(reminders.triggerTime, now),
+          lte(reminders.triggerTime, windowEnd),
+          isNull(reminders.advanceNotifiedAt)
+        ))
+        .orderBy(reminders.triggerTime);
+    } catch (error) {
+      console.error('Failed to get advance warning reminders:', error);
+      return [];
+    }
+  }
+
+  async markAdvanceNotified(id: string): Promise<void> {
+    try {
+      await db
+        .update(reminders)
+        .set({ advanceNotifiedAt: new Date() })
+        .where(eq(reminders.id, id));
+    } catch (error) {
+      console.error('Failed to mark advance notified:', error);
     }
   }
 

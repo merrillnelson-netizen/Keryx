@@ -31,6 +31,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Bell,
   Plus,
   Clock,
@@ -41,6 +46,9 @@ import {
   AlarmClock,
   Trash2,
   RotateCcw,
+  Pencil,
+  Undo2,
+  Timer,
 } from "lucide-react";
 import { format, formatDistanceToNow, isPast, addMinutes, addHours, addDays } from "date-fns";
 
@@ -58,6 +66,7 @@ interface Reminder {
   sourceMemoryId: string | null;
   triggeredAt: string | null;
   completedAt: string | null;
+  advanceNotifiedAt: string | null;
   createdAt: string;
 }
 
@@ -69,25 +78,48 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
   dismissed: { label: "Dismissed", color: "bg-gray-500/10 text-gray-500 border-gray-500/20", icon: XCircle },
 };
 
-function ReminderCard({ 
-  reminder, 
-  onComplete, 
-  onSnooze, 
+function ReminderCard({
+  reminder,
+  onComplete,
+  onSnooze,
   onDismiss,
   onDelete,
-  isUpdating 
-}: { 
-  reminder: Reminder; 
+  onEdit,
+  onUnsnooze,
+  isUpdating,
+}: {
+  reminder: Reminder;
   onComplete: () => void;
   onSnooze: (minutes: number) => void;
   onDismiss: () => void;
   onDelete: () => void;
+  onEdit: () => void;
+  onUnsnooze: () => void;
   isUpdating: boolean;
 }) {
+  const [customSnoozeOpen, setCustomSnoozeOpen] = useState(false);
+  const [customSnoozeTime, setCustomSnoozeTime] = useState("");
+
   const status = statusConfig[reminder.status] || statusConfig.pending;
   const StatusIcon = status.icon;
   const isOverdue = reminder.triggerTime && isPast(new Date(reminder.triggerTime)) && reminder.status === 'pending';
   const isDue = reminder.status === 'triggered' || isOverdue;
+
+  const showSnoozeButtons = reminder.status === 'triggered' || reminder.status === 'snoozed' || isOverdue;
+
+  function handleCustomSnooze() {
+    if (!customSnoozeTime) return;
+    const [hours, mins] = customSnoozeTime.split(':').map(Number);
+    const target = new Date();
+    target.setHours(hours, mins, 0, 0);
+    if (target <= new Date()) target.setDate(target.getDate() + 1);
+    const diffMinutes = Math.round((target.getTime() - Date.now()) / 60000);
+    if (diffMinutes > 0) {
+      onSnooze(diffMinutes);
+      setCustomSnoozeOpen(false);
+      setCustomSnoozeTime("");
+    }
+  }
 
   return (
     <Card className={`border-border/50 bg-card/50 backdrop-blur-sm ${isDue ? 'ring-2 ring-orange-500/50' : ''}`}>
@@ -107,10 +139,24 @@ function ReminderCard({
               <CardTitle className="text-base font-medium">{reminder.content}</CardTitle>
             </div>
           </div>
-          <Badge variant="outline" className={status.color}>
-            <StatusIcon className="w-3 h-3 mr-1" />
-            {status.label}
-          </Badge>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {(reminder.status === 'pending' || reminder.status === 'triggered' || reminder.status === 'snoozed') && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onEdit}
+                disabled={isUpdating}
+                className="w-8 h-8 p-0 text-muted-foreground hover:text-foreground"
+                title="Edit reminder"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+            )}
+            <Badge variant="outline" className={status.color}>
+              <StatusIcon className="w-3 h-3 mr-1" />
+              {status.label}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-2">
@@ -120,7 +166,7 @@ function ReminderCard({
               <div className={`flex items-center gap-1 ${isOverdue ? 'text-orange-500 font-medium' : ''}`}>
                 <Clock className="w-4 h-4" />
                 <span>
-                  {isOverdue 
+                  {isOverdue
                     ? `Overdue (${formatDistanceToNow(new Date(reminder.triggerTime), { addSuffix: true })})`
                     : format(new Date(reminder.triggerTime), 'MMM d, yyyy h:mm a')
                   }
@@ -144,8 +190,8 @@ function ReminderCard({
 
           {(reminder.status === 'pending' || reminder.status === 'triggered' || reminder.status === 'snoozed') && (
             <div className="flex flex-wrap gap-2 pt-2">
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 onClick={onComplete}
                 disabled={isUpdating}
                 className="gap-1"
@@ -153,28 +199,79 @@ function ReminderCard({
                 <CheckCircle2 className="w-4 h-4" />
                 Done
               </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => onSnooze(30)}
-                disabled={isUpdating}
-                className="gap-1"
-              >
-                <RotateCcw className="w-4 h-4" />
-                30m
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => onSnooze(60)}
-                disabled={isUpdating}
-                className="gap-1"
-              >
-                <RotateCcw className="w-4 h-4" />
-                1h
-              </Button>
-              <Button 
-                size="sm" 
+
+              {reminder.status === 'snoozed' ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onUnsnooze}
+                  disabled={isUpdating}
+                  className="gap-1"
+                  title="Cancel snooze and restore to pending"
+                >
+                  <Undo2 className="w-4 h-4" />
+                  Unsnooze
+                </Button>
+              ) : showSnoozeButtons ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onSnooze(30)}
+                    disabled={isUpdating}
+                    className="gap-1"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    30m
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onSnooze(60)}
+                    disabled={isUpdating}
+                    className="gap-1"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    1h
+                  </Button>
+                  <Popover open={customSnoozeOpen} onOpenChange={setCustomSnoozeOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isUpdating}
+                        className="gap-1"
+                        title="Snooze until a specific time"
+                      >
+                        <Timer className="w-4 h-4" />
+                        Custom
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="start">
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium">Snooze until</p>
+                        <Input
+                          type="time"
+                          value={customSnoozeTime}
+                          onChange={(e) => setCustomSnoozeTime(e.target.value)}
+                          className="text-sm"
+                        />
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={handleCustomSnooze}
+                          disabled={!customSnoozeTime}
+                        >
+                          Set Snooze
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </>
+              ) : null}
+
+              <Button
+                size="sm"
                 variant="ghost"
                 onClick={onDismiss}
                 disabled={isUpdating}
@@ -189,12 +286,12 @@ function ReminderCard({
           {(reminder.status === 'completed' || reminder.status === 'dismissed') && (
             <div className="flex items-center justify-between pt-2">
               <span className="text-xs text-muted-foreground">
-                {reminder.status === 'completed' && reminder.completedAt && 
+                {reminder.status === 'completed' && reminder.completedAt &&
                   `Completed ${formatDistanceToNow(new Date(reminder.completedAt), { addSuffix: true })}`
                 }
               </span>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="ghost"
                 onClick={onDelete}
                 disabled={isUpdating}
@@ -217,6 +314,8 @@ export default function RemindersPage() {
   const [location] = useLocation();
   const [activeTab, setActiveTab] = useState<string>("active");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [deleteReminderId, setDeleteReminderId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -226,8 +325,15 @@ export default function RemindersPage() {
       window.history.replaceState({}, "", "/reminders");
     }
   }, [location]);
-  
+
   const [newReminder, setNewReminder] = useState({
+    content: "",
+    triggerType: "time" as "time" | "location",
+    triggerTime: "",
+    triggerLocationName: "",
+  });
+
+  const [editForm, setEditForm] = useState({
     content: "",
     triggerType: "time" as "time" | "location",
     triggerTime: "",
@@ -236,23 +342,8 @@ export default function RemindersPage() {
 
   const { data: reminders = [], isLoading } = useQuery<Reminder[]>({
     queryKey: ['/api/reminders'],
-    staleTime: 60000,
-  });
-
-  const checkDueMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/reminders/check-due");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.count > 0) {
-        queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
-        toast({
-          title: "Reminders triggered",
-          description: `${data.count} reminder(s) are now due`,
-        });
-      }
-    },
+    staleTime: 30000,
+    refetchInterval: 60000,
   });
 
   const createMutation = useMutation({
@@ -281,6 +372,33 @@ export default function RemindersPage() {
     },
   });
 
+  const editMutation = useMutation({
+    mutationFn: async (data: typeof editForm) => {
+      if (!editingReminder) return;
+      const payload: any = {
+        content: data.content,
+        triggerType: data.triggerType,
+      };
+      if (data.triggerType === 'time' && data.triggerTime) {
+        payload.triggerTime = new Date(data.triggerTime).toISOString();
+      }
+      if (data.triggerType === 'location' && data.triggerLocationName) {
+        payload.triggerLocationName = data.triggerLocationName;
+      }
+      const res = await apiRequest("PATCH", `/api/reminders/${editingReminder.id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
+      setIsEditOpen(false);
+      setEditingReminder(null);
+      toast({ title: "Reminder updated", description: "Changes saved" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update reminder", variant: "destructive" });
+    },
+  });
+
   const completeMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiRequest("POST", `/api/reminders/${id}/complete`);
@@ -301,6 +419,17 @@ export default function RemindersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
       toast({ title: "Snoozed", description: "Reminder snoozed" });
+    },
+  });
+
+  const unsnoozeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/reminders/${id}/unsnooze`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reminders'] });
+      toast({ title: "Unsnoozed", description: "Reminder restored to pending" });
     },
   });
 
@@ -328,7 +457,20 @@ export default function RemindersPage() {
     },
   });
 
-  const activeReminders = reminders.filter(r => 
+  function openEdit(reminder: Reminder) {
+    setEditingReminder(reminder);
+    setEditForm({
+      content: reminder.content,
+      triggerType: reminder.triggerType as "time" | "location",
+      triggerTime: reminder.triggerTime
+        ? format(new Date(reminder.triggerTime), "yyyy-MM-dd'T'HH:mm")
+        : "",
+      triggerLocationName: reminder.triggerLocationName || "",
+    });
+    setIsEditOpen(true);
+  }
+
+  const activeReminders = reminders.filter(r =>
     ['pending', 'triggered', 'snoozed'].includes(r.status)
   ).sort((a, b) => {
     if (a.status === 'triggered' && b.status !== 'triggered') return -1;
@@ -339,12 +481,13 @@ export default function RemindersPage() {
     return 0;
   });
 
-  const completedReminders = reminders.filter(r => 
+  const completedReminders = reminders.filter(r =>
     ['completed', 'dismissed'].includes(r.status)
   );
 
-  const isUpdating = completeMutation.isPending || snoozeMutation.isPending || 
-                     dismissMutation.isPending || deleteMutation.isPending;
+  const isUpdating = completeMutation.isPending || snoozeMutation.isPending ||
+                     unsnoozeMutation.isPending || dismissMutation.isPending ||
+                     deleteMutation.isPending || editMutation.isPending;
 
   const getDefaultDateTime = () => {
     const now = new Date();
@@ -353,6 +496,91 @@ export default function RemindersPage() {
     now.setMilliseconds(0);
     return format(now, "yyyy-MM-dd'T'HH:mm");
   };
+
+  function ReminderFormFields({
+    form,
+    onChange,
+  }: {
+    form: typeof newReminder;
+    onChange: (updated: typeof newReminder) => void;
+  }) {
+    return (
+      <div className="space-y-4 py-4">
+        <div className="space-y-2">
+          <Label htmlFor="form-content">What do you need to remember?</Label>
+          <Input
+            id="form-content"
+            placeholder="e.g., Call the dentist"
+            value={form.content}
+            onChange={(e) => onChange({ ...form, content: e.target.value })}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>When should I remind you?</Label>
+          <RadioGroup
+            value={form.triggerType}
+            onValueChange={(v) => onChange({ ...form, triggerType: v as "time" | "location" })}
+            className="flex gap-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="time" id="form-time" />
+              <Label htmlFor="form-time" className="flex items-center gap-1 cursor-pointer">
+                <Clock className="w-4 h-4" /> At a time
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="location" id="form-location" />
+              <Label htmlFor="form-location" className="flex items-center gap-1 cursor-pointer">
+                <MapPin className="w-4 h-4" /> At a place
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
+
+        {form.triggerType === 'time' && (
+          <div className="space-y-2">
+            <Label htmlFor="form-triggerTime">Date & Time</Label>
+            <Input
+              id="form-triggerTime"
+              type="datetime-local"
+              value={form.triggerTime}
+              onChange={(e) => onChange({ ...form, triggerTime: e.target.value })}
+            />
+            <div className="flex gap-2 flex-wrap">
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => onChange({ ...form, triggerTime: format(addMinutes(new Date(), 30), "yyyy-MM-dd'T'HH:mm") })}>
+                30 min
+              </Button>
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => onChange({ ...form, triggerTime: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm") })}>
+                1 hour
+              </Button>
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => onChange({ ...form, triggerTime: format(addDays(new Date(), 1), "yyyy-MM-dd'T'HH:mm") })}>
+                Tomorrow
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {form.triggerType === 'location' && (
+          <div className="space-y-2">
+            <Label htmlFor="form-triggerLocation">Location name</Label>
+            <Input
+              id="form-triggerLocation"
+              placeholder="e.g., gym, grocery store, office"
+              value={form.triggerLocationName}
+              onChange={(e) => onChange({ ...form, triggerLocationName: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">
+              Reminder will trigger when you log a memory at this location
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <AppLayout>
@@ -420,8 +648,10 @@ export default function RemindersPage() {
                     reminder={reminder}
                     onComplete={() => completeMutation.mutate(reminder.id)}
                     onSnooze={(minutes) => snoozeMutation.mutate({ id: reminder.id, minutes })}
+                    onUnsnooze={() => unsnoozeMutation.mutate(reminder.id)}
                     onDismiss={() => dismissMutation.mutate(reminder.id)}
                     onDelete={() => setDeleteReminderId(reminder.id)}
+                    onEdit={() => openEdit(reminder)}
                     isUpdating={isUpdating}
                   />
                 ))}
@@ -448,8 +678,10 @@ export default function RemindersPage() {
                     reminder={reminder}
                     onComplete={() => {}}
                     onSnooze={() => {}}
+                    onUnsnooze={() => {}}
                     onDismiss={() => {}}
                     onDelete={() => setDeleteReminderId(reminder.id)}
+                    onEdit={() => {}}
                     isUpdating={isUpdating}
                   />
                 ))}
@@ -458,127 +690,59 @@ export default function RemindersPage() {
           </TabsContent>
         </Tabs>
 
+        {/* Create Reminder Dialog */}
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Create Reminder</DialogTitle>
               <DialogDescription>Set up a new time-based or location-based reminder.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="content">What do you need to remember?</Label>
-                <Input
-                  id="content"
-                  placeholder="e.g., Call the dentist"
-                  value={newReminder.content}
-                  onChange={(e) => setNewReminder(prev => ({ ...prev, content: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>When should I remind you?</Label>
-                <RadioGroup
-                  value={newReminder.triggerType}
-                  onValueChange={(v) => setNewReminder(prev => ({ ...prev, triggerType: v as "time" | "location" }))}
-                  className="flex gap-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="time" id="time" />
-                    <Label htmlFor="time" className="flex items-center gap-1 cursor-pointer">
-                      <Clock className="w-4 h-4" /> At a time
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="location" id="location" />
-                    <Label htmlFor="location" className="flex items-center gap-1 cursor-pointer">
-                      <MapPin className="w-4 h-4" /> At a place
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {newReminder.triggerType === 'time' && (
-                <div className="space-y-2">
-                  <Label htmlFor="triggerTime">Date & Time</Label>
-                  <Input
-                    id="triggerTime"
-                    type="datetime-local"
-                    value={newReminder.triggerTime}
-                    onChange={(e) => setNewReminder(prev => ({ ...prev, triggerTime: e.target.value }))}
-                  />
-                  <div className="flex gap-2 flex-wrap">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setNewReminder(prev => ({ 
-                        ...prev, 
-                        triggerTime: format(addMinutes(new Date(), 30), "yyyy-MM-dd'T'HH:mm")
-                      }))}
-                    >
-                      30 min
-                    </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setNewReminder(prev => ({ 
-                        ...prev, 
-                        triggerTime: format(addHours(new Date(), 1), "yyyy-MM-dd'T'HH:mm")
-                      }))}
-                    >
-                      1 hour
-                    </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setNewReminder(prev => ({ 
-                        ...prev, 
-                        triggerTime: format(addDays(new Date(), 1), "yyyy-MM-dd'T'HH:mm")
-                      }))}
-                    >
-                      Tomorrow
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {newReminder.triggerType === 'location' && (
-                <div className="space-y-2">
-                  <Label htmlFor="triggerLocation">Location name</Label>
-                  <Input
-                    id="triggerLocation"
-                    placeholder="e.g., gym, grocery store, office"
-                    value={newReminder.triggerLocationName}
-                    onChange={(e) => setNewReminder(prev => ({ ...prev, triggerLocationName: e.target.value }))}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Reminder will trigger when you log a memory at this location
-                  </p>
-                </div>
-              )}
-            </div>
+            <ReminderFormFields form={newReminder} onChange={setNewReminder} />
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={() => createMutation.mutate(newReminder)}
-                disabled={!newReminder.content || createMutation.isPending || 
+                disabled={!newReminder.content || createMutation.isPending ||
                   (newReminder.triggerType === 'time' && !newReminder.triggerTime) ||
                   (newReminder.triggerType === 'location' && !newReminder.triggerLocationName)
                 }
               >
-                {createMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : null}
+                {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 Create Reminder
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
+        {/* Edit Reminder Dialog */}
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Reminder</DialogTitle>
+              <DialogDescription>Update the content or trigger time for this reminder.</DialogDescription>
+            </DialogHeader>
+            <ReminderFormFields form={editForm} onChange={setEditForm} />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => editMutation.mutate(editForm)}
+                disabled={!editForm.content || editMutation.isPending ||
+                  (editForm.triggerType === 'time' && !editForm.triggerTime) ||
+                  (editForm.triggerType === 'location' && !editForm.triggerLocationName)
+                }
+              >
+                {editMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!deleteReminderId} onOpenChange={() => setDeleteReminderId(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>

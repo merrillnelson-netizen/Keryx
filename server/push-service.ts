@@ -144,6 +144,8 @@ export async function sendPushToAllUserDevices(
     body: string;
     url?: string;
     requireInteraction?: boolean;
+    extraData?: Record<string, unknown>;
+    actions?: Array<{ action: string; title: string }>;
   }
 ): Promise<{ sent: number; failed: number }> {
   const payload: PushPayload = {
@@ -155,11 +157,14 @@ export async function sendPushToAllUserDevices(
       type: notification.type,
       url: notification.url || '/',
       timestamp: Date.now(),
+      ...notification.extraData,
     },
   };
 
-  // Add appropriate actions based on type
-  if (notification.type === 'briefing') {
+  // Use caller-supplied actions if provided, otherwise apply defaults by type
+  if (notification.actions && notification.actions.length > 0) {
+    payload.actions = notification.actions;
+  } else if (notification.type === 'briefing') {
     payload.actions = [
       { action: 'view', title: 'View Briefing' },
       { action: 'dismiss', title: 'Dismiss' },

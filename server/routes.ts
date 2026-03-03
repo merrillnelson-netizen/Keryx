@@ -5121,6 +5121,20 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // Unsnooze a reminder (restore to pending, clear snoozedUntil)
+  app.post("/api/reminders/:id/unsnooze", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const unsnoozed = await storage.unsnoozeReminder(req.params.id, user.id);
+      if (!unsnoozed) {
+        return sendErrorResponse(res, 404, "Reminder not found");
+      }
+      res.json(unsnoozed);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to unsnooze reminder", error);
+    }
+  });
+
   // Check and trigger due reminders (called on app load/periodic check)
   app.post("/api/reminders/check-due", requireAuth, async (req, res) => {
     try {

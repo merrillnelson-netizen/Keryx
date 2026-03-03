@@ -909,6 +909,7 @@ export const reminders = pgTable("reminders", {
   // Timestamps
   triggeredAt: timestamp("triggered_at"), // When the reminder was triggered
   completedAt: timestamp("completed_at"), // When marked complete
+  advanceNotifiedAt: timestamp("advance_notified_at"), // When the 30-min advance push was sent (prevents duplicates)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("reminders_user_id_idx").on(table.userId),
@@ -943,6 +944,7 @@ export const insertReminderSchema = createInsertSchema(reminders).omit({
   snoozeCount: true,
   triggeredAt: true,
   completedAt: true,
+  advanceNotifiedAt: true,
   createdAt: true,
 });
 

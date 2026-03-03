@@ -8,6 +8,7 @@ import passport from "./auth";
 import { pool } from "./db";
 import { storage } from "./storage";
 import { processMessageBatch } from "./message-ai-service";
+import { sendPushToAllUserDevices } from "./push-service";
 
 /**
  * Validate required environment variables on startup
@@ -148,6 +149,61 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // ─── Reminder Daemon ─────────────────────────────────────────────────────
+    log('[reminder-daemon] Started — polling every 60s');
+    setInterval(async () => {
+      try {
+        const now = new Date();
+
+        // 1. Fire due reminders (pending past their time, or snoozed past snooze time)
+        const dueReminders = await storage.getAllDueReminders(now);
+        for (const reminder of dueReminders) {
+          try {
+            await storage.triggerReminder(reminder.id, reminder.userId);
+            const timeStr = reminder.triggerTime
+              ? new Date(reminder.triggerTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+              : '';
+            await sendPushToAllUserDevices(reminder.userId, {
+              type: 'reminder',
+              title: `⏰ ${reminder.content}`,
+              body: timeStr ? `Scheduled for ${timeStr}` : 'Your reminder is due',
+              url: '/reminders',
+              requireInteraction: true,
+              extraData: { reminderId: reminder.id },
+              actions: [
+                { action: 'done', title: 'Done ✓' },
+                { action: 'snooze', title: 'Snooze 30m' },
+              ],
+            });
+          } catch (err) {
+            console.error(`[reminder-daemon] Failed to fire reminder ${reminder.id}:`, err);
+          }
+        }
+
+        // 2. Send advance warnings for reminders due in the next 30 minutes
+        const advanceReminders = await storage.getAdvanceWarningReminders(now, 30);
+        for (const reminder of advanceReminders) {
+          try {
+            await sendPushToAllUserDevices(reminder.userId, {
+              type: 'reminder',
+              title: `🔔 Coming up: ${reminder.content}`,
+              body: reminder.triggerTime
+                ? `Due at ${new Date(reminder.triggerTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+                : 'Due in about 30 minutes',
+              url: '/reminders',
+              requireInteraction: false,
+            });
+            await storage.markAdvanceNotified(reminder.id);
+          } catch (err) {
+            console.error(`[reminder-daemon] Failed to send advance warning for ${reminder.id}:`, err);
+          }
+        }
+      } catch (err) {
+        console.error('[reminder-daemon] Poll cycle error:', err);
+      }
+    }, 60 * 1000);
+    // ─────────────────────────────────────────────────────────────────────────
 
     setTimeout(async () => {
       try {
