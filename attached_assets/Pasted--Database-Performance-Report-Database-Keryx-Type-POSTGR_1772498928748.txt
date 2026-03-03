@@ -1,0 +1,67 @@
+# Database Performance Report
+
+**Database:** Keryx  
+**Type:** POSTGRESQL  
+**Analysis Date:** 2026-03-03 00:47 UTC  
+**Health Grade:** D  
+**Summary:** Serious issues found with many missing FK indexes and high table bloat impacting performance.  
+**Data Sources:** pg_stat_user_indexes + pg_stat_user_tables, pg_stat_user_tables  
+
+## Critical Findings
+
+- 26 foreign key columns without supporting indexes, e.g., log_entries.user_id → users(id)
+- High table bloat in session with 4100.0% dead rows, never vacuumed
+- High sequential scan ratio in users table with 34857 seq_scans and only 3 index_scans
+
+## Action Items
+
+### 1. [HIGH] Indexes — Create missing FK indexes
+
+**Reason:** 26 foreign key columns lack supporting indexes, causing inefficient joins and lookups, e.g., log_entries.user_id → users(id).
+
+**SQL:**
+```sql
+CREATE INDEX ON log_entries(user_id); CREATE INDEX ON settings(user_id); CREATE INDEX ON push_subscriptions(user_id); CREATE INDEX ON categories(user_id); CREATE INDEX ON people(user_id); CREATE INDEX ON ai_action_preferences(user_id); CREATE INDEX ON ai_actions(user_id); CREATE INDEX ON ai_cache(user_id); CREATE INDEX ON location_history(user_id); CREATE INDEX ON plaid_items(user_id); CREATE INDEX ON financial_accounts(plaid_item_id); CREATE INDEX ON financial_accounts(user_id); CREATE INDEX ON financial_transactions(account_id); CREATE INDEX ON financial_transactions(linked_memory_id); CREATE INDEX ON financial_transactions(user_id); CREATE INDEX ON frequent_places(user_id); CREATE INDEX ON ideas(user_id); CREATE INDEX ON idea_tasks(idea_id); CREATE INDEX ON goals(user_id); CREATE INDEX ON reminders(source_memory_id);
+```
+
+---
+
+### 2. [HIGH] Maintenance — Vacuum tables with high bloat
+
+**Reason:** Tables like session have 4100.0% dead rows, never vacuumed, leading to wasted space and slower queries.
+
+**SQL:**
+```sql
+VACUUM FULL session; VACUUM FULL people; VACUUM FULL frequent_places; VACUUM FULL reminders; VACUUM FULL ideas; VACUUM FULL idea_tasks; VACUUM FULL log_entries; VACUUM FULL message_conversations; VACUUM FULL messages; VACUUM FULL financial_accounts;
+```
+
+---
+
+### 3. [MEDIUM] Indexes — Drop never-used indexes
+
+**Reason:** 42 indexes have never been used, e.g., financial_transactions.financial_transactions_category_idx, which wastes space and maintenance resources.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS financial_transactions.financial_transactions_category_idx; DROP INDEX IF EXISTS messages.messages_import_batch_idx; DROP INDEX IF EXISTS settings.settings_pkey; DROP INDEX IF EXISTS users.users_pkey; DROP INDEX IF EXISTS ideas.ideas_type_idx; DROP INDEX IF EXISTS financial_transactions.financial_transactions_account_idx; DROP INDEX IF EXISTS frequent_places.frequent_places_label_idx; DROP INDEX IF EXISTS financial_transactions.financial_transactions_user_id_idx; DROP INDEX IF EXISTS people.people_priority_idx; DROP INDEX IF EXISTS ideas.ideas_stage_idx;
+```
+
+---
+
+### 4. [MEDIUM] Indexes — Add indexes to reduce high sequential scans
+
+**Reason:** High sequential scan ratio in users table with 34857 seq_scans and only 3 index_scans indicates missing indexes.
+
+**SQL:**
+```sql
+CREATE INDEX ON users(id); CREATE INDEX ON log_entries(id); CREATE INDEX ON settings(id); CREATE INDEX ON ai_actions(id); CREATE INDEX ON frequent_places(id); CREATE INDEX ON categories(id);
+```
+
+---
+
+## Dev Sync Instructions
+
+The SQL blocks above are ready to run against your development database to bring it in line with the performance improvements recommended for production.
+
+**Suggested prompt for AI:**
+> Review the action items in this report. For each item with SQL, confirm the SQL is safe to run on a development database, note any risks, and group the changes by priority so I can apply them in order.

@@ -238,7 +238,9 @@ export const settings = pgTable("settings", {
   userTimezone: text("user_timezone").default("America/Denver"), // IANA timezone (e.g., 'America/Denver')
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  userIdIdx: index("settings_user_id_idx").on(table.userId),
+}));
 
 /**
  * AI Actions table - tracks AI-proposed and executed actions
@@ -397,6 +399,7 @@ export const financialTransactions = pgTable("financial_transactions", {
   dateIdx: index("financial_transactions_date_idx").on(table.date.desc()),
   userDateIdx: index("financial_transactions_user_date_idx").on(table.userId, table.date.desc()),
   categoryIdx: index("financial_transactions_category_idx").on(table.primaryCategory),
+  linkedMemoryIdIdx: index("financial_transactions_linked_memory_idx").on(table.linkedMemoryId),
 }));
 
 // Insert schemas for validation
@@ -913,6 +916,7 @@ export const reminders = pgTable("reminders", {
   userStatusIdx: index("reminders_user_status_idx").on(table.userId, table.status),
   triggerTimeIdx: index("reminders_trigger_time_idx").on(table.triggerTime),
   triggerTypeIdx: index("reminders_trigger_type_idx").on(table.triggerType),
+  sourceMemoryIdIdx: index("reminders_source_memory_id_idx").on(table.sourceMemoryId),
 }));
 
 export const remindersRelations = relations(reminders, ({ one }) => ({
