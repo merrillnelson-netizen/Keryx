@@ -19,7 +19,8 @@ import {
   Brain,
   Navigation,
   Clock,
-  Zap
+  Zap,
+  Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
@@ -37,7 +38,7 @@ interface Discovery {
 }
 
 interface InsightContext {
-  type: 'calendar' | 'email' | 'memory' | 'financial' | 'location';
+  type: 'calendar' | 'email' | 'memory' | 'financial' | 'location' | 'goal';
   summary: string;
   location?: string;
   date?: string;
@@ -104,6 +105,7 @@ const getInsightIcon = (type: InsightContext['type']) => {
     case 'memory': return Brain;
     case 'financial': return DollarSign;
     case 'location': return Navigation;
+    case 'goal': return Target;
     default: return Lightbulb;
   }
 };
@@ -189,7 +191,7 @@ function InsightBadge({ insight }: { insight: InsightContext }) {
 export default function ContextualDiscoveries() {
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery<DiscoveriesData>({
     queryKey: ["/api/discoveries"],
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60 * 240,
     refetchOnWindowFocus: false,
   });
 

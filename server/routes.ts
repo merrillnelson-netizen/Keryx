@@ -3057,7 +3057,7 @@ Respond with JSON only.`
           matchContext: m.matchContext,
           confidence: m.confidence
         }))
-      }, '', recentMemories.length, 30);
+      }, '', recentMemories.length, 240);
       
       res.json({
         status: 'success',

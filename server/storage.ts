@@ -388,6 +388,7 @@ export class DatabaseStorage implements IStorage {
           moodScore: logEntries.moodScore,
           detectedPeople: logEntries.detectedPeople,
           timestamp: logEntries.timestamp,
+          geoPlaceName: logEntries.geoPlaceName,
         })
         .from(logEntries)
         .where(and(

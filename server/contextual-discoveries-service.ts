@@ -10,7 +10,8 @@ const openai = new OpenAI({
 });
 
 // Minimum relevance score to show a discovery (0-1 scale)
-const MIN_RELEVANCE_THRESHOLD = 0.6;
+// Tavily "basic" search_depth returns scores in the 0.3–0.7 range for lifestyle/goal queries
+const MIN_RELEVANCE_THRESHOLD = 0.3;
 
 // Time windows for different trigger types
 const TRIP_WINDOW_DAYS = 7; // Only show trip content when within 7 days
@@ -394,7 +395,9 @@ export async function searchForDiscoveries(
             if (seenUrls.has(result.url)) continue;
             
             // Apply minimum relevance threshold
-            const score = result.score || 0.5;
+            // Use ?? (nullish coalescing) so a score of 0 is handled correctly,
+            // and results without an explicit score are assumed relevant (0.7)
+            const score = result.score ?? 0.7;
             if (score < MIN_RELEVANCE_THRESHOLD) continue;
             
             seenUrls.add(result.url);
