@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
-import { LogEntry } from "@shared/schema";
+import { LogEntry, Category } from "@shared/schema";
 import { useState, useMemo } from "react";
 import {
   Dialog,
@@ -46,7 +46,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Edit2, Trash2, ChevronDown, ChevronUp, LayoutGrid, Table as TableIcon, Users, MapPin, Calendar, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Category } from "@shared/schema";
 import {
   Tooltip,
   TooltipContent,

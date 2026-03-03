@@ -101,7 +101,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               We encountered an unexpected error. Please try again.
             </p>
 
-            {process.env.NODE_ENV === "development" && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <div className="glass-card p-4 rounded-lg mb-6 text-left">
                 <p className="text-xs font-mono text-destructive break-all">
                   {this.state.error.toString()}
