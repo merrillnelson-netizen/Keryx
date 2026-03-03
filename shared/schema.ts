@@ -918,6 +918,7 @@ export const reminders = pgTable("reminders", {
   triggerTimeIdx: index("reminders_trigger_time_idx").on(table.triggerTime),
   triggerTypeIdx: index("reminders_trigger_type_idx").on(table.triggerType),
   sourceMemoryIdIdx: index("reminders_source_memory_id_idx").on(table.sourceMemoryId),
+  triggerLocationIdIdx: index("reminders_trigger_location_id_idx").on(table.triggerLocationId),
 }));
 
 export const remindersRelations = relations(reminders, ({ one }) => ({
