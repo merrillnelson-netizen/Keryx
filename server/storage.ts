@@ -83,7 +83,7 @@ export interface IStorage {
   getEntriesByMood(userId: string, mood: string): Promise<LogEntry[]>;
   
   // Time capsule - memories from this day in previous years
-  getOnThisDayMemories(userId: string): Promise<LogEntry[]>;
+  getOnThisDayMemories(userId: string, userTimezone?: string): Promise<LogEntry[]>;
   
   // AI Actions (user-scoped)
   getAiActions(userId: string, status?: string[], limit?: number): Promise<AiAction[]>;
@@ -1130,14 +1130,15 @@ export class DatabaseStorage implements IStorage {
   /**
    * Get daily mood trend data for line chart visualization
    */
-  async getMoodTrend(userId: string, days = 30): Promise<{ date: string; avgScore: number; count: number }[]> {
+  async getMoodTrend(userId: string, days = 30, userTimezone?: string): Promise<{ date: string; avgScore: number; count: number }[]> {
     try {
+      const tz = userTimezone || 'America/Denver';
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
       const result = await db
         .select({
-          date: sql<string>`date_trunc('day', ${logEntries.timestamp})::date::text`,
+          date: sql<string>`(date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz}))::date::text`,
           avgScore: sql<number>`avg(${logEntries.moodScore})::int`,
           count: sql<number>`count(*)::int`,
         })
@@ -1147,8 +1148,8 @@ export class DatabaseStorage implements IStorage {
           gte(logEntries.timestamp, startDate),
           sql`${logEntries.moodScore} IS NOT NULL`
         ))
-        .groupBy(sql`date_trunc('day', ${logEntries.timestamp})`)
-        .orderBy(sql`date_trunc('day', ${logEntries.timestamp})`);
+        .groupBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})`)
+        .orderBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})`);
 
       return result.map(r => ({
         date: r.date,
@@ -1198,21 +1199,22 @@ export class DatabaseStorage implements IStorage {
    * Surface memories from this day in previous years
    */
 
-  async getOnThisDayMemories(userId: string): Promise<LogEntry[]> {
+  async getOnThisDayMemories(userId: string, userTimezone?: string): Promise<LogEntry[]> {
     try {
-      const today = new Date();
-      const month = today.getMonth() + 1;
-      const day = today.getDate();
-      const currentYear = today.getFullYear();
+      const tz = userTimezone || 'America/Denver';
+      const now = new Date();
+      const month = parseInt(now.toLocaleString('en-US', { timeZone: tz, month: 'numeric' }));
+      const day   = parseInt(now.toLocaleString('en-US', { timeZone: tz, day: 'numeric' }));
+      const currentYear = parseInt(now.toLocaleString('en-US', { timeZone: tz, year: 'numeric' }));
 
       return await db
         .select()
         .from(logEntries)
         .where(and(
           eq(logEntries.userId, userId),
-          sql`EXTRACT(MONTH FROM ${logEntries.timestamp}) = ${month}`,
-          sql`EXTRACT(DAY FROM ${logEntries.timestamp}) = ${day}`,
-          sql`EXTRACT(YEAR FROM ${logEntries.timestamp}) < ${currentYear}`
+          sql`EXTRACT(MONTH FROM (${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})) = ${month}`,
+          sql`EXTRACT(DAY   FROM (${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})) = ${day}`,
+          sql`EXTRACT(YEAR  FROM (${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})) < ${currentYear}`
         ))
         .orderBy(desc(logEntries.timestamp));
     } catch (error) {

@@ -35,9 +35,12 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Storage**: All timestamps in PostgreSQL are stored in UTC (`timestamp without time zone`, defaulting to `now()` in UTC).
 - **User Timezone**: Stored in `settings.userTimezone` (IANA format, e.g., `America/Denver`). Auto-synced from browser on login via `useTimezoneSync()` in App.tsx.
 - **AI Prompts**: Memory timestamps are converted to user's local timezone using `formatDateForTimezone()` before being passed to AI (briefings, insights, alerts, news feed). This prevents UTC date mismatch (e.g., 11 PM Mountain showing as next day in UTC).
+- **Reminder times in briefing**: Formatted using `formatDateTimeForTimezone()` before inclusion in the AI briefing prompt so the AI sees local time, not UTC ISO strings.
 - **Frontend Display**: Uses browser's native `toLocaleString()` / `date-fns format()` which auto-convert UTC to local time.
 - **Calendar Events**: Created with user's timezone passed as IANA string to Google/Outlook APIs.
 - **Reminders**: Trigger times stored in UTC, AI extracts reminder times by converting from user's local to UTC.
+- **On This Day (Time Capsule)**: `getOnThisDayMemories()` accepts `userTimezone` and uses `AT TIME ZONE` in SQL `EXTRACT` calls so the local calendar date is used, not UTC date. Route fetches user settings before the query.
+- **Mood Trend chart**: `getMoodTrend()` accepts `userTimezone` and uses `date_trunc('day', timestamp AT TIME ZONE 'UTC' AT TIME ZONE tz)` to bucket entries by local calendar day, not UTC day.
 - **Key Helpers**: `formatDateForTimezone(date, tz)` and `formatDateTimeForTimezone(date, tz)` in `server/ai-service.ts`.
 
 ### Performance Optimizations

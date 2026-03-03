@@ -2166,8 +2166,10 @@ Respond with JSON only.`
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 30;
+      const userSettings = await storage.getSettings(user.id);
+      const userTimezone = userSettings?.userTimezone || 'America/Denver';
       
-      const trend = await storage.getMoodTrend(user.id, days);
+      const trend = await storage.getMoodTrend(user.id, days, userTimezone);
       
       res.json({
         status: 'success',
@@ -2242,11 +2244,10 @@ Respond with JSON only.`
   app.get("/api/timecapsule", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const memories = await storage.getOnThisDayMemories(user.id);
-      
-      // Use user's timezone for correct "today" date
       const userSettings = await storage.getSettings(user.id);
       const userTimezone = userSettings?.userTimezone || 'America/Denver';
+      const memories = await storage.getOnThisDayMemories(user.id, userTimezone);
+      
       const now = new Date();
       const localMonth = parseInt(now.toLocaleString('en-US', { timeZone: userTimezone, month: 'numeric' }));
       const localDay = parseInt(now.toLocaleString('en-US', { timeZone: userTimezone, day: 'numeric' }));

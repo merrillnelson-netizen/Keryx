@@ -767,7 +767,8 @@ export async function generateMorningBriefing(
     if (activeReminders && activeReminders.length > 0) {
       remindersContext = `\n\nUSER-SET REMINDERS (include these in the REMINDERS section):\n${activeReminders.map(r => {
         if (r.triggerType === 'time' && r.triggerTime) {
-          return `- [TIME] "${r.content}" - Due: ${r.triggerTime}`;
+          const dueLocal = formatDateTimeForTimezone(new Date(r.triggerTime), userTimezone);
+          return `- [TIME] "${r.content}" - Due: ${dueLocal}`;
         } else if (r.triggerType === 'location' && r.triggerLocationName) {
           return `- [LOCATION] "${r.content}" - When at: ${r.triggerLocationName}`;
         }
