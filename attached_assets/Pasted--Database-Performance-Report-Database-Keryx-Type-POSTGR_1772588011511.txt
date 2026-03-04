@@ -1,0 +1,85 @@
+# Database Performance Report
+
+**Database:** Keryx  
+**Type:** POSTGRESQL  
+**Analysis Date:** 2026-03-04 01:30 UTC  
+**Health Grade:** B  
+**Summary:** No structural issues found, but there are unused secondary indexes on populated tables and high sequential scan ratios on some tables.  
+**Data Sources:** pg_stat_user_indexes + pg_stat_user_tables  
+
+## Action Items
+
+### 1. [MEDIUM] Indexes — Review and potentially drop unused secondary indexes
+
+**Reason:** The index messages.messages_import_batch_idx on the messages table has 551 rows and 0 scans, indicating it may be unused.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS messages.messages_import_batch_idx;
+```
+
+---
+
+### 2. [MEDIUM] Indexes — Review and potentially drop unused secondary indexes
+
+**Reason:** The index financial_transactions.financial_transactions_account_idx on the financial_transactions table has 301 rows and 0 scans, indicating it may be unused.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS financial_transactions.financial_transactions_account_idx;
+```
+
+---
+
+### 3. [MEDIUM] Indexes — Review and potentially drop unused secondary indexes
+
+**Reason:** The index financial_transactions.financial_transactions_category_idx on the financial_transactions table has 301 rows and 0 scans, indicating it may be unused.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS financial_transactions.financial_transactions_category_idx;
+```
+
+---
+
+### 4. [MEDIUM] Indexes — Review and potentially drop unused secondary indexes
+
+**Reason:** The index financial_transactions.financial_transactions_user_id_idx on the financial_transactions table has 301 rows and 0 scans, indicating it may be unused.
+
+**SQL:**
+```sql
+DROP INDEX IF EXISTS financial_transactions.financial_transactions_user_id_idx;
+```
+
+---
+
+### 5. [LOW] Queries — Investigate high sequential scan ratio on users table
+
+**Reason:** The users table has a high sequential scan count (52303) compared to index scans (3), despite having only ~2 rows. This may indicate inefficient query patterns.
+
+---
+
+### 6. [LOW] Queries — Investigate high sequential scan ratio on log_entries table
+
+**Reason:** The log_entries table has a high sequential scan count (37183) compared to index scans (1374), with ~410 rows, suggesting potential query inefficiencies.
+
+---
+
+### 7. [LOW] Queries — Investigate high sequential scan ratio on ai_actions table
+
+**Reason:** The ai_actions table has a high sequential scan count (2316) compared to index scans (85), with ~29 rows, suggesting potential query inefficiencies.
+
+---
+
+### 8. [LOW] Queries — Investigate high sequential scan ratio on frequent_places table
+
+**Reason:** The frequent_places table has a high sequential scan count (926) compared to index scans (82), with ~369 rows, suggesting potential query inefficiencies.
+
+---
+
+## Dev Sync Instructions
+
+The SQL blocks above are ready to run against your development database to bring it in line with the performance improvements recommended for production.
+
+**Suggested prompt for AI:**
+> Review the action items in this report. For each item with SQL, confirm the SQL is safe to run on a development database, note any risks, and group the changes by priority so I can apply them in order.
