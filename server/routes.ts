@@ -2725,9 +2725,12 @@ Respond with JSON only.`
           const calendarConnected = await isCalendarConnected();
           if (calendarConnected) {
             const events = await getUpcomingEvents(3);
-            return events.map(e => ({
-              title: e.title, startTime: e.startTime, endTime: e.endTime, attendees: e.attendees, location: e.location
-            }));
+            const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+            return events
+              .filter(e => new Date(e.startTime) >= cutoff)
+              .map(e => ({
+                title: e.title, startTime: e.startTime, endTime: e.endTime, attendees: e.attendees, location: e.location
+              }));
           }
         } catch (err) { console.warn('News-feed: calendar fetch failed:', err instanceof Error ? err.message : err); }
         return [];

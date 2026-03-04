@@ -1206,8 +1206,10 @@ export async function generatePersonalNewsFeed(
       const diffDays = Math.round((eventLocal.getTime() - todayLocal.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays === 0) return '(TODAY)';
       if (diffDays === 1) return '(TOMORROW)';
+      if (diffDays === -1) return '(YESTERDAY)';
       const dayName = eventDate.toLocaleDateString('en-US', { timeZone: userTimezone, weekday: 'long' }).toUpperCase();
       if (diffDays >= 2) return `(THIS ${dayName})`;
+      if (diffDays <= -2) return `(${Math.abs(diffDays)} DAYS AGO)`;
       return '';
     };
 
@@ -1286,17 +1288,33 @@ STORY CATEGORIES:
 - location: Location-based observations (places visited, routine patterns, travel activity)
 
 CRITICAL TIMING RULES FOR CALENDAR EVENTS:
-- Each calendar event has a day label in parentheses: (TODAY), (TOMORROW), or (THIS WEDNESDAY), etc.
+- Each calendar event has a day label in parentheses: (TODAY), (TOMORROW), (YESTERDAY), (THIS WEDNESDAY), or (X DAYS AGO), etc.
 - You MUST use exactly these labels when referring to events. Do NOT compute your own relative dates.
 - If an event says "(TODAY)", say "today" in the headline/summary.
 - If an event says "(TOMORROW)", say "tomorrow" in the headline/summary.
 - If an event says "(THIS THURSDAY)", say "this Thursday" in the headline/summary.
+- If an event says "(YESTERDAY)", say "yesterday" in the headline/summary — NEVER say "today" for a (YESTERDAY) event.
+- If an event says "(X DAYS AGO)", it is in the past — frame it accordingly in past tense.
 - NEVER say "tomorrow" for an event that is labeled "(THIS THURSDAY)" or any other non-tomorrow label.
+- Events labeled (YESTERDAY) or (X DAYS AGO) are PAST events. They must NEVER use priority "breaking". Use "standard" at most. Do NOT generate a breaking story about a past event that no longer requires immediate action.
+
+CRITICAL PEOPLE RULES — PHYSICAL PRESENCE VS. REMOTE COMMUNICATION:
+- A person is physically present ONLY if the memory text EXPLICITLY says so with words like: "cooked with [name]", "[name] came over", "had lunch with [name]", "[name] was here", "we went together", "[name] helped me", etc.
+- If the memory says "texted [name]", "called [name]", "messaged [name]", "talked to [name] on the phone", "thinking about [name]", or simply mentions a name in passing, that person was NOT physically there.
+- NEVER write a headline or summary implying someone physically joined, helped with, or participated in an activity when the memory only shows remote communication, a text/message, or a passive mention.
+- WRONG: Memory says "texted Michael while making dinner" → do NOT write "Michael Joins You in Kitchen Adventures" or "Son Michael Helps in the Kitchen."
+- RIGHT: For that memory, you may note the user was cooking and separately that they were in touch with their son — but keep them as two distinct observations, not one co-activity story.
+
+CRITICAL RULE — DO NOT USE RELATIVE WORDS FROM INSIDE QUOTED MEMORY TEXT:
+- Every memory entry begins with a [Date] label (e.g., [Tuesday, March 3, 2026]). Use ONLY that date label to determine recency.
+- Memory text is quoted from what the user said at the time of logging. Words like "today", "yesterday", "this morning" inside a memory's quoted text reflect when the user was speaking — they are NOT reliable indicators of when the story is being generated.
+- NEVER use relative words ("today", "yesterday", "this morning") from inside quoted memory text to set the timeframe of a story.
+- ONLY use relative time words in stories when they come from the structured calendar labels: (TODAY), (TOMORROW), (YESTERDAY).
 
 STORY PRIORITIES:
-- breaking: Time-sensitive or very important (upcoming event today or tomorrow, urgent email)
+- breaking: Time-sensitive or very important (upcoming event TODAY or TOMORROW, urgent email)
 - featured: Significant patterns or notable events (mood improvements, project milestones)
-- standard: Regular updates and observations
+- standard: Regular updates, observations, and anything that happened in the past
 
 STORY SENTIMENTS:
 - positive: Good news, achievements, improvements
@@ -1310,6 +1328,7 @@ WRITING STYLE:
 - Details can expand on the story with specific examples
 - Reference actual names, dates, and specifics from the data
 - Be supportive and positive, never judgmental
+- Use past tense for events that already happened (YESTERDAY or older)
 
 Example stories:
 - Headline: "Catch-Up with Sarah Scheduled for Tomorrow"
@@ -1317,6 +1336,9 @@ Example stories:
   
 - Headline: "Weekend Productivity Streak Continues"
   Summary: "Your mood scores have improved 20% since Monday, with most positive memories centered around project work."
+
+- Headline: "Healthcare Appointment Was Cancelled Yesterday"
+  Summary: "Your Oak St. Health appointment was cancelled yesterday, leaving you with an unexpectedly open day." (priority: standard, NOT breaking)
 
 IMPORTANT: When people are mentioned, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship. Use this to make stories more personal. For example, if "Kim" is listed as "daughter", your headline should say "Daughter Kim" or refer to "your daughter Kim" rather than just "Kim" or "friend Kim".
 

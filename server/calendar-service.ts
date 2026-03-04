@@ -572,8 +572,15 @@ async function getGoogleUpcomingEvents(days: number = 14, retryCount: number = 0
     });
 
     const events = response.data.items || [];
-    
-    return events.map(event => ({
+
+    const activeEvents = events.filter(event => {
+      if (event.status === 'cancelled') return false;
+      const userRsvp = event.attendees?.find(a => a.self);
+      if (userRsvp?.responseStatus === 'declined') return false;
+      return true;
+    });
+
+    return activeEvents.map(event => ({
       id: event.id || '',
       title: event.summary || 'Untitled Event',
       description: event.description || undefined,
