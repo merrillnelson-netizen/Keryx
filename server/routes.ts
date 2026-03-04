@@ -2098,14 +2098,14 @@ Respond with JSON only.`
       const sortFields: Array<{ field: string; direction: 'asc' | 'desc' }> = [];
       if (Array.isArray(result.sortFields)) {
         for (const sf of result.sortFields) {
-          if (sf && typeof sf.field === 'string' && VALID_SORT_FIELDS.includes(sf.field as any)) {
+          if (sf && typeof sf.field === 'string' && (VALID_SORT_FIELDS as readonly string[]).includes(sf.field)) {
             sortFields.push({
               field: sf.field,
               direction: sf.direction === 'desc' ? 'desc' : 'asc',
             });
           }
         }
-      } else if (result.sortField && VALID_SORT_FIELDS.includes(result.sortField)) {
+      } else if (result.sortField && (VALID_SORT_FIELDS as readonly string[]).includes(result.sortField)) {
         sortFields.push({
           field: result.sortField,
           direction: result.sortDirection === 'desc' ? 'desc' : 'asc',
@@ -3048,7 +3048,7 @@ Respond with JSON only.`
         }
       }
       
-      // Cache the result for 30 minutes
+      // Cache the result for 240 minutes (limits Tavily calls to ~6/day)
       await storage.setAiCache(user.id, 'discoveries', cacheKey, {
         discoveries: discoveries.discoveries,
         insights: discoveries.insights,
@@ -5814,7 +5814,7 @@ Respond with JSON only.`
       const sortFields: Array<{ field: string; direction: 'asc' | 'desc' }> = [];
       if (Array.isArray(result.sortFields)) {
         for (const sf of result.sortFields) {
-          if (sf && typeof sf.field === 'string' && MESSAGE_SORT_FIELDS.includes(sf.field as any)) {
+          if (sf && typeof sf.field === 'string' && (MESSAGE_SORT_FIELDS as readonly string[]).includes(sf.field)) {
             sortFields.push({
               field: sf.field,
               direction: sf.direction === 'desc' ? 'desc' : 'asc',
