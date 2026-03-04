@@ -1134,12 +1134,15 @@ export class DatabaseStorage implements IStorage {
   async getMoodTrend(userId: string, days = 30, userTimezone?: string): Promise<{ date: string; avgScore: number; count: number }[]> {
     try {
       const tz = userTimezone || 'America/Denver';
+      // Use sql.raw() so the timezone appears as a literal string in SELECT, GROUP BY, and ORDER BY.
+      // Drizzle parameterizes template ${tz} differently in each clause, causing PostgreSQL grouping errors.
+      const tzLiteral = sql.raw(`'${tz.replace(/'/g, "''")}'`);
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
       const result = await db
         .select({
-          date: sql<string>`(date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz}))::date::text`,
+          date: sql<string>`(date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral}))::date::text`,
           avgScore: sql<number>`avg(${logEntries.moodScore})::int`,
           count: sql<number>`count(*)::int`,
         })
@@ -1149,8 +1152,8 @@ export class DatabaseStorage implements IStorage {
           gte(logEntries.timestamp, startDate),
           sql`${logEntries.moodScore} IS NOT NULL`
         ))
-        .groupBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})`)
-        .orderBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tz})`);
+        .groupBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral})`)
+        .orderBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral})`);
 
       return result.map(r => ({
         date: r.date,

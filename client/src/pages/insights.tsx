@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
-import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign, CreditCard, ArrowDownCircle, ArrowUpCircle, Clock } from "lucide-react";
+import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign, CreditCard, ArrowDownCircle, ArrowUpCircle, Clock, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -137,6 +137,10 @@ export default function Insights() {
   const [txDays, setTxDays] = useState("30");
   const [selectedAccount, setSelectedAccount] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [privacyMode, setPrivacyMode] = useState(false);
+
+  const fmt = (amount: number) =>
+    privacyMode ? "••••••" : `$${amount.toFixed(2)}`;
 
   const { data: moodStats, isLoading: moodLoading } = useQuery<{ data: MoodStat[]; period: string }>({
     queryKey: ["/api/mood/stats", days],
@@ -563,16 +567,27 @@ export default function Insights() {
                   </CardTitle>
                   <CardDescription>Spending breakdown and transaction history</CardDescription>
                 </div>
-                <Select value={txDays} onValueChange={(v) => { setTxDays(v); setSelectedAccount("all"); setSelectedCategory("all"); }}>
-                  <SelectTrigger className="w-28 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {txDaysOptions.map(o => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPrivacyMode(p => !p)}
+                    className="h-8 w-8 p-0"
+                    title={privacyMode ? "Show numbers" : "Hide numbers"}
+                  >
+                    {privacyMode ? <Eye className="w-4 h-4 text-muted-foreground" /> : <EyeOff className="w-4 h-4 text-muted-foreground" />}
+                  </Button>
+                  <Select value={txDays} onValueChange={(v) => { setTxDays(v); setSelectedAccount("all"); setSelectedCategory("all"); }}>
+                    <SelectTrigger className="w-28 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {txDaysOptions.map(o => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -594,7 +609,7 @@ export default function Insights() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="glass-card p-3 rounded-xl text-center">
                       <p className="text-xl font-bold text-emerald-500">
-                        ${spendingSummary.totalSpending.toFixed(2)}
+                        {fmt(spendingSummary.totalSpending)}
                       </p>
                       <p className="text-xs text-muted-foreground">Total Spent</p>
                     </div>
@@ -606,7 +621,7 @@ export default function Insights() {
                     </div>
                     <div className="glass-card p-3 rounded-xl text-center">
                       <p className="text-xl font-bold text-cyan-500">
-                        ${(spendingSummary.totalSpending / spendingSummary.transactionCount).toFixed(2)}
+                        {fmt(spendingSummary.totalSpending / spendingSummary.transactionCount)}
                       </p>
                       <p className="text-xs text-muted-foreground">Avg / Txn</p>
                     </div>
@@ -653,7 +668,7 @@ export default function Insights() {
                               ))}
                             </Pie>
                             <Tooltip
-                              formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                              formatter={(value: number) => [privacyMode ? '••••••' : `$${value.toFixed(2)}`, 'Amount']}
                               contentStyle={{
                                 backgroundColor: 'rgba(0,0,0,0.8)',
                                 border: '1px solid rgba(255,255,255,0.2)',
@@ -672,7 +687,7 @@ export default function Insights() {
                           {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
                             <div key={i} className="glass-card p-3 rounded-lg flex items-center justify-between gap-2">
                               <p className="text-sm text-foreground break-words flex-1">{merchant.merchant}</p>
-                              <span className="text-sm font-semibold text-emerald-500 shrink-0">${merchant.amount.toFixed(2)}</span>
+                              <span className="text-sm font-semibold text-emerald-500 shrink-0">{fmt(merchant.amount)}</span>
                             </div>
                           ))}
                         </div>
@@ -735,7 +750,7 @@ export default function Insights() {
                     {!txLoading && transactions.length > 0 && (
                       <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
                         <span>{transactions.length} transaction{transactions.length !== 1 ? "s" : ""}</span>
-                        <span className="font-medium text-emerald-500">${txTotal.toFixed(2)} spent</span>
+                        <span className="font-medium text-emerald-500">{fmt(txTotal)} spent</span>
                       </div>
                     )}
 
@@ -802,7 +817,7 @@ export default function Insights() {
                                 "text-sm font-semibold shrink-0",
                                 isDebit ? "text-red-400" : "text-emerald-400"
                               )}>
-                                {isDebit ? "-" : "+"}${Math.abs(tx.amount).toFixed(2)}
+                                {privacyMode ? "••••••" : `${isDebit ? "-" : "+"}$${Math.abs(tx.amount).toFixed(2)}`}
                               </span>
                             </div>
                           );

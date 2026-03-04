@@ -40,7 +40,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Calendar Events**: Created with user's timezone passed as IANA string to Google/Outlook APIs.
 - **Reminders**: Trigger times stored in UTC, AI extracts reminder times by converting from user's local to UTC.
 - **On This Day (Time Capsule)**: `getOnThisDayMemories()` accepts `userTimezone` and uses `AT TIME ZONE` in SQL `EXTRACT` calls so the local calendar date is used, not UTC date. Route fetches user settings before the query.
-- **Mood Trend chart**: `getMoodTrend()` accepts `userTimezone` and uses `date_trunc('day', timestamp AT TIME ZONE 'UTC' AT TIME ZONE tz)` to bucket entries by local calendar day, not UTC day.
+- **Mood Trend chart**: `getMoodTrend()` accepts `userTimezone` and uses `date_trunc('day', timestamp AT TIME ZONE 'UTC' AT TIME ZONE tz)` to bucket entries by local calendar day, not UTC day. **Important**: uses `sql.raw()` for the timezone literal — Drizzle parameterizes `${tz}` differently in SELECT vs GROUP BY/ORDER BY causing PostgreSQL grouping errors; inlining it as a raw literal fixes this.
 - **Key Helpers**: `formatDateForTimezone(date, tz)` and `formatDateTimeForTimezone(date, tz)` in `server/ai-service.ts`.
 
 ### Performance Optimizations
