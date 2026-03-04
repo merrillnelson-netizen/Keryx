@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
-import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign } from "lucide-react";
+import { Brain, TrendingUp, Lightbulb, Sparkles, Loader2, Wallet, DollarSign, CreditCard, ArrowDownCircle, ArrowUpCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -64,6 +64,27 @@ interface PlaidStatus {
   featureDisabled: boolean;
 }
 
+interface FinancialAccount {
+  id: string;
+  accountId: string;
+  name: string;
+  mask: string | null;
+  type: string;
+  isHidden: boolean;
+}
+
+interface Transaction {
+  id: string;
+  accountId: string;
+  amount: number;
+  date: string;
+  name: string;
+  merchantName: string | null;
+  primaryCategory: string | null;
+  pending: boolean | null;
+  paymentChannel: string | null;
+}
+
 const MOOD_COLORS: Record<string, string> = {
   happy: "#22c55e",
   sad: "#3b82f6",
@@ -113,6 +134,9 @@ const SPENDING_COLORS = [
 
 export default function Insights() {
   const [days, setDays] = useState("30");
+  const [txDays, setTxDays] = useState("30");
+  const [selectedAccount, setSelectedAccount] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
 
   const { data: moodStats, isLoading: moodLoading } = useQuery<{ data: MoodStat[]; period: string }>({
     queryKey: ["/api/mood/stats", days],
@@ -158,15 +182,67 @@ export default function Insights() {
   });
 
   const { data: spendingSummary, isLoading: spendingLoading } = useQuery<SpendingSummary>({
-    queryKey: ["/api/plaid/spending-summary", days],
+    queryKey: ["/api/plaid/spending-summary", txDays],
     queryFn: async () => {
-      const response = await fetch(`/api/plaid/spending-summary?days=${days}`, { credentials: "include" });
+      const response = await fetch(`/api/plaid/spending-summary?days=${txDays}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to fetch spending summary");
       return response.json();
     },
     enabled: plaidStatus?.enabled && plaidStatus?.configured,
-    staleTime: 1000 * 60 * 15, // 15 minutes - financial data syncs periodically
+    staleTime: 1000 * 60 * 15,
   });
+
+  const { data: accounts = [] } = useQuery<FinancialAccount[]>({
+    queryKey: ["/api/plaid/accounts"],
+    queryFn: async () => {
+      const response = await fetch("/api/plaid/accounts", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch accounts");
+      return response.json();
+    },
+    enabled: plaidStatus?.enabled && plaidStatus?.configured,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const { data: categoryOptions = [] } = useQuery<string[]>({
+    queryKey: ["/api/plaid/transaction-categories"],
+    queryFn: async () => {
+      const response = await fetch("/api/plaid/transaction-categories", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch categories");
+      return response.json();
+    },
+    enabled: plaidStatus?.enabled && plaidStatus?.configured,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: transactions = [], isLoading: txLoading } = useQuery<Transaction[]>({
+    queryKey: ["/api/plaid/transactions", txDays, selectedAccount, selectedCategory],
+    queryFn: async () => {
+      const params = new URLSearchParams({ days: txDays, limit: "200" });
+      if (selectedAccount !== "all") params.set("accountId", selectedAccount);
+      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      const response = await fetch(`/api/plaid/transactions?${params}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch transactions");
+      return response.json();
+    },
+    enabled: plaidStatus?.enabled && plaidStatus?.configured,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  // Build an accountId→name map for the transaction list
+  const accountNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of accounts) {
+      map[a.id] = a.mask ? `${a.name} ····${a.mask}` : a.name;
+    }
+    return map;
+  }, [accounts]);
+
+  const visibleAccounts = useMemo(() => accounts.filter(a => !a.isHidden), [accounts]);
+
+  const txTotal = useMemo(
+    () => transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
 
   // Memoize chart data to prevent unnecessary recalculations on re-renders
   const chartData = useMemo(() => 
@@ -223,6 +299,13 @@ export default function Insights() {
   }, [spendingSummary?.categoryBreakdown]);
 
   const isFinancialEnabled = plaidStatus?.enabled && plaidStatus?.configured;
+
+  const txDaysOptions = [
+    { value: "7", label: "7 days" },
+    { value: "14", label: "14 days" },
+    { value: "30", label: "30 days" },
+    { value: "90", label: "90 days" },
+  ];
 
   return (
     <AppLayout>
@@ -472,11 +555,25 @@ export default function Insights() {
         {isFinancialEnabled && (
           <Card className="glass-card border-white/20 overflow-hidden">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-emerald-500" />
-                Spending Breakdown
-              </CardTitle>
-              <CardDescription>Where your money is going</CardDescription>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="w-5 h-5 text-emerald-500" />
+                    Financial Insights
+                  </CardTitle>
+                  <CardDescription>Spending breakdown and transaction history</CardDescription>
+                </div>
+                <Select value={txDays} onValueChange={(v) => { setTxDays(v); setSelectedAccount("all"); setSelectedCategory("all"); }}>
+                  <SelectTrigger className="w-28 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {txDaysOptions.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               {spendingLoading ? (
@@ -493,38 +590,40 @@ export default function Insights() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="glass-card p-4 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-emerald-500">
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="glass-card p-3 rounded-xl text-center">
+                      <p className="text-xl font-bold text-emerald-500">
                         ${spendingSummary.totalSpending.toFixed(2)}
                       </p>
                       <p className="text-xs text-muted-foreground">Total Spent</p>
                     </div>
-                    <div className="glass-card p-4 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-primary">
+                    <div className="glass-card p-3 rounded-xl text-center">
+                      <p className="text-xl font-bold text-primary">
                         {spendingSummary.transactionCount}
                       </p>
                       <p className="text-xs text-muted-foreground">Transactions</p>
                     </div>
-                    <div className="glass-card p-4 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-cyan-500">
+                    <div className="glass-card p-3 rounded-xl text-center">
+                      <p className="text-xl font-bold text-cyan-500">
                         ${(spendingSummary.totalSpending / spendingSummary.transactionCount).toFixed(2)}
                       </p>
-                      <p className="text-xs text-muted-foreground">Avg per Transaction</p>
+                      <p className="text-xs text-muted-foreground">Avg / Txn</p>
                     </div>
-                    <div className="glass-card p-4 rounded-xl text-center">
-                      <p className="text-2xl font-bold text-violet-500">
+                    <div className="glass-card p-3 rounded-xl text-center">
+                      <p className="text-xl font-bold text-violet-500">
                         {spendingSummary.categoryBreakdown.length}
                       </p>
                       <p className="text-xs text-muted-foreground">Categories</p>
                     </div>
                   </div>
 
+                  {/* Charts */}
                   <div className="grid md:grid-cols-2 gap-6">
                     {spendingChartData.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-muted-foreground mb-4">By Category</h4>
-                        <ResponsiveContainer width="100%" height={240}>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-2">By Category <span className="text-xs opacity-60">(tap to filter)</span></h4>
+                        <ResponsiveContainer width="100%" height={220}>
                           <PieChart>
                             <Pie
                               data={spendingChartData}
@@ -532,18 +631,31 @@ export default function Insights() {
                               nameKey="name"
                               cx="50%"
                               cy="50%"
-                              outerRadius={80}
+                              outerRadius={75}
+                              cursor="pointer"
                               label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                               labelLine={{ stroke: 'rgba(255,255,255,0.3)' }}
+                              onClick={(entry) => {
+                                const cat = entry?.name as string;
+                                setSelectedCategory(prev => prev === cat ? "all" : cat);
+                                const txEl = document.getElementById("tx-browser");
+                                if (txEl) txEl.scrollIntoView({ behavior: "smooth" });
+                              }}
                             >
                               {spendingChartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={entry.fill}
+                                  opacity={selectedCategory === "all" || selectedCategory === entry.name ? 1 : 0.4}
+                                  stroke={selectedCategory === entry.name ? "#fff" : "transparent"}
+                                  strokeWidth={2}
+                                />
                               ))}
                             </Pie>
-                            <Tooltip 
+                            <Tooltip
                               formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(0,0,0,0.8)', 
+                              contentStyle={{
+                                backgroundColor: 'rgba(0,0,0,0.8)',
                                 border: '1px solid rgba(255,255,255,0.2)',
                                 borderRadius: '8px'
                               }}
@@ -555,17 +667,146 @@ export default function Insights() {
 
                     {spendingSummary.topMerchants.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-muted-foreground mb-4">Top Merchants</h4>
+                        <h4 className="text-sm font-medium text-muted-foreground mb-2">Top Merchants</h4>
                         <div className="space-y-2">
                           {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
-                            <div key={i} className="glass-card p-3 rounded-lg">
-                              <p className="text-sm text-foreground break-words">{merchant.merchant}</p>
-                              <div className="flex justify-end mt-1">
-                                <span className="text-sm font-medium text-emerald-500">${merchant.amount.toFixed(2)}</span>
-                              </div>
+                            <div key={i} className="glass-card p-3 rounded-lg flex items-center justify-between gap-2">
+                              <p className="text-sm text-foreground break-words flex-1">{merchant.merchant}</p>
+                              <span className="text-sm font-semibold text-emerald-500 shrink-0">${merchant.amount.toFixed(2)}</span>
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Transaction Browser */}
+                  <div id="tx-browser" className="space-y-3 pt-2 border-t border-white/10">
+                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-emerald-500" />
+                      Transactions
+                    </h4>
+
+                    {/* Filters */}
+                    <div className="flex flex-wrap gap-2">
+                      {visibleAccounts.length > 1 && (
+                        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                          <SelectTrigger className="h-8 text-xs flex-1 min-w-32">
+                            <SelectValue placeholder="All Accounts" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Accounts</SelectItem>
+                            {visibleAccounts.map(a => (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name}{a.mask ? ` ····${a.mask}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {categoryOptions.length > 0 && (
+                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                          <SelectTrigger className="h-8 text-xs flex-1 min-w-36">
+                            <SelectValue placeholder="All Categories" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {categoryOptions.map(c => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {(selectedAccount !== "all" || selectedCategory !== "all") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
+                          onClick={() => { setSelectedAccount("all"); setSelectedCategory("all"); }}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Count + total */}
+                    {!txLoading && transactions.length > 0 && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                        <span>{transactions.length} transaction{transactions.length !== 1 ? "s" : ""}</span>
+                        <span className="font-medium text-emerald-500">${txTotal.toFixed(2)} spent</span>
+                      </div>
+                    )}
+
+                    {/* List */}
+                    {txLoading ? (
+                      <div className="space-y-2">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="glass-card p-3 rounded-lg animate-pulse">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-muted/40" />
+                              <div className="flex-1 space-y-1">
+                                <div className="h-3 bg-muted/40 rounded w-2/3" />
+                                <div className="h-2.5 bg-muted/30 rounded w-1/3" />
+                              </div>
+                              <div className="h-3 bg-muted/40 rounded w-16" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : transactions.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">No transactions match your filters</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                        {transactions.map(tx => {
+                          const isDebit = tx.amount > 0;
+                          return (
+                            <div key={tx.id} className="glass-card p-3 rounded-lg flex items-center gap-3">
+                              <div className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                isDebit ? "bg-red-500/10" : "bg-emerald-500/10"
+                              )}>
+                                {isDebit
+                                  ? <ArrowDownCircle className="w-4 h-4 text-red-400" />
+                                  : <ArrowUpCircle className="w-4 h-4 text-emerald-400" />
+                                }
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">
+                                  {tx.merchantName || tx.name}
+                                </p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(tx.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </span>
+                                  {tx.primaryCategory && (
+                                    <span className="text-xs bg-white/10 text-muted-foreground rounded px-1.5 py-0.5">
+                                      {tx.primaryCategory}
+                                    </span>
+                                  )}
+                                  {tx.pending && (
+                                    <span className="text-xs bg-yellow-500/20 text-yellow-400 rounded px-1.5 py-0.5 flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5" />Pending
+                                    </span>
+                                  )}
+                                </div>
+                                {accountNameMap[tx.accountId] && (
+                                  <p className="text-xs text-muted-foreground/60 truncate">{accountNameMap[tx.accountId]}</p>
+                                )}
+                              </div>
+                              <span className={cn(
+                                "text-sm font-semibold shrink-0",
+                                isDebit ? "text-red-400" : "text-emerald-400"
+                              )}>
+                                {isDebit ? "-" : "+"}${Math.abs(tx.amount).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

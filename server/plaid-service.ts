@@ -1,7 +1,7 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode, TransactionsSyncRequest } from 'plaid';
 import { db } from './db';
 import { plaidItems, financialAccounts, financialTransactions } from '@shared/schema';
-import { eq, and, desc, gte, inArray } from 'drizzle-orm';
+import { eq, and, desc, gte, inArray, sql } from 'drizzle-orm';
 
 const PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID;
 const PLAID_SECRET = process.env.PLAID_SECRET;
@@ -283,6 +283,52 @@ export async function getRecentTransactions(userId: string, days: number = 7, li
     ))
     .orderBy(desc(financialTransactions.date))
     .limit(limit);
+}
+
+export async function getFilteredTransactions(
+  userId: string,
+  options: { days?: number; limit?: number; accountId?: string; category?: string } = {}
+) {
+  const { days = 30, limit = 200, accountId, category } = options;
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const conditions = [
+    eq(financialTransactions.userId, userId),
+    gte(financialTransactions.date, since),
+  ];
+  if (accountId) conditions.push(eq(financialTransactions.accountId, accountId));
+  if (category) conditions.push(eq(financialTransactions.primaryCategory, category));
+
+  return db.select({
+    id: financialTransactions.id,
+    accountId: financialTransactions.accountId,
+    amount: financialTransactions.amount,
+    date: financialTransactions.date,
+    name: financialTransactions.name,
+    merchantName: financialTransactions.merchantName,
+    primaryCategory: financialTransactions.primaryCategory,
+    pending: financialTransactions.pending,
+    paymentChannel: financialTransactions.paymentChannel,
+  })
+    .from(financialTransactions)
+    .where(and(...conditions))
+    .orderBy(desc(financialTransactions.date))
+    .limit(limit);
+}
+
+export async function getTransactionCategories(userId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ category: financialTransactions.primaryCategory })
+    .from(financialTransactions)
+    .where(
+      and(
+        eq(financialTransactions.userId, userId),
+        sql`${financialTransactions.primaryCategory} IS NOT NULL`
+      )
+    )
+    .orderBy(financialTransactions.primaryCategory);
+  return rows.map(r => r.category!).filter(Boolean);
 }
 
 export async function getSpendingSummary(userId: string, days: number = 7) {

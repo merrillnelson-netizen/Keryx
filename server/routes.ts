@@ -4190,13 +4190,28 @@ Respond with JSON only.`
     }
     try {
       const user = req.user as User;
-      const days = parseInt(req.query.days as string) || 7;
-      const limit = parseInt(req.query.limit as string) || 50;
-      
-      const transactions = await plaidService.getRecentTransactions(user.id, days, limit);
+      const days = parseInt(req.query.days as string) || 30;
+      const limit = parseInt(req.query.limit as string) || 200;
+      const accountId = (req.query.accountId as string) || undefined;
+      const category = (req.query.category as string) || undefined;
+
+      const transactions = await plaidService.getFilteredTransactions(user.id, { days, limit, accountId, category });
       res.json(transactions);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to get transactions", error);
+    }
+  });
+
+  app.get("/api/plaid/transaction-categories", requireAuth, async (req, res) => {
+    if (!isPlaidFeatureEnabled()) {
+      return res.json([]);
+    }
+    try {
+      const user = req.user as User;
+      const categories = await plaidService.getTransactionCategories(user.id);
+      res.json(categories);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get transaction categories", error);
     }
   });
 
