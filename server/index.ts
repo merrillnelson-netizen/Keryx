@@ -9,6 +9,7 @@ import { pool } from "./db";
 import { storage } from "./storage";
 import { processMessageBatch } from "./message-ai-service";
 import { sendPushToAllUserDevices } from "./push-service";
+import { handleWebhookEvent, isStripeConfigured } from "./stripe-service";
 
 /**
  * Validate required environment variables on startup
@@ -47,6 +48,24 @@ app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
+
+// Stripe webhook must use raw body parser — registered BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
+  if (!isStripeConfigured()) {
+    return res.status(400).json({ error: 'Stripe not configured' });
+  }
+  const sig = req.headers['stripe-signature'] as string;
+  if (!sig) {
+    return res.status(400).json({ error: 'Missing stripe-signature header' });
+  }
+  try {
+    await handleWebhookEvent(req.body as Buffer, sig);
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Stripe webhook error:', err);
+    res.status(400).json({ error: `Webhook error: ${err instanceof Error ? err.message : 'Unknown error'}` });
+  }
+});
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));

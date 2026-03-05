@@ -19,6 +19,8 @@ import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, ty
 import { isPushConfigured, getVapidPublicKey, sendPushNotification, sendPushToAllUserDevices } from "./push-service";
 import { parseAndImportNDJSON } from "./sms-import-service";
 import { processMessageBatch } from "./message-ai-service";
+import { requireTier, requireMemoryQuota } from "./tier-middleware";
+import { isStripeConfigured, createCheckoutSession, createPortalSession } from "./stripe-service";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -455,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Now includes mood detection and people tracking
    * Requires authentication
    */
-  app.post("/api/memories", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/memories", requireAuth, requireMemoryQuota(), aiLimiter, async (req, res) => {
     try {
       const { 
         memoryText, 
@@ -571,6 +573,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // These are completely decoupled from the response
       setImmediate(() => {
         try {
+          // Increment monthly memory count for free-tier users
+          if (user.subscriptionTier === 'free') {
+            const currentCount = user.memoriesThisMonth || 0;
+            storage.updateUser(user.id, { memoriesThisMonth: currentCount + 1 }).catch(err =>
+              console.error("Failed to increment memory count:", err)
+            );
+          }
+
           // Track people mentions in the people table
           if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
             Promise.all(
@@ -774,7 +784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Detects financial queries and routes them to financial analysis
    * Requires authentication
    */
-  app.post("/api/memories/search", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/memories/search", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const { queryText } = req.body;
       const user = req.user as User;
@@ -926,7 +936,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Routes to record or query based on action type
    * Enriches memories with geolocation and device context
    */
-  app.post("/api/companion/action", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/companion/action", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const payload = mcpPayloadSchema.parse(req.body);
       const user = req.user as User;
@@ -2011,7 +2021,7 @@ Respond with JSON only.`
     }
   });
 
-  app.post("/api/people/ai-search", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/people/ai-search", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = aiSearchSchema.safeParse(req.body);
@@ -2280,7 +2290,7 @@ Respond with JSON only.`
    * Body: { question?: string, days?: number }
    * Requires authentication
    */
-  app.post("/api/insights", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/insights", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = insightsQuerySchema.safeParse(req.body);
@@ -2364,7 +2374,7 @@ Respond with JSON only.`
    * reminders, mood trends, email highlights, and an encouraging affirmation.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/briefing", requireAuth, aiLimiter, async (req, res) => {
+  app.get("/api/briefing", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const localHour = parseInt(req.query.localHour as string) || new Date().getHours();
@@ -2645,7 +2655,7 @@ Respond with JSON only.`
    * to create news-style stories about the user's personal ecosystem.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/news-feed", requireAuth, aiLimiter, async (req, res) => {
+  app.get("/api/news-feed", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const forceRefresh = req.query.refresh === 'true';
@@ -2883,7 +2893,7 @@ Respond with JSON only.`
    * Examples: travel tips for upcoming trips, local news for destinations, product reviews.
    * Requires TAVILY_API_KEY to be configured.
    */
-  app.get("/api/discoveries", requireAuth, aiLimiter, async (req, res) => {
+  app.get("/api/discoveries", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const tavilyApiKey = process.env.TAVILY_API_KEY;
@@ -3116,7 +3126,7 @@ Respond with JSON only.`
    * and returns actionable alerts.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/alerts", requireAuth, aiLimiter, async (req, res) => {
+  app.get("/api/alerts", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 14;
@@ -3982,7 +3992,7 @@ Respond with JSON only.`
   /**
    * POST /api/plaid/link-token - Create a Plaid Link token to start the connection flow
    */
-  app.post("/api/plaid/link-token", requireAuth, async (req, res) => {
+  app.post("/api/plaid/link-token", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
@@ -4017,7 +4027,7 @@ Respond with JSON only.`
    * POST /api/plaid/exchange-token - Exchange public token for access token after user connects
    * Note: Feature is currently disabled
    */
-  app.post("/api/plaid/exchange-token", requireAuth, async (req, res) => {
+  app.post("/api/plaid/exchange-token", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
@@ -4067,7 +4077,7 @@ Respond with JSON only.`
    * GET /api/plaid/institutions - Get user's connected financial institutions
    * Note: Feature is currently disabled - returns empty array
    */
-  app.get("/api/plaid/institutions", requireAuth, async (req, res) => {
+  app.get("/api/plaid/institutions", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
@@ -4084,7 +4094,7 @@ Respond with JSON only.`
    * DELETE /api/plaid/institutions/:itemId - Disconnect a financial institution
    * Note: Feature is currently disabled
    */
-  app.delete("/api/plaid/institutions/:itemId", requireAuth, async (req, res) => {
+  app.delete("/api/plaid/institutions/:itemId", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
@@ -4104,7 +4114,7 @@ Respond with JSON only.`
    * GET /api/plaid/accounts - Get user's financial accounts
    * Note: Feature is currently disabled - returns empty array
    */
-  app.get("/api/plaid/accounts", requireAuth, async (req, res) => {
+  app.get("/api/plaid/accounts", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
@@ -4121,7 +4131,7 @@ Respond with JSON only.`
    * PATCH /api/plaid/accounts/:accountId/visibility - Hide/show an account
    * Note: Feature is currently disabled
    */
-  app.patch("/api/plaid/accounts/:accountId/visibility", requireAuth, async (req, res) => {
+  app.patch("/api/plaid/accounts/:accountId/visibility", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
@@ -4146,7 +4156,7 @@ Respond with JSON only.`
    * POST /api/plaid/sync/:itemId - Sync transactions for an institution
    * Note: Feature is currently disabled
    */
-  app.post("/api/plaid/sync/:itemId", requireAuth, async (req, res) => {
+  app.post("/api/plaid/sync/:itemId", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return sendErrorResponse(res, 503, "Financial integration is not available");
     }
@@ -4187,7 +4197,7 @@ Respond with JSON only.`
    * GET /api/plaid/transactions - Get recent transactions
    * Note: Feature is currently disabled - returns empty array
    */
-  app.get("/api/plaid/transactions", requireAuth, async (req, res) => {
+  app.get("/api/plaid/transactions", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
@@ -4205,7 +4215,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/plaid/transaction-categories", requireAuth, async (req, res) => {
+  app.get("/api/plaid/transaction-categories", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json([]);
     }
@@ -4222,7 +4232,7 @@ Respond with JSON only.`
    * GET /api/plaid/spending-summary - Get spending summary for briefings
    * Note: Feature is currently disabled - returns empty summary
    */
-  app.get("/api/plaid/spending-summary", requireAuth, async (req, res) => {
+  app.get("/api/plaid/spending-summary", requireAuth, requireTier('life_os'), async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json({ totalSpent: 0, transactionCount: 0, categories: {} });
     }
@@ -4241,7 +4251,7 @@ Respond with JSON only.`
    * POST /api/plaid/query - Ask AI questions about financial data
    * Provides natural language answers about spending patterns and balances
    */
-  app.post("/api/plaid/query", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/plaid/query", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     if (!isPlaidFeatureEnabled()) {
       return res.json({ 
         answer: "Financial integration is not enabled. Please connect a bank account in Settings.",
@@ -6024,6 +6034,78 @@ Respond with JSON only.`
       }
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to process messages", error);
+    }
+  });
+
+  /**
+   * GET /api/billing/status - Returns current subscription info for the authenticated user
+   */
+  app.get("/api/billing/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const isFoundingMember = !user.currentPeriodEnd && user.subscriptionTier !== 'free';
+      const memoriesLimit = user.subscriptionTier === 'free' ? 100 : null;
+      res.json({
+        tier: user.subscriptionTier,
+        status: user.subscriptionStatus,
+        memoriesThisMonth: user.memoriesThisMonth || 0,
+        memoriesLimit,
+        currentPeriodEnd: user.currentPeriodEnd || null,
+        isFoundingMember,
+        stripeCustomerId: user.stripeCustomerId || null,
+        stripeConfigured: isStripeConfigured(),
+        enforcementActive: process.env.BILLING_ENFORCEMENT === 'true',
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get billing status", error);
+    }
+  });
+
+  /**
+   * POST /api/billing/checkout - Create a Stripe Checkout session for upgrading
+   * Body: { tier: 'pro' | 'life_os', successUrl: string, cancelUrl: string }
+   */
+  app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+    try {
+      if (!isStripeConfigured()) {
+        return res.status(503).json({ error: 'Stripe not configured', billingNotReady: true });
+      }
+      const user = req.user as User;
+      const { tier, successUrl, cancelUrl } = req.body;
+      if (!['pro', 'life_os'].includes(tier)) {
+        return res.status(400).json({ error: 'Invalid tier. Must be pro or life_os' });
+      }
+      const priceId = tier === 'pro' ? process.env.STRIPE_PRICE_PRO! : process.env.STRIPE_PRICE_LIFE_OS!;
+      const url = await createCheckoutSession({
+        userId: user.id,
+        username: user.username,
+        priceId,
+        successUrl: successUrl || `${req.headers.origin}/billing?success=true`,
+        cancelUrl: cancelUrl || `${req.headers.origin}/billing?canceled=true`,
+      });
+      res.json({ url });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create checkout session", error);
+    }
+  });
+
+  /**
+   * POST /api/billing/portal - Create a Stripe Customer Portal session for managing subscription
+   */
+  app.post("/api/billing/portal", requireAuth, async (req, res) => {
+    try {
+      if (!isStripeConfigured()) {
+        return res.status(503).json({ error: 'Stripe not configured', billingNotReady: true });
+      }
+      const user = req.user as User;
+      if (!user.stripeCustomerId) {
+        return res.status(400).json({ error: 'No Stripe customer record found. Please upgrade first.' });
+      }
+      const returnUrl = `${req.headers.origin}/billing`;
+      const url = await createPortalSession(user.stripeCustomerId, returnUrl);
+      res.json({ url });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create portal session", error);
     }
   });
 

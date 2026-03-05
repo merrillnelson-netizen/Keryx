@@ -32,6 +32,7 @@ import Reminders from "@/pages/reminders";
 import ShowcasePage from "@/pages/showcase";
 import Messages from "@/pages/messages";
 import ShareImport from "@/pages/share-import";
+import Billing from "@/pages/billing";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -184,6 +185,9 @@ function Router() {
       </Route>
       <Route path="/share-import">
         {() => <ProtectedRoute component={ShareImport} />}
+      </Route>
+      <Route path="/billing">
+        {() => <ProtectedRoute component={Billing} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

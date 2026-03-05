@@ -65,6 +65,13 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  subscriptionTier: text("subscription_tier").default('free').notNull(),
+  subscriptionStatus: text("subscription_status").default('active').notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  memoriesThisMonth: integer("memories_this_month").default(0).notNull(),
+  memoriesMonthStart: timestamp("memories_month_start"),
 });
 
 /**

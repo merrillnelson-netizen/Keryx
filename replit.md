@@ -26,6 +26,19 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Rate Limiting**: Per-user rate limiting on AI routes.
 - **Environment**: Validation for critical environment variables.
 
+### Monetization (Stripe — Phase 1: Built, Enforcement Off)
+- **Tiers**: Free (100 memories/month), Pro ($12/mo), Life OS ($24/mo)
+- **Enforcement toggle**: `BILLING_ENFORCEMENT=false` env var — all routes pass through when false; flip to `true` when ready to go live
+- **Stripe service**: `server/stripe-service.ts` — checkout sessions, customer portal, webhook handler
+- **Tier middleware**: `server/tier-middleware.ts` — `requireTier()` and `requireMemoryQuota()` Express middlewares
+- **Route gating**: Pro routes: `/api/briefing`, `/api/news-feed`, `/api/alerts`, `/api/insights`, `/api/memories/search`, `/api/people/ai-search`; Life OS routes: `/api/discoveries`, all `/api/plaid/*` (except status), `/api/companion/action`
+- **Webhook**: `POST /api/stripe/webhook` registered BEFORE `express.json()` in `server/index.ts` using `express.raw()` for HMAC validation
+- **Billing routes**: `GET /api/billing/status`, `POST /api/billing/checkout`, `POST /api/billing/portal`
+- **Frontend**: `client/src/pages/billing.tsx` (3-tier pricing page), `client/src/components/upgrade-prompt.tsx`, billing card in settings
+- **Existing users**: All 40 existing users grandfathered to Life OS permanently (`current_period_end=NULL` = never expires)
+- **To go live**: Add 5 Stripe env vars + set `BILLING_ENFORCEMENT=true` — no code changes needed
+- **Founding member coupon**: Create Stripe coupon "FOUNDING8" (33% off Life OS forever, max 50 redemptions)
+
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
 - **Schema**: Includes tables for `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals`, `reminders`, `messageConversations`, `messages`, `messageImports`.

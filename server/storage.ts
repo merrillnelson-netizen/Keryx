@@ -30,6 +30,9 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<User>): Promise<User>;
+  getMonthlyMemoryCount(userId: string, since: Date): Promise<number>;
+  getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
 
   // Memory/Log Entries (user-scoped)
   getLogEntries(userId: string, limit?: number, offset?: number): Promise<LogEntry[]>;
@@ -267,6 +270,44 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error creating user:', error);
       throw new Error(`Failed to create user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async updateUser(id: string, data: Partial<User>): Promise<User> {
+    try {
+      const [updated] = await db
+        .update(users)
+        .set(data)
+        .where(eq(users.id, id))
+        .returning();
+      if (!updated) throw new Error('User not found');
+      return updated;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw new Error(`Failed to update user: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async getMonthlyMemoryCount(userId: string, since: Date): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(logEntries)
+        .where(and(eq(logEntries.userId, userId), gte(logEntries.timestamp, since)));
+      return result[0]?.count ?? 0;
+    } catch (error) {
+      console.error('Error getting monthly memory count:', error);
+      throw new Error(`Failed to get monthly memory count: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.stripeCustomerId, stripeCustomerId));
+      return user || undefined;
+    } catch (error) {
+      console.error('Error fetching user by Stripe customer ID:', error);
+      throw new Error(`Failed to retrieve user by Stripe customer ID: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
