@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { 
   Sun, 
   Moon, 
@@ -18,7 +20,10 @@ import {
   RefreshCw,
   Loader2,
   Mail,
-  Wallet
+  Wallet,
+  Crown,
+  X,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
@@ -96,6 +101,63 @@ interface AlertsResponse {
   periodDays: number;
 }
 
+function FoundingMemberBanner() {
+  const [, navigate] = useLocation();
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem('keryx-founding-dismissed') === 'true'
+  );
+
+  const { data: billing } = useQuery<{ enforcementActive: boolean; tier: string }>({
+    queryKey: ["/api/billing/status"],
+    staleTime: 60_000,
+  });
+
+  if (dismissed || billing?.enforcementActive) return null;
+
+  const handleDismiss = () => {
+    localStorage.setItem('keryx-founding-dismissed', 'true');
+    setDismissed(true);
+  };
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-yellow-500/30 bg-gradient-to-r from-yellow-950/60 via-amber-950/40 to-yellow-950/60 p-4">
+      <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-amber-500/5 pointer-events-none" />
+      <button
+        onClick={handleDismiss}
+        className="absolute top-3 right-3 text-yellow-400/60 hover:text-yellow-300 transition-colors"
+        aria-label="Dismiss"
+      >
+        <X className="w-4 h-4" />
+      </button>
+      <div className="flex items-start gap-3 pr-6">
+        <div className="w-9 h-9 rounded-xl bg-yellow-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Crown className="w-5 h-5 text-yellow-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-yellow-300">
+            Founding Member offer — lock in $8/month before we launch
+          </p>
+          <p className="text-xs text-yellow-400/80 mt-0.5 leading-relaxed">
+            Keryx is transitioning to a paid service soon. Early users can lock in
+            <strong className="text-yellow-300"> Life OS for $8/mo forever</strong> — that's 33% off — using
+            code <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
+            Only 50 spots available.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => navigate("/billing")}
+          className="flex-shrink-0 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 text-yellow-300 text-xs h-8 px-3 gap-1"
+          variant="ghost"
+        >
+          See plans
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   // Custom queryFn to preserve full response with metadata
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -139,6 +201,9 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
+        {/* Founding Member Banner */}
+        <FoundingMemberBanner />
+
         {/* Header with Refresh */}
         <div className="glass-card p-6 rounded-2xl">
           <div className="flex items-center justify-between">
