@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
 import ContextualDiscoveries from "@/components/contextual-discoveries";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 interface MorningBriefing {
   greeting: string;
@@ -373,7 +374,9 @@ export default function Dashboard() {
         <PendingActions />
 
         {/* Personal News Feed */}
-        <ContextualDiscoveries />
+        <ErrorBoundary fallback={null}>
+          <ContextualDiscoveries />
+        </ErrorBoundary>
 
         {/* Pattern Alerts */}
         <Card className="glass-card border-white/20">

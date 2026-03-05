@@ -69,6 +69,11 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Lightweight Memory Queries**: Excludes heavy fields for AI prompt assembly.
 - **Frontend Query Caching**: `staleTime` configured for major queries.
 
+### Code Quality Notes
+- **Deleted unused components**: `mobile-layout.tsx`, `sidebar.tsx`, `command-examples.tsx`, `recent-activity.tsx`, `upgrade-prompt.tsx` (all confirmed unused, not imported anywhere)
+- **Parallel embeddings**: `server/message-ai-service.ts` now generates embeddings in parallel via `Promise.allSettled` instead of sequential `await` loop
+- **Error resilience**: `ContextualDiscoveries` widget in `dashboard.tsx` wrapped with `ErrorBoundary` (fallback=null) so a render failure hides the widget silently without crashing the dashboard
+
 ### Core Features & Design Principles
 - **AI Processing**: OpenAI GPT for metadata extraction and action detection; `text-embedding-3-small` for embeddings.
 - **Voice Processing**: Browser SpeechRecognition API, OpenAI Whisper API for Telegram voice notes.

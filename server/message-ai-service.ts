@@ -46,31 +46,27 @@ export async function processMessageBatch(
 
         const analysis = await analyzeMessageGroup(contextWindow, contactName);
 
-        const messageIds: string[] = [];
-        const updates: Partial<InsertMessage>[] = [];
+        const messageIds = msgs.map(m => m.id);
 
-        for (let j = 0; j < msgs.length; j++) {
-          const msg = msgs[j];
-          messageIds.push(msg.id);
+        const embeddingResults = await Promise.allSettled(
+          msgs.map(msg =>
+            msg.body && msg.body.length > 10
+              ? generateEmbedding(msg.body)
+              : Promise.resolve(undefined)
+          )
+        );
 
-          let embedding: number[] | undefined;
-          if (msg.body && msg.body.length > 10) {
-            try {
-              embedding = await generateEmbedding(msg.body);
-            } catch {
-              // skip embedding on failure
-            }
-          }
-
-          updates.push({
-            topicTag: analysis.topicTag,
-            detectedPeople: analysis.detectedPeople,
-            mood: analysis.mood,
-            moodScore: analysis.moodScore,
-            importance: analysis.importance,
-            embeddingVector: embedding,
-          });
-        }
+        const updates: Partial<InsertMessage>[] = msgs.map((_, j) => ({
+          topicTag: analysis.topicTag,
+          detectedPeople: analysis.detectedPeople,
+          mood: analysis.mood,
+          moodScore: analysis.moodScore,
+          importance: analysis.importance,
+          embeddingVector:
+            embeddingResults[j].status === 'fulfilled'
+              ? (embeddingResults[j] as PromiseFulfilledResult<number[] | undefined>).value
+              : undefined,
+        }));
 
         await storage.markMessagesProcessed(messageIds, updates);
         processed += msgs.length;
