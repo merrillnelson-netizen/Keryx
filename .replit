@@ -39,7 +39,7 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["javascript_openai:1.0.0", "google-calendar:1.0.0", "outlook:1.0.0", "google-mail:1.0.0"]
+integrations = ["javascript_openai:1.0.0", "google-calendar:1.0.0", "outlook:1.0.0", "google-mail:1.0.0", "stripe:1.0.0"]
 
 [userenv]
 
@@ -49,3 +49,5 @@ VAPID_PUBLIC_KEY = "BD5BwsfaBnZZdMf54i5XHbEDcTFHBArSPWDb_ySAkA85OaniAY6txwkLJtvI
 VAPID_PRIVATE_KEY = "T4pOnn_6PUAG7M-US2BUWIQxJufLJlWEbHVSAFRcvaI"
 VITE_GA_MEASUREMENT_ID = "G-9K0CTR39SS"
 BILLING_ENFORCEMENT = "false"
+STRIPE_PRICE_PRO = "price_1T7eqoDDKVwZDmPuOIpTTZdk"
+STRIPE_PRICE_LIFE_OS = "price_1T7eqoDDKVwZDmPuG8hxwzYx"

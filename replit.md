@@ -29,15 +29,19 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 ### Monetization (Stripe — Phase 1: Built, Enforcement Off)
 - **Tiers**: Free (100 memories/month), Pro ($12/mo), Life OS ($24/mo)
 - **Enforcement toggle**: `BILLING_ENFORCEMENT=false` env var — all routes pass through when false; flip to `true` when ready to go live
-- **Stripe service**: `server/stripe-service.ts` — checkout sessions, customer portal, webhook handler
+- **Stripe credentials**: Managed via Replit Stripe integration connector (NOT env vars). `server/stripe-client.ts` fetches keys from `REPLIT_CONNECTORS_HOSTNAME` using `getUncachableStripeClient()`. Never cache the client — tokens expire.
+- **stripe-replit-sync**: Handles managed webhooks, syncs Stripe data to `stripe` schema in PostgreSQL. Init runs on startup in `server/index.ts` (runMigrations → getStripeSync → findOrCreateManagedWebhook → syncBackfill). No manual webhook setup in Stripe Dashboard needed.
+- **Stripe service**: `server/stripe-service.ts` — checkout sessions, customer portal, webhook handler (uses `StripeSync.processWebhook()` for HMAC validation)
 - **Tier middleware**: `server/tier-middleware.ts` — `requireTier()` and `requireMemoryQuota()` Express middlewares
 - **Route gating**: Pro routes: `/api/briefing`, `/api/news-feed`, `/api/alerts`, `/api/insights`, `/api/memories/search`, `/api/people/ai-search`; Life OS routes: `/api/discoveries`, all `/api/plaid/*` (except status), `/api/companion/action`
-- **Webhook**: `POST /api/stripe/webhook` registered BEFORE `express.json()` in `server/index.ts` using `express.raw()` for HMAC validation
+- **Webhook**: `POST /api/stripe/webhook` registered BEFORE `express.json()` in `server/index.ts` using `express.raw()`
 - **Billing routes**: `GET /api/billing/status`, `POST /api/billing/checkout`, `POST /api/billing/portal`
-- **Frontend**: `client/src/pages/billing.tsx` (3-tier pricing page), `client/src/components/upgrade-prompt.tsx`, billing card in settings
-- **Existing users**: All 40 existing users grandfathered to Life OS permanently (`current_period_end=NULL` = never expires)
-- **To go live**: Add 5 Stripe env vars + set `BILLING_ENFORCEMENT=true` — no code changes needed
-- **Founding member coupon**: Create Stripe coupon "FOUNDING8" (33% off Life OS forever, max 50 redemptions)
+- **Frontend**: `client/src/pages/billing.tsx` (3-tier pricing page), `client/src/components/upgrade-prompt.tsx`, billing card in settings, founding member banner in `dashboard.tsx`
+- **Products created**: Keryx Pro (`STRIPE_PRICE_PRO`) $12/mo, Keryx Life OS (`STRIPE_PRICE_LIFE_OS`) $24/mo — both set as env vars
+- **FOUNDING8 coupon**: Created in Stripe — 33% off Life OS forever, max 50 redemptions
+- **Seed script**: `scripts/seed-stripe-products.ts` — idempotent, run to recreate products if needed
+- **Existing users**: All grandfathered to Life OS permanently (`current_period_end=NULL` = never expires)
+- **To go live**: Set `BILLING_ENFORCEMENT=true` env var + redeploy — no code changes needed
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).

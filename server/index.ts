@@ -9,7 +9,8 @@ import { pool } from "./db";
 import { storage } from "./storage";
 import { processMessageBatch } from "./message-ai-service";
 import { sendPushToAllUserDevices } from "./push-service";
-import { handleWebhookEvent, isStripeConfigured } from "./stripe-service";
+import { handleWebhookEvent } from "./stripe-service";
+import { getStripeSync } from "./stripe-client";
 
 /**
  * Validate required environment variables on startup
@@ -50,10 +51,8 @@ app.use(helmet({
 }));
 
 // Stripe webhook must use raw body parser — registered BEFORE express.json()
+// stripe-replit-sync manages the webhook secret automatically via findOrCreateManagedWebhook
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: Request, res: Response) => {
-  if (!isStripeConfigured()) {
-    return res.status(400).json({ error: 'Stripe not configured' });
-  }
   const sig = req.headers['stripe-signature'] as string;
   if (!sig) {
     return res.status(400).json({ error: 'Missing stripe-signature header' });
@@ -138,6 +137,31 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize Stripe schema, managed webhook, and backfill sync
+  // Runs in background — does not block server startup
+  (async () => {
+    try {
+      const { runMigrations } = await import('stripe-replit-sync');
+      await runMigrations({ databaseUrl: process.env.DATABASE_URL! });
+      log('[stripe] Schema migrations complete');
+
+      const stripeSync = await getStripeSync();
+      const domain = process.env.REPLIT_DOMAINS?.split(',')[0];
+      if (domain) {
+        const webhook = await stripeSync.findOrCreateManagedWebhook(
+          `https://${domain}/api/stripe/webhook`
+        );
+        log(`[stripe] Managed webhook active: ${webhook?.url ?? 'configured'}`);
+      }
+
+      stripeSync.syncBackfill()
+        .then(() => log('[stripe] Backfill sync complete'))
+        .catch((err: any) => console.error('[stripe] Backfill sync error (non-fatal):', err));
+    } catch (err) {
+      console.warn('[stripe] Initialization skipped (Stripe not yet connected):', err instanceof Error ? err.message : err);
+    }
+  })();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
