@@ -6076,12 +6076,13 @@ Respond with JSON only.`
         return res.status(400).json({ error: 'Invalid tier. Must be pro or life_os' });
       }
       const priceId = tier === 'pro' ? process.env.STRIPE_PRICE_PRO! : process.env.STRIPE_PRICE_LIFE_OS!;
+      const appBase = req.headers.origin || `${req.protocol}://${req.get('host')}`;
       const url = await createCheckoutSession({
         userId: user.id,
         username: user.username,
         priceId,
-        successUrl: successUrl || `${req.headers.origin}/billing?success=true`,
-        cancelUrl: cancelUrl || `${req.headers.origin}/billing?canceled=true`,
+        successUrl: successUrl || `${appBase}/billing?success=true`,
+        cancelUrl: cancelUrl || `${appBase}/billing?canceled=true`,
       });
       res.json({ url });
     } catch (error) {
@@ -6101,8 +6102,8 @@ Respond with JSON only.`
       if (!user.stripeCustomerId) {
         return res.status(400).json({ error: 'No Stripe customer record found. Please upgrade first.' });
       }
-      const returnUrl = `${req.headers.origin}/billing`;
-      const url = await createPortalSession(user.stripeCustomerId, returnUrl);
+      const appBase = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+      const url = await createPortalSession(user.stripeCustomerId, `${appBase}/billing`);
       res.json({ url });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to create portal session", error);

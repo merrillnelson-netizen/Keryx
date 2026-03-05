@@ -1,5 +1,4 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +86,6 @@ function tierBadgeClass(tier: string) {
 
 export default function Billing() {
   const { toast } = useToast();
-  const [, navigate] = useLocation();
 
   const { data: billing, isLoading } = useQuery<BillingStatus>({
     queryKey: ["/api/billing/status"],

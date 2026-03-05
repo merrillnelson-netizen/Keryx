@@ -1,11 +1,16 @@
 import Stripe from 'stripe';
 import { storage } from './storage';
 
+let _stripeInstance: Stripe | null = null;
+
 function getStripeClient(): Stripe | null {
   if (!process.env.STRIPE_SECRET_KEY) return null;
-  return new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: '2025-01-27.acacia',
-  });
+  if (!_stripeInstance) {
+    _stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2026-02-25.clover',
+    });
+  }
+  return _stripeInstance;
 }
 
 export function isStripeConfigured(): boolean {
@@ -23,10 +28,10 @@ function getTierFromPriceId(priceId: string): 'pro' | 'life_os' | null {
   return null;
 }
 
-async function getUserByStripeCustomerId(stripeCustomerId: string) {
+async function resolveUserIdFromCustomer(stripeCustomerId: string): Promise<string | undefined> {
   try {
-    const result = await storage.getUserByStripeCustomerId(stripeCustomerId);
-    return result;
+    const user = await storage.getUserByStripeCustomerId(stripeCustomerId);
+    return user?.id;
   } catch {
     return undefined;
   }
@@ -114,11 +119,13 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const userId = sub.metadata?.userId || (await resolveUserIdFromCustomer(sub.customer as string));
       if (!userId) break;
 
+      // In Stripe API 2026, current_period_end lives on the subscription item
+      const periodEnd = sub.items.data[0]?.current_period_end;
       await storage.updateUser(userId, {
         subscriptionTier: tier,
         subscriptionStatus: sub.status as string,
         stripeSubscriptionId: sub.id,
-        currentPeriodEnd: new Date((sub as any).current_period_end * 1000),
+        currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       });
       break;
     }
@@ -131,8 +138,8 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       await storage.updateUser(userId, {
         subscriptionTier: 'free',
         subscriptionStatus: 'canceled',
-        stripeSubscriptionId: null as any,
-        currentPeriodEnd: null as any,
+        stripeSubscriptionId: null,
+        currentPeriodEnd: null,
       });
       break;
     }
@@ -149,23 +156,10 @@ export async function handleWebhookEvent(rawBody: Buffer, signature: string): Pr
       const invoice = event.data.object as Stripe.Invoice;
       const userId = await resolveUserIdFromCustomer(invoice.customer as string);
       if (!userId) break;
-      const sub = invoice.subscription
-        ? await (getStripeClient()!.subscriptions.retrieve(invoice.subscription as string))
-        : null;
-      await storage.updateUser(userId, {
-        subscriptionStatus: 'active',
-        ...(sub ? { currentPeriodEnd: new Date((sub as any).current_period_end * 1000) } : {}),
-      });
+      // Status update only — period end is refreshed via the subscription.updated event
+      // which fires simultaneously with invoice.payment_succeeded on renewal
+      await storage.updateUser(userId, { subscriptionStatus: 'active' });
       break;
     }
-  }
-}
-
-async function resolveUserIdFromCustomer(stripeCustomerId: string): Promise<string | undefined> {
-  try {
-    const user = await storage.getUserByStripeCustomerId(stripeCustomerId);
-    return user?.id;
-  } catch {
-    return undefined;
   }
 }
