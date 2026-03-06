@@ -934,8 +934,23 @@ Respond with JSON:
  */
 export async function detectCalendarEvent(
   memoryText: string,
-  currentDate: Date = new Date()
+  currentDate: Date = new Date(),
+  userTimezone: string = 'UTC'
 ): Promise<DetectedCalendarEvent> {
+  // Build local date context so AI knows the user's actual day/time
+  const now = currentDate;
+  const localDate = now.toLocaleDateString('en-CA', { timeZone: userTimezone }); // YYYY-MM-DD
+  const localTime = now.toLocaleTimeString('en-US', {
+    timeZone: userTimezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const localDayOfWeek = now.toLocaleDateString('en-US', {
+    timeZone: userTimezone,
+    weekday: 'long',
+  });
+
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -945,26 +960,31 @@ export async function detectCalendarEvent(
           content: `You are an AI assistant that detects future events from natural language.
 Analyze the text to determine if it describes a FUTURE calendar event (meeting, appointment, gathering, call, etc.).
 
-Current date/time context: ${currentDate.toISOString()}
+USER'S LOCAL DATE: ${localDate}
+USER'S LOCAL TIME: ${localTime}
+USER'S DAY OF WEEK: ${localDayOfWeek}
+USER'S TIMEZONE: ${userTimezone}
 
-RULES:
-1. Only detect FUTURE events (not past events or general statements)
-2. If dates are relative ("tomorrow", "next Tuesday", "in 2 weeks"), calculate the actual date
-3. If no specific time is mentioned, use reasonable defaults:
+CRITICAL DATETIME RULES:
+1. Always calculate relative dates (today, tomorrow, Saturday, next week, etc.) from the USER'S LOCAL DATE and DAY OF WEEK shown above — never from UTC.
+2. All datetimes you return MUST be in the user's LOCAL time as plain ISO 8601 WITHOUT a Z suffix or timezone offset (e.g. "2026-03-07T08:00:00" not "2026-03-07T15:00:00Z"). The calendar system will apply the user's timezone automatically.
+3. Only detect FUTURE events (not past events or general statements).
+4. If dates are relative ("tomorrow", "next Tuesday", "in 2 weeks"), calculate the actual date from USER'S LOCAL DATE above.
+5. If no specific time is mentioned, use reasonable defaults:
    - Morning meetings: 9:00 AM
    - Lunch: 12:00 PM  
    - Afternoon: 2:00 PM
    - Dinner: 7:00 PM
    - Default duration: 1 hour
-4. Extract all attendee names mentioned
-5. Extract location if mentioned
+6. Extract all attendee names mentioned.
+7. Extract location if mentioned.
 
 Respond with JSON:
 {
   "detected": true/false,
   "title": "Event title based on context",
-  "startDateTime": "ISO 8601 datetime string",
-  "endDateTime": "ISO 8601 datetime string", 
+  "startDateTime": "YYYY-MM-DDTHH:mm:ss (local time, no Z, no offset)",
+  "endDateTime": "YYYY-MM-DDTHH:mm:ss (local time, no Z, no offset)",
   "attendees": ["name1", "name2"],
   "location": "location if mentioned",
   "description": "Brief context from the memory"

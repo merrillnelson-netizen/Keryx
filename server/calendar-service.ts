@@ -337,36 +337,42 @@ async function createGoogleCalendarEvent(
       return null;
     }
     
-    // Format datetime for Google Calendar: use the original local time string
-    // If startDateTime already has timezone info, use it directly
-    // Otherwise, we need to format it without the Z suffix
-    const formatLocalDateTime = (dateStr: string, date: Date): string => {
-      // If it already has timezone offset (e.g., +07:00), use as-is
+    // Format datetime for Google Calendar: produce a plain local time string
+    // (no Z, no offset) so Google Calendar interprets it in the given timeZone field.
+    const formatLocalDateTime = (dateStr: string, date: Date, tz: string): string => {
+      // If it already has a numeric timezone offset (e.g., +07:00), use as-is
       if (/[+-]\d{2}:\d{2}$/.test(dateStr)) {
         return dateStr;
       }
-      // If it's a plain datetime (no Z, no offset), use as-is
+      // If it's already a plain datetime (no Z, no offset), use as-is
       if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
         return dateStr;
       }
-      // Otherwise, format as local time in YYYY-MM-DDTHH:mm:ss format
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      const seconds = String(date.getSeconds()).padStart(2, '0');
-      return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+      // Z-suffixed UTC datetime — convert to the user's local time in their timezone
+      // using Intl so we don't accidentally use the server's local clock (UTC on Replit)
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).formatToParts(date);
+      const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+      const hour = get('hour') === '24' ? '00' : get('hour'); // midnight edge case
+      return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}:${get('second')}`;
     };
-    
+
     const event: calendar_v3.Schema$Event = {
       summary: title,
       start: {
-        dateTime: formatLocalDateTime(startDateTime, startDate),
+        dateTime: formatLocalDateTime(startDateTime, startDate, userTimezone),
         timeZone: userTimezone,
       },
       end: {
-        dateTime: formatLocalDateTime(endDateTime, endDate),
+        dateTime: formatLocalDateTime(endDateTime, endDate, userTimezone),
         timeZone: userTimezone,
       },
     };

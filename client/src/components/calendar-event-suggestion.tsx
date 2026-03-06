@@ -68,8 +68,10 @@ export default function CalendarEventSuggestion({
 
   const detectMutation = useMutation({
     mutationFn: async () => {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const response = await apiRequest("POST", "/api/calendar/events/detect", {
         memoryText,
+        timezone,
       });
       if (!response.ok) throw new Error("Failed to detect event");
       return response.json();

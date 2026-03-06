@@ -115,6 +115,7 @@ const backfillLimiter = rateLimit({
 // Validation schemas for API endpoints
 const calendarEventDetectSchema = z.object({
   memoryText: z.string().min(1, "Memory text is required").max(5000, "Memory text too long"),
+  timezone: z.string().optional(),
 });
 
 const calendarEventCreateSchema = z.object({
@@ -1567,9 +1568,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validation.success) {
         return sendErrorResponse(res, 400, validation.error.errors[0]?.message || "Invalid request");
       }
-      const { memoryText } = validation.data;
+      const { memoryText, timezone } = validation.data;
 
-      const detectedEvent = await detectCalendarEvent(memoryText);
+      const detectedEvent = await detectCalendarEvent(memoryText, new Date(), timezone ?? 'UTC');
       
       res.json({
         status: 'success',
