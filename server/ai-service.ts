@@ -776,12 +776,24 @@ export async function generateMorningBriefing(
       }).join('\n')}`;
     }
 
+    // Build today's local date context so the AI can correctly label reminders
+    const nowForBriefing = new Date();
+    const briefingLocalDate = nowForBriefing.toLocaleDateString('en-CA', { timeZone: userTimezone }); // YYYY-MM-DD
+    const briefingDayOfWeek = nowForBriefing.toLocaleDateString('en-US', { timeZone: userTimezone, weekday: 'long' });
+    const briefingLocalTime = nowForBriefing.toLocaleTimeString('en-US', { timeZone: userTimezone, hour: 'numeric', minute: '2-digit', hour12: true });
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content: `You are a warm, supportive personal AI assistant generating a ${timeOfDay} briefing for the user${userName ? ` named ${userName}` : ''}. 
+
+TODAY'S DATE (user's local time): ${briefingLocalDate} (${briefingDayOfWeek})
+CURRENT LOCAL TIME: ${briefingLocalTime}
+USER'S TIMEZONE: ${userTimezone}
+
+CRITICAL: Use the TODAY'S DATE above — not UTC — when determining whether a reminder is "today", "tomorrow", or a future date. A reminder due on ${briefingLocalDate} is TODAY. A reminder due the day after is TOMORROW. Never confuse UTC dates with the user's local date.
 
 Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}${activeReminders?.length ? ', and their set reminders' : ''}, create a personalized briefing that:
 
