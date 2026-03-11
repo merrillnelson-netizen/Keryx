@@ -724,12 +724,13 @@ export async function generateMorningBriefing(
       }
     }
 
-    // Format email context if available
+    // Format email context if available — include received date so AI can resolve relative references
     let emailContext = '';
     if (recentEmails && recentEmails.length > 0) {
-      emailContext = `\n\nRECENT EMAILS (last 24-48 hours):\n${recentEmails.map(e => 
-        `From: ${e.from} | Subject: "${e.subject}"\nPreview: ${e.snippet}`
-      ).join('\n\n')}`;
+      emailContext = `\n\nRECENT EMAILS (last 24-48 hours):\n${recentEmails.map(e => {
+        const emailDate = e.date ? formatDateForTimezone(new Date(e.date), userTimezone) : 'unknown date';
+        return `Received: ${emailDate} | From: ${e.from} | Subject: "${e.subject}"\nPreview: ${e.snippet}`;
+      }).join('\n\n')}`;
     }
 
     // Format active projects context
@@ -793,7 +794,11 @@ TODAY'S DATE (user's local time): ${briefingLocalDate} (${briefingDayOfWeek})
 CURRENT LOCAL TIME: ${briefingLocalTime}
 USER'S TIMEZONE: ${userTimezone}
 
-CRITICAL: Use the TODAY'S DATE above — not UTC — when determining whether a reminder is "today", "tomorrow", or a future date. A reminder due on ${briefingLocalDate} is TODAY. A reminder due the day after is TOMORROW. Never confuse UTC dates with the user's local date.
+CRITICAL DATE RULES — READ CAREFULLY:
+1. TODAY is ${briefingLocalDate} (${briefingDayOfWeek}). TOMORROW is the next calendar day. Never confuse UTC with the user's local date.
+2. For REMINDERS listed in the USER-SET REMINDERS section: the due date is already in local time — compare it against TODAY above to determine "today"/"tomorrow"/"this Thursday" etc.
+3. For appointments/events mentioned in EMAILS: each email shows its "Received" date. If an email says "your appointment is tomorrow", calculate from the email's received date, not from today. If an email says "your appointment is on [specific day/date]", use that specific date and compare to TODAY to determine "today"/"tomorrow"/"[day name]".
+4. NEVER label an appointment as "today" unless its date matches ${briefingLocalDate} exactly. If unsure, use the specific day name (e.g., "Thursday") rather than relative terms.
 
 Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}${activeReminders?.length ? ', and their set reminders' : ''}, create a personalized briefing that:
 
