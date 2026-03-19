@@ -1477,34 +1477,39 @@ export async function analyzeGoalProgress(
         {
           role: "system",
           content: `You are an AI assistant that analyzes user memories to track progress toward their goals.
+
+IMPORTANT: "Current Progress" is a manually set tracker (0-100%) showing how far along the user is toward completing the goal — it does NOT represent the actual value of the goal's metric. For example, if the goal is "Achieve a 70% win rate" and progress is 70%, that means the user is 70% of the way through their journey — it does NOT mean they have a 70% win rate. Never confuse the progress percentage with the goal's target metric.
+
 Examine the recent memories and determine:
-1. How much progress has been made toward the goal (0-100%)
+1. What evidence of actual progress exists in the memories (look for real metric data, practice sessions, outcomes)
 2. Which memories show evidence of progress
-3. What achievements have been made
+3. What achievements have been made based on memory evidence
 4. Any blockers or challenges detected
 5. Suggestions for next steps
 
+CRITICAL: Do NOT say the user has "reached" or "achieved" their goal unless the memories clearly show the target metric has been hit. Only say "goal achieved" or "successfully reached" if there is direct evidence in the memories. Be accurate about what the memories actually show.
+
 Respond in JSON format:
 {
-  "progressPercent": <number 0-100>,
-  "summary": "<2-3 sentence summary of progress>",
+  "progressPercent": <number 0-100 — only adjust if memories clearly show significant change; otherwise keep close to current progress>,
+  "summary": "<2-3 sentence summary of actual progress based on memory evidence — be accurate, not congratulatory if goal not yet achieved>",
   "relatedMemoryIndices": [<indices of memories that show progress, 0-based>],
   "achievements": ["<achievement 1>", "<achievement 2>"],
   "blockers": ["<blocker 1>"],
   "suggestions": ["<suggestion 1>", "<suggestion 2>"]
 }
 
-Be encouraging but realistic. Only count clear evidence of progress.`
+Be encouraging but accurate. Only count clear evidence of progress. Never claim the goal is achieved unless memories prove it.`
         },
         {
           role: "user",
           content: `Goal: ${goal.title}
 Description: ${goal.description || 'No description'}
-Current Progress: ${goal.progressPercent}%
+Current Progress (manually tracked, 0-100% of journey — NOT the metric value): ${goal.progressPercent}%
 Milestones:
 ${milestonesContext}
 
-Recent Memories:
+Recent Memories (look here for actual evidence of metric progress):
 ${memoriesContext || 'No recent memories'}`
         }
       ],
