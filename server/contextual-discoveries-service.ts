@@ -77,7 +77,7 @@ interface ExtendedCalendarEvent {
 interface ExtendedFinancialData {
   merchants?: string[];
   categories?: string[];
-  recentTransactions?: Array<{ name: string; amount: number; date?: string; category?: string }>;
+  merchantAggregates?: Array<{ name: string; amount: number; date?: string; category?: string }>;
 }
 
 interface CurrentLocationContext {
@@ -167,9 +167,9 @@ export async function extractSearchableInsights(
     insights.push(...memoryInsights);
   }
 
-  // 4. NOTABLE FINANCIAL TRIGGERS: Only large or unusual transactions
-  if (financialData?.recentTransactions && financialData.recentTransactions.length > 0) {
-    const notableTransactions = financialData.recentTransactions
+  // 4. NOTABLE FINANCIAL TRIGGERS: Only large merchant aggregates (30-day totals, not individual purchases)
+  if (financialData?.merchantAggregates && financialData.merchantAggregates.length > 0) {
+    const notableTransactions = financialData.merchantAggregates
       .filter(t => Math.abs(t.amount) >= LARGE_TRANSACTION_THRESHOLD)
       .slice(0, 3);
 
@@ -322,27 +322,28 @@ function generateFinancialInsight(transaction: { name: string; amount: number; d
   const amount = Math.abs(transaction.amount);
   const merchant = transaction.name.toLowerCase();
   
-  // Only generate insights for specific, meaningful purchases
+  // Only generate insights for specific merchant categories above the threshold
+  // Note: amounts here are 30-day aggregate totals across multiple purchases, not single transactions
   const insightPatterns: Array<{ pattern: RegExp; topics: (merchant: string) => string[]; summary: (merchant: string, amount: number) => string }> = [
     {
       pattern: /amazon|best buy|target|walmart/i,
-      topics: (m) => [`${m} purchase reviews`, 'return policy tips'],
-      summary: (m, a) => `Recent $${a.toFixed(0)} purchase at ${m}`
+      topics: (m) => [`${m} shopping tips`, 'return policy tips'],
+      summary: (m, a) => `$${a.toFixed(0)} total at ${m} this month`
     },
     {
       pattern: /airline|delta|united|american|southwest|flight/i,
-      topics: () => ['flight delay tracking', 'airline seat selection tips'],
-      summary: (m, a) => `Upcoming flight ($${a.toFixed(0)})`
+      topics: () => ['flight tips and travel hacks', 'airline seat selection tips'],
+      summary: (m, a) => `$${a.toFixed(0)} in flight spending this month`
     },
     {
       pattern: /hotel|marriott|hilton|hyatt|airbnb|vrbo/i,
       topics: () => ['hotel check-in tips', 'packing checklist'],
-      summary: (m, a) => `Accommodation booking ($${a.toFixed(0)})`
+      summary: (m, a) => `$${a.toFixed(0)} in accommodation spending this month`
     },
     {
       pattern: /apple|microsoft|software|subscription/i,
-      topics: (m) => [`${m} tips and tricks`, 'getting started guide'],
-      summary: (m, a) => `New software/subscription from ${m}`
+      topics: (m) => [`${m} tips and tricks`, 'managing software subscriptions'],
+      summary: (m, a) => `$${a.toFixed(0)} in software/subscriptions at ${m} this month`
     },
   ];
 

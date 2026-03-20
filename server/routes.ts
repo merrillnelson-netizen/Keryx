@@ -2970,7 +2970,7 @@ Respond with JSON only.`
       
       // Get financial data with transaction details
       const userSettings = await storage.getSettings(user.id);
-      let financialData: { merchants?: string[]; categories?: string[]; recentTransactions?: Array<{ name: string; amount: number; category?: string }> } | undefined;
+      let financialData: { merchants?: string[]; categories?: string[]; merchantAggregates?: Array<{ name: string; amount: number; category?: string }> } | undefined;
       if (isPlaidFeatureEnabled() && userSettings?.plaidEnabled) {
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 30);
@@ -2978,7 +2978,7 @@ Respond with JSON only.`
             financialData = {
               merchants: rawSummary.topMerchants.map(m => m.merchant),
               categories: rawSummary.categoryBreakdown.map(c => c.category),
-              recentTransactions: rawSummary.topMerchants.slice(0, 10).map(m => ({
+              merchantAggregates: rawSummary.topMerchants.slice(0, 10).map(m => ({
                 name: m.merchant,
                 amount: m.amount,
                 category: rawSummary.categoryBreakdown.find(c => c.category)?.category
