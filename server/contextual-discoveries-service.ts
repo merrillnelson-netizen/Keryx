@@ -328,22 +328,22 @@ function generateFinancialInsight(transaction: { name: string; amount: number; d
     {
       pattern: /amazon|best buy|target|walmart/i,
       topics: (m) => [`${m} shopping tips`, 'return policy tips'],
-      summary: (m, a) => `$${a.toFixed(0)} total at ${m} this month`
+      summary: (m, a) => `Total at ${m}: $${a.toFixed(0)} (past 30 days)`
     },
     {
       pattern: /airline|delta|united|american|southwest|flight/i,
       topics: () => ['flight tips and travel hacks', 'airline seat selection tips'],
-      summary: (m, a) => `$${a.toFixed(0)} in flight spending this month`
+      summary: (m, a) => `Total flight spending: $${a.toFixed(0)} (past 30 days)`
     },
     {
       pattern: /hotel|marriott|hilton|hyatt|airbnb|vrbo/i,
       topics: () => ['hotel check-in tips', 'packing checklist'],
-      summary: (m, a) => `$${a.toFixed(0)} in accommodation spending this month`
+      summary: (m, a) => `Total accommodation: $${a.toFixed(0)} (past 30 days)`
     },
     {
       pattern: /apple|microsoft|software|subscription/i,
       topics: (m) => [`${m} tips and tricks`, 'managing software subscriptions'],
-      summary: (m, a) => `$${a.toFixed(0)} in software/subscriptions at ${m} this month`
+      summary: (m, a) => `Total at ${m}: $${a.toFixed(0)} (past 30 days)`
     },
   ];
 
