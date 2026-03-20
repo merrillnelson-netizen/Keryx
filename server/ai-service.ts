@@ -37,7 +37,7 @@ if (process.env.NODE_ENV === 'development') {
   console.log(`[ai-service] OpenAI initialized - using ${hasIntegration ? 'Replit AI Integration' : 'direct API key'}, key present: ${!!apiKey}`);
 }
 
-const openai = new OpenAI({ 
+export const openai = new OpenAI({ 
   apiKey,
   // Only set baseURL when using Replit AI Integration
   ...(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL && { baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL }),

@@ -3,16 +3,18 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder } from "@shared/schema";
 import { z } from "zod";
-import { extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent } from "./ai-service";
+import { openai, extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
 import rateLimit from "express-rate-limit";
 import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpcomingEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
-import { isGmailConnected, getGmailCapabilities } from "./gmail-service";
-import { isOutlookMailConnected } from "./outlook-mail-service";
-import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, type TelegramUpdate } from "./telegram-service";
+import { isGmailConnected, getGmailCapabilities, getRecentEmails } from "./gmail-service";
+import { isOutlookMailConnected, getOutlookRecentEmails } from "./outlook-mail-service";
+import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, sendBriefingToTelegram, sendAlertToTelegram, type TelegramUpdate } from "./telegram-service";
+import { buildLocationContext, formatLocationContextForAI, parseGoogleTakeoutFile, convertToInsertLocation, clusterLocations, detectFrequentPlaces, reverseGeocode } from "./location-service";
+import { getAvailableActionTypes, approveAction, rejectAction, processUserInputForActions } from "./ai-actions-service";
 import * as plaidService from "./plaid-service";
 import { getContextualDiscoveries } from "./contextual-discoveries-service";
 import { detectHighSignalMentions, shouldTriggerAlert, formatHighSignalAlert, type HighSignalMatch } from "./high-signal-service";
@@ -1949,8 +1951,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validPeopleIds = new Set(allPeople.map(p => p.id));
 
-      const openaiModule = await import('openai');
-      const openaiClient = new openaiModule.OpenAI();
+      const openaiClient = openai;
 
       const response = await openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
@@ -2053,8 +2054,7 @@ Respond with JSON only.`
         firstMentioned: p.firstMentioned?.toISOString().split('T')[0] || 'unknown',
       }));
 
-      const openaiModule = await import('openai');
-      const openaiClient = new openaiModule.OpenAI();
+      const openaiClient = openai;
 
       const response = await openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
@@ -2384,7 +2384,6 @@ Respond with JSON only.`
       const queryTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : undefined;
       
       // Cache key based on user's LOCAL date (not UTC) to avoid wrong day boundary
-      const { formatDateForTimezone } = await import('./ai-service');
       const settingsForCache = await storage.getSettings(user.id);
       const briefingTimezone = queryTimezone || settingsForCache?.userTimezone || 'America/Denver';
       const today = formatDateForTimezone(new Date(), briefingTimezone);
@@ -2439,7 +2438,6 @@ Respond with JSON only.`
           if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
             const gmailConnected = await isGmailConnected();
             if (gmailConnected) {
-              const { getRecentEmails, getGmailCapabilities } = await import('./gmail-service');
               const gmailCaps = await getGmailCapabilities();
               if (gmailCaps.canRead) {
                 const emails = await getRecentEmails(10);
@@ -2451,7 +2449,7 @@ Respond with JSON only.`
           if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
             const outlookConnected = await isOutlookMailConnected();
             if (outlookConnected) {
-              const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+
               const emails = await getOutlookRecentEmails(10);
               const mapped = emails.map(e => ({ subject: e.subject, from: e.from, snippet: e.snippet, date: e.date }));
               if (mapped.length > 0) return { emails: mapped, source: 'outlook' };
@@ -2479,7 +2477,7 @@ Respond with JSON only.`
       
       const fetchLocationContext = async (): Promise<string | undefined> => {
         try {
-          const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
+
           const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
             storage.getFrequentPlaces(user.id),
             storage.getRecentLocations(user.id, 7, 50),
@@ -2623,7 +2621,6 @@ Respond with JSON only.`
           try {
             // Telegram notification
             if (sendToTelegram && userSettings?.telegramEnabled && userSettings?.telegramBriefingsEnabled && userSettings?.telegramChatId) {
-              const { sendBriefingToTelegram } = await import('./telegram-service');
               const briefingText = formatBriefingForTelegram(briefing);
               await sendBriefingToTelegram(user.id, briefingText);
             }
@@ -2710,7 +2707,6 @@ Respond with JSON only.`
           if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
             const gmailConnected = await isGmailConnected();
             if (gmailConnected) {
-              const { getRecentEmails } = await import('./gmail-service');
               const emails = await getRecentEmails(10);
               const mapped = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
                 subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
@@ -2721,7 +2717,7 @@ Respond with JSON only.`
           if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
             const outlookConnected = await isOutlookMailConnected();
             if (outlookConnected) {
-              const { getOutlookRecentEmails } = await import('./outlook-mail-service');
+
               const emails = await getOutlookRecentEmails(10);
               return emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
                 subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
@@ -2766,7 +2762,7 @@ Respond with JSON only.`
       
       const fetchLocationContext = async (): Promise<string | undefined> => {
         try {
-          const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
+
           const [frequentPlaces, recentLocations, totalCount] = await Promise.all([
             storage.getFrequentPlaces(user.id),
             storage.getRecentLocations(user.id, 7, 50),
@@ -2955,7 +2951,6 @@ Respond with JSON only.`
         if (gmailConnected) {
           const capabilities = await getGmailCapabilities();
           if (capabilities.canRead) {
-            const { getRecentEmails } = await import('./gmail-service');
             const recentEmails = await getRecentEmails(10);
             emails = recentEmails.map(e => ({
               subject: e.subject,
@@ -3247,7 +3242,6 @@ Respond with JSON only.`
             
             // Telegram notification
             if (userSettings?.telegramEnabled && userSettings?.telegramAlertsEnabled && userSettings?.telegramChatId) {
-              const { sendAlertToTelegram } = await import('./telegram-service');
               const alertsText = formatAlertsForTelegram(alerts);
               await sendAlertToTelegram(user.id, alertsText);
             }
@@ -3556,7 +3550,6 @@ Respond with JSON only.`
    */
   app.get("/api/actions/available", requireAuth, async (req, res) => {
     try {
-      const { getAvailableActionTypes } = await import('./ai-actions-service');
       const actionTypes = await getAvailableActionTypes();
       
       res.json({
@@ -3647,7 +3640,6 @@ Respond with JSON only.`
   app.post("/api/actions/:id/approve", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
-      const { approveAction } = await import('./ai-actions-service');
       
       const result = await approveAction(req.params.id, user.id);
       
@@ -3676,7 +3668,6 @@ Respond with JSON only.`
   app.post("/api/actions/:id/reject", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const { rejectAction } = await import('./ai-actions-service');
       
       const success = await rejectAction(req.params.id, user.id);
       
@@ -3734,7 +3725,6 @@ Respond with JSON only.`
         return sendErrorResponse(res, 400, "userInput is required");
       }
       
-      const { processUserInputForActions } = await import('./ai-actions-service');
       const result = await processUserInputForActions(user.id, userInput, 'manual', undefined, { timezone });
       
       res.json({
@@ -4536,8 +4526,7 @@ Be encouraging but honest. Keep responses concise and actionable.`;
       ];
       
       // Call OpenAI
-      const openai = await import('openai');
-      const client = new openai.OpenAI();
+      const client = openai;
       
       const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -4627,8 +4616,7 @@ Example format:
 
 Return ONLY the JSON array, no other text.`;
 
-      const openai = await import('openai');
-      const client = new openai.OpenAI();
+      const client = openai;
       
       const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -5264,8 +5252,6 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 400, "JSON content is required");
       }
       
-      // Dynamic import of location service
-      const { parseGoogleTakeoutFile, convertToInsertLocation, clusterLocations, detectFrequentPlaces } = await import('./location-service');
       
       // Parse the file
       const parsedLocations = parseGoogleTakeoutFile(jsonContent);
@@ -5320,8 +5306,6 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 400, "Locations array is required");
       }
       
-      // Dynamic import of location service
-      const { clusterLocations, detectFrequentPlaces } = await import('./location-service');
       
       // Generate batch ID
       const importBatchId = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -5488,7 +5472,6 @@ Return ONLY the JSON array, no other text.`;
         return res.json({ success: true, geocoded: 0 });
       }
       
-      const { reverseGeocode } = await import('./location-service');
       
       let geocodedCount = 0;
       for (const place of placesToGeocode.slice(0, 10)) { // Limit to 10 at a time
@@ -5512,7 +5495,6 @@ Return ONLY the JSON array, no other text.`;
     try {
       const user = req.user as User;
       
-      const { buildLocationContext, formatLocationContextForAI } = await import('./location-service');
       
       const [frequentPlacesList, recentLocations, totalCount] = await Promise.all([
         storage.getFrequentPlaces(user.id),
@@ -5771,8 +5753,7 @@ Return ONLY the JSON array, no other text.`;
         lastMessageAt: c.lastMessageAt ? new Date(c.lastMessageAt).toISOString().split('T')[0] : 'unknown',
       }));
 
-      const openaiModule = await import('openai');
-      const openaiClient = new openaiModule.OpenAI();
+      const openaiClient = openai;
 
       const response = await openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
