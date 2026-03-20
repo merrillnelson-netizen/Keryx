@@ -485,29 +485,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.createCategoryIfNotExists(user.id, userProvidedTag);
       }
 
-      // Extract metadata with AI (includes mood and people detection)
-      const extracted = await extractMetadata(memoryText, timezone);
-      
+      // Run AI metadata extraction, embedding generation, and settings fetch in parallel
+      // None of these depend on each other, so parallelizing saves 0.5-1.5 seconds
+      const [extracted, embeddingVector, settingsForCalendar] = await Promise.all([
+        extractMetadata(memoryText, timezone),
+        generateEmbedding(memoryText),
+        storage.getSettings(user.id),
+      ]);
+
       // Use user-provided category or AI extraction
       const topicTag = userProvidedTag || extracted.topicTag;
       const metadataJson = userProvidedTag ? {} : extracted.metadataJson;
 
-      // Generate embedding vector for semantic search
-      const embeddingVector = await generateEmbedding(memoryText);
       const isZeroVector = embeddingVector.every(v => v === 0);
       if (isZeroVector) {
         console.warn("Zero embedding vector - OpenAI may have failed");
       }
 
-      // Try to link to a calendar event if available
+      // Try to link to a calendar event if available (settings already fetched above)
       let calendarEventId: string | undefined;
       let calendarEventTitle: string | undefined;
       let calendarEventAttendees: string[] | undefined;
       let calendarReasoning: string | undefined;
       
       try {
-        const settings = await storage.getSettings(user.id);
-        if (settings?.calendarAutoLink !== false) {
+        if (settingsForCalendar?.calendarAutoLink !== false) {
           const relevantEvent = await findRelevantEvent(new Date());
           if (relevantEvent) {
             calendarEventId = relevantEvent.id;
@@ -518,7 +520,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (calendarError) {
         // Calendar not connected or error - continue without it
-        // Calendar auto-link not available - this is expected when calendar is not connected
       }
 
       // Combine AI reasoning with calendar reasoning

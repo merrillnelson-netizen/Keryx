@@ -256,7 +256,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           if (settings?.voiceResponseEnabled) {
             speak(successMessage);
           }
-        }, 1000);
+        }, 100);
       } catch (onSuccessError) {
         console.error('[saveMutation] Error in onSuccess handler:', onSuccessError);
         isProcessingRef.current = false;

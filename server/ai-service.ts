@@ -227,6 +227,8 @@ If no people are mentioned, return empty array for detectedPeople.`,
         },
       ],
       response_format: { type: "json_object" },
+      max_tokens: 700,
+      temperature: 0,
     });
 
     const result = JSON.parse(response.choices[0].message.content || "{}");
