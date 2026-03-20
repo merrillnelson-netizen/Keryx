@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -189,8 +190,23 @@ function InsightBadge({ insight }: { insight: InsightContext }) {
 }
 
 export default function ContextualDiscoveries() {
+  const forceRefreshRef = useRef(false);
+
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery<DiscoveriesData>({
     queryKey: ["/api/discoveries"],
+    queryFn: async () => {
+      const url = forceRefreshRef.current
+        ? "/api/discoveries?refresh=true"
+        : "/api/discoveries";
+      forceRefreshRef.current = false;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        const text = (await res.text()) || res.statusText;
+        throw new Error(`${res.status}: ${text}`);
+      }
+      const json = await res.json();
+      return (json?.data ?? json) as DiscoveriesData;
+    },
     staleTime: 1000 * 60 * 240,
     refetchOnWindowFocus: false,
   });
@@ -199,6 +215,7 @@ export default function ContextualDiscoveries() {
   const insights = data?.insights || [];
 
   const handleRefresh = () => {
+    forceRefreshRef.current = true;
     queryClient.invalidateQueries({ queryKey: ["/api/discoveries"] });
     refetch();
   };
