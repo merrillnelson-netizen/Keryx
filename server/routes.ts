@@ -5048,7 +5048,7 @@ Return ONLY the JSON array, no other text.`;
       
       const reminder = await storage.createReminder(user.id, parsed.data);
       // Clear briefing cache so next load reflects the new reminder
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.status(201).json(reminder);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to create reminder", error);
@@ -5084,7 +5084,7 @@ Return ONLY the JSON array, no other text.`;
       
       const updated = await storage.updateReminder(req.params.id, user.id, updates);
       // Clear briefing cache so next load reflects the updated reminder
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json(updated);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update reminder", error);
@@ -5100,7 +5100,7 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       // Clear briefing cache so the deleted reminder no longer appears in Focus Areas
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json({ success: true });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to delete reminder", error);
@@ -5116,7 +5116,7 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       // Clear briefing cache so completed reminder is removed from next briefing
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json(completed);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to complete reminder", error);
@@ -5135,7 +5135,7 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       // Clear briefing cache so snoozed reminder reflects updated time
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json(snoozed);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to snooze reminder", error);
@@ -5151,7 +5151,7 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       // Clear briefing cache so dismissed reminder no longer appears
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json(dismissed);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to dismiss reminder", error);
@@ -5167,7 +5167,7 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Reminder not found");
       }
       // Clear briefing cache so unsnoozed reminder reappears in next briefing
-      storage.invalidateAiCache(user.id, 'briefing').catch(() => {});
+      await storage.invalidateAiCache(user.id, 'briefing');
       res.json(unsnoozed);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to unsnooze reminder", error);
