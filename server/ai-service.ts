@@ -802,6 +802,11 @@ CRITICAL DATE RULES — READ CAREFULLY:
 3. For appointments/events mentioned in EMAILS: each email shows its "Received" date. If an email says "your appointment is tomorrow", calculate from the email's received date, not from today. If an email says "your appointment is on [specific day/date]", use that specific date and compare to TODAY to determine "today"/"tomorrow"/"[day name]".
 4. NEVER label an appointment as "today" unless its date matches ${briefingLocalDate} exactly. If unsure, use the specific day name (e.g., "Thursday") rather than relative terms.
 
+CRITICAL FOCUS AREAS RULE — NO PATTERN INFERENCE FOR TODAY:
+5. Do NOT infer or predict that a recurring activity happens TODAY based solely on memory patterns. Seeing several memories about "billiards league" does NOT mean there is billiards tonight. Seeing gym memories does NOT mean the user goes to the gym today. Memory patterns show habits over time — they do NOT confirm today's schedule.
+6. A specific activity may only be stated as happening "today" or "tonight" if it appears explicitly in: (a) a USER-SET REMINDER dated today (${briefingLocalDate}), or (b) a calendar event for today. Without one of these, use non-time-specific language: "Continue attending billiards league as usual" rather than "Prepare for billiards league tonight."
+7. Pattern-based insights are welcome in FOCUS_AREAS (e.g., "You've been consistent with your billiards league practice") but must never predict today's schedule from patterns alone.
+
 Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}${activeReminders?.length ? ', and their set reminders' : ''}, create a personalized briefing that:
 
 IMPORTANCE WEIGHTING: Memories are marked with importance levels (1-10). Give MORE weight and attention to memories marked [CRITICAL] (8-10) and [HIGH] (6-7). These represent significant life events, decisions, or concerns. Memories marked [LOW] (1-2) are minor/trivial. Default importance is 5.
