@@ -38,6 +38,7 @@ export interface InsightContext {
   topics: string[];
   urgency: 'immediate' | 'upcoming' | 'general';
   confidence: number; // 0-1 score for how relevant this insight is
+  homeCity?: string; // For localizing memory-based searches when no explicit location in topic
 }
 
 export interface DiscoveriesResponse {
@@ -160,11 +161,23 @@ export async function extractSearchableInsights(
     return memoryDate >= sevenDaysAgo;
   });
 
+  // Derive the effective search location:
+  // - If traveling: use current city (most relevant)
+  // - If at home: use home city (so food/local searches are localized, not global)
+  const effectiveLocation =
+    (locationContext?.isAway && locationContext.currentCity)
+      ? locationContext.currentCity.split(',')[0].trim()
+      : locationContext?.homeCity
+        ? locationContext.homeCity.split(',')[0].trim()
+        : undefined;
+
   // Only extract insights if there are recent memories with actionable content
   const hasOpenAIKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
   if (recentMemories.length > 0 && hasOpenAIKey) {
-    const memoryInsights = await extractActionableMemoryInsights(recentMemories);
-    insights.push(...memoryInsights);
+    const memoryInsights = await extractActionableMemoryInsights(recentMemories, effectiveLocation);
+    // Carry homeCity on each insight so buildPersonalizedSearchQueries can use it as a fallback
+    const taggedInsights = memoryInsights.map(i => ({ ...i, homeCity: effectiveLocation }));
+    insights.push(...taggedInsights);
   }
 
   // 4. NOTABLE FINANCIAL TRIGGERS: Only large merchant aggregates (30-day totals, not individual purchases)
@@ -248,9 +261,13 @@ function generateGoalTopics(title: string, description: string): string[] {
   return topics.slice(0, 2); // Max 2 topics per goal
 }
 
-async function extractActionableMemoryInsights(memories: ExtendedMemory[]): Promise<InsightContext[]> {
+async function extractActionableMemoryInsights(memories: ExtendedMemory[], effectiveLocation?: string): Promise<InsightContext[]> {
   try {
     const memoryTexts = memories.slice(0, 10).map(m => m.memoryText).join('\n');
+
+    const locationRule = effectiveLocation
+      ? `\nLOCATION RULE: The user is based in ${effectiveLocation}. If and ONLY IF they expressed a desire to FIND a local place (restaurant, shop, service, etc.), include "${effectiveLocation}" in the search query — e.g. "best Egg Foo Young restaurants ${effectiveLocation}". Do NOT add a city to non-local queries (e.g. camera research, car troubleshooting).`
+      : '';
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -268,11 +285,14 @@ Good examples:
 - "considering buying a new camera for travel" → "mirrorless cameras for travel photography 2024"
 - "my car is making a strange noise" → "car grinding noise when braking causes"
 - "starting to learn guitar" → "beginner guitar practice routine"
+- "want to find a good dim sum place" → "best dim sum restaurants [city]"
 
 Do NOT extract for:
 - General musings or reflections
 - Past events with no future action
+- Food or drink the person simply ATE or DRANK ("had Egg Foo Young for dinner", "ate sushi last night") — they already consumed it; no search needed
 - Vague interests without clear need
+- Things the person already did or resolved${locationRule}
 
 Return JSON:
 {
@@ -436,6 +456,22 @@ export async function searchForDiscoveries(
   return { discoveries: uniqueDiscoveries.slice(0, 6) };
 }
 
+/**
+ * True if the topic sounds like a local food/restaurant/service search that
+ * benefits from having a city appended.
+ */
+function isLocalServiceTopic(topic: string): boolean {
+  return /restaurant|dining|eat|food|cafe|coffee\s+shop|bar|pub|pizza|sushi|taco|burger|brunch|breakfast|lunch|dinner|takeout|delivery|bakery|deli|brewery|winery|dim\s*sum|chinese\s+food|ramen|bbq|steak|seafood|thai|indian|mexican/i.test(topic);
+}
+
+/**
+ * True if the topic already contains a location qualifier so we don't double-append.
+ */
+function topicHasLocation(topic: string): boolean {
+  // Patterns: "near Denver", "in Denver", "Denver CO", "Denver, CO", "Denver restaurants"
+  return /\bnear\s+\w|\bin\s+[A-Z][a-z]|\b[A-Z][a-z]+,?\s+[A-Z]{2}\b/.test(topic);
+}
+
 function buildPersonalizedSearchQueries(insight: InsightContext): string[] {
   const queries: string[] = [];
   const currentYear = new Date().getFullYear();
@@ -452,7 +488,14 @@ function buildPersonalizedSearchQueries(insight: InsightContext): string[] {
   } else if (insight.type === 'memory') {
     // Memory-based - use the specific topics from AI extraction
     for (const topic of insight.topics) {
-      queries.push(`${topic} ${currentYear}`);
+      // Safety net: if the topic looks like a local food/service search but has no
+      // location qualifier, and we know the user's home city, append it.
+      // (The AI prompt already tries to do this, but this catches any slippage.)
+      if (insight.homeCity && isLocalServiceTopic(topic) && !topicHasLocation(topic)) {
+        queries.push(`${topic} ${insight.homeCity} ${currentYear}`);
+      } else {
+        queries.push(`${topic} ${currentYear}`);
+      }
     }
   } else if (insight.type === 'financial') {
     // Financial - use specific topics

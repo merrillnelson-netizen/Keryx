@@ -2990,7 +2990,13 @@ Respond with JSON only.`
         const frequentPlaces = await storage.getFrequentPlaces(user.id);
         const homePlace = frequentPlaces.find(p => p.label === 'home');
         
-        // Get most recent memory location to determine current city
+        // Always seed homeCity so memory-based local searches (food, services) are
+        // localized even when the user is at home, not just when traveling.
+        if (homePlace?.name) {
+          locationContext = { homeCity: homePlace.name, isAway: false };
+        }
+
+        // Get most recent memory location to determine if user is currently away
         const latestMemoryWithLocation = recentMemories.find(m => m.geoPlaceName);
         if (latestMemoryWithLocation?.geoPlaceName && homePlace?.name) {
           const currentLocation = latestMemoryWithLocation.geoPlaceName;
