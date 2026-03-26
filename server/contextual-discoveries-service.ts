@@ -466,10 +466,11 @@ function isLocalServiceTopic(topic: string): boolean {
 
 /**
  * True if the topic already contains a location qualifier so we don't double-append.
+ * Case-insensitive to catch both "in Denver" and "in denver".
  */
 function topicHasLocation(topic: string): boolean {
-  // Patterns: "near Denver", "in Denver", "Denver CO", "Denver, CO", "Denver restaurants"
-  return /\bnear\s+\w|\bin\s+[A-Z][a-z]|\b[A-Z][a-z]+,?\s+[A-Z]{2}\b/.test(topic);
+  // Patterns: "near Denver", "in Denver/denver", "Denver CO", "Denver, CO"
+  return /\bnear\s+\w|\bin\s+[a-z]|\b[A-Z][a-z]+,?\s+[A-Z]{2}\b/i.test(topic);
 }
 
 function buildPersonalizedSearchQueries(insight: InsightContext): string[] {
