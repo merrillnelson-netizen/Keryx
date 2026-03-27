@@ -934,14 +934,16 @@ export class DatabaseStorage implements IStorage {
     try {
       let finalData: Record<string, any> = { ...data };
 
-      if (data.name) {
-        const current = await this.getPersonById(userId, id);
-        if (current && current.name !== data.name) {
-          const existingAliases: string[] = current.aliases || [];
-          if (!existingAliases.includes(current.name)) {
-            finalData.aliases = [...existingAliases, current.name];
-          }
+      const current = await this.getPersonById(userId, id);
+      if (current) {
+        const isRename = data.name && data.name !== current.name;
+        const userSuppliedAliases: string[] = data.aliases !== undefined ? data.aliases : (current.aliases || []);
+        const aliasSet = new Set(userSuppliedAliases);
+        if (isRename) {
+          aliasSet.add(current.name);
+          aliasSet.delete(data.name!);
         }
+        finalData.aliases = Array.from(aliasSet);
       }
 
       const [updated] = await db
