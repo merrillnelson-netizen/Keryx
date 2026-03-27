@@ -1788,14 +1788,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!name) {
         return sendErrorResponse(res, 400, "Person name is required");
       }
+
+      const decodedName = decodeURIComponent(name);
+      const person = await storage.getPerson(user.id, decodedName);
+      const aliases = person?.aliases || [];
       
-      const mentions = await storage.getPersonMentions(user.id, decodeURIComponent(name));
+      const mentions = await storage.getPersonMentions(user.id, decodedName, aliases);
       
       res.json({
         status: 'success',
         data: mentions,
         count: mentions.length,
-        personName: decodeURIComponent(name),
+        personName: decodedName,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

@@ -195,6 +195,7 @@ export const people = pgTable("people", {
   phoneNumber: text("phone_number"),
   relationship: text("relationship"),
   notes: text("notes"),
+  aliases: text("aliases").array().default(sql`'{}'::text[]`),
   priority: integer("priority").default(5).notNull(),
   mentionCount: integer("mention_count").default(0),
   source: text("source").default("memory").notNull(),

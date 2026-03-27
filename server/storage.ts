@@ -79,7 +79,7 @@ export interface IStorage {
   deletePerson(userId: string, id: string): Promise<boolean>;
   mergePersonRecords(userId: string, target: Person, source: Person, updateData: Partial<InsertPerson>): Promise<Person>;
   mergePeople(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; updatedMemories: number }>;
-  getPersonMentions(userId: string, personName: string): Promise<LogEntry[]>;
+  getPersonMentions(userId: string, personName: string, aliases?: string[]): Promise<LogEntry[]>;
   
   // Mood analytics (user-scoped)
   getMoodStats(userId: string, days?: number): Promise<{ mood: string; count: number; avgScore: number }[]>;
@@ -861,6 +861,17 @@ export class DatabaseStorage implements IStorage {
       if (!existing) {
         existing = await this.getPerson(userId, name);
       }
+      if (!existing) {
+        const [aliasMatch] = await db.select().from(people)
+          .where(and(
+            eq(people.userId, userId),
+            sql`${name} = ANY(${people.aliases})`
+          ))
+          .limit(1);
+        if (aliasMatch) {
+          existing = aliasMatch;
+        }
+      }
       
       if (existing) {
         const newSource = existing.source !== source && existing.source !== 'both' && source !== 'manual'
@@ -921,9 +932,21 @@ export class DatabaseStorage implements IStorage {
 
   async updatePerson(userId: string, id: string, data: Partial<InsertPerson>): Promise<Person | undefined> {
     try {
+      let finalData: Record<string, any> = { ...data };
+
+      if (data.name) {
+        const current = await this.getPersonById(userId, id);
+        if (current && current.name !== data.name) {
+          const existingAliases: string[] = current.aliases || [];
+          if (!existingAliases.includes(current.name)) {
+            finalData.aliases = [...existingAliases, current.name];
+          }
+        }
+      }
+
       const [updated] = await db
         .update(people)
-        .set(data)
+        .set(finalData)
         .where(and(eq(people.userId, userId), eq(people.id, id)))
         .returning();
       return updated || undefined;
@@ -969,6 +992,14 @@ export class DatabaseStorage implements IStorage {
       if (target.source !== source.source) {
         mergeUpdates.source = 'both';
       }
+
+      const combinedAliases = new Set([
+        ...(target.aliases || []),
+        ...(source.aliases || []),
+        source.name,
+      ]);
+      combinedAliases.delete(target.name);
+      mergeUpdates.aliases = Array.from(combinedAliases);
 
       mergeUpdates.mentionCount = (target.mentionCount || 0) + (source.mentionCount || 0);
 
@@ -1022,6 +1053,15 @@ export class DatabaseStorage implements IStorage {
       
       const targetName = targetPerson[0].name;
       const sourceNames = sourcePeople.map(p => p.name);
+
+      const existingAliases: string[] = targetPerson[0].aliases || [];
+      const allSourceAliases = sourcePeople.flatMap(p => p.aliases || []);
+      const combinedAliases = new Set([...existingAliases, ...allSourceAliases, ...sourceNames]);
+      combinedAliases.delete(targetName);
+      await db
+        .update(people)
+        .set({ aliases: Array.from(combinedAliases) })
+        .where(and(eq(people.userId, userId), eq(people.id, targetId)));
       
       let updatedMemories = 0;
       
@@ -1066,14 +1106,20 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getPersonMentions(userId: string, personName: string): Promise<LogEntry[]> {
+  async getPersonMentions(userId: string, personName: string, aliases?: string[]): Promise<LogEntry[]> {
     try {
+      const allNames = [personName, ...(aliases || [])];
+      const nameConditions = allNames.map(n => sql`${n} = ANY(${logEntries.detectedPeople})`);
+      const nameCondition = nameConditions.length === 1
+        ? nameConditions[0]
+        : sql`(${sql.join(nameConditions, sql` OR `)})`;
+
       return await db
         .select()
         .from(logEntries)
         .where(and(
           eq(logEntries.userId, userId),
-          sql`${personName} = ANY(${logEntries.detectedPeople})`
+          nameCondition
         ))
         .orderBy(desc(logEntries.timestamp));
     } catch (error) {
@@ -1092,8 +1138,8 @@ export class DatabaseStorage implements IStorage {
       let updated = 0;
 
       for (const person of userPeople) {
-        // Count actual memories mentioning this person
-        const mentions = await this.getPersonMentions(userId, person.name);
+        // Count actual memories mentioning this person (including aliases)
+        const mentions = await this.getPersonMentions(userId, person.name, person.aliases || []);
         const actualCount = mentions.length;
         
         // Find the most recent mention date

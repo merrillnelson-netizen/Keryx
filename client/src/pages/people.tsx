@@ -68,6 +68,8 @@ export default function People() {
   const [editRelationship, setEditRelationship] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY_VALUE);
+  const [editAliases, setEditAliases] = useState<string[]>([]);
+  const [editAliasInput, setEditAliasInput] = useState("");
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
@@ -352,11 +354,25 @@ export default function People() {
     setEditRelationship(person.relationship || "");
     setEditNotes(person.notes || "");
     setEditPriority(person.priority || DEFAULT_PRIORITY_VALUE);
+    setEditAliases(person.aliases || []);
+    setEditAliasInput("");
+  };
+
+  const handleAddAlias = () => {
+    const trimmed = editAliasInput.trim();
+    if (trimmed && !editAliases.includes(trimmed)) {
+      setEditAliases(prev => [...prev, trimmed]);
+      setEditAliasInput("");
+    }
+  };
+
+  const handleRemoveAlias = (alias: string) => {
+    setEditAliases(prev => prev.filter(a => a !== alias));
   };
 
   const handleSaveEdit = () => {
     if (editingPerson) {
-      const data: Record<string, any> = { priority: editPriority };
+      const data: Record<string, any> = { priority: editPriority, aliases: editAliases };
       if (editName && editName !== editingPerson.name) data.name = editName;
       if (editRelationship) data.relationship = editRelationship;
       if (editNotes) data.notes = editNotes;
@@ -1248,6 +1264,53 @@ export default function People() {
               <p className="text-xs text-muted-foreground">
                 People with priority 8+ will trigger High-Signal Alerts when mentioned in discoveries.
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Also known as (aliases)</Label>
+              <p className="text-xs text-muted-foreground">
+                Aliases let past memories under old names still count toward this person's mentions.
+              </p>
+              {editAliases.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {editAliases.map(alias => (
+                    <Badge
+                      key={alias}
+                      variant="secondary"
+                      className="bg-primary/20 text-primary border-primary/30 pr-1 gap-1"
+                    >
+                      {alias}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAlias(alias)}
+                        className="ml-0.5 rounded-full hover:bg-primary/30 p-0.5"
+                        aria-label={`Remove alias ${alias}`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  value={editAliasInput}
+                  onChange={(e) => setEditAliasInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddAlias(); } }}
+                  placeholder="Add an alias..."
+                  className="glass-card border-white/20 flex-1"
+                  data-testid="input-alias"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddAlias}
+                  disabled={!editAliasInput.trim()}
+                  className="border-white/20"
+                >
+                  Add
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
