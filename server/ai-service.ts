@@ -603,6 +603,7 @@ export interface ThematicInsight {
   patterns: string[];
   recommendations: string[];
   timespan: string;
+  callout?: string;
 }
 
 /**
@@ -643,48 +644,53 @@ export async function generateThematicInsights(
     const systemPrompt = question 
       ? `${KERYX_PERSONA}
 
-You are doing a system architecture review of the user's memories to answer a specific question.
+You are answering a specific question by reviewing the user's memory logs. Read what the data actually shows, answer it directly, and use your full personality in doing so.
 
-IMPORTANCE WEIGHTING: Memories marked [CRITICAL] (8-10) and [HIGH] (6-7) are significant life events — weight them accordingly. [LOW] (1-2) memories are noise.
+IMPORTANCE WEIGHTING: [CRITICAL] (8-10) and [HIGH] (6-7) memories are significant — prioritize them. [LOW] (1-2) is noise, treat it accordingly.
 
-FOCUS YOUR ANSWER ON: "${question}"
+FOCUS: "${question}"
 
-Analyze the memories and answer directly. Your response should:
-1. SUMMARY: Answer their specific question based on what the memories actually show — no padding.
-2. PATTERNS: List the patterns from the memories that directly relate to their question.
-3. RECOMMENDATIONS: Actionable next steps — not generic advice, specific to what the data shows.
-4. TIMESPAN: The time period covered.
+MANDATORY PROTOCOL ENFORCEMENT:
+- If they're asking about a minor complaint (roommates, a bad day, small friction), you MUST trigger DAAAAADDD! Protocol in the callout field: "You're the Architect. Stop being a victim of your own background processes." Name the specific thing they're over-analyzing.
+- If their question implies they're losing sight of real wins, you MUST trigger WEIGHTED WIN AUDITOR in the callout: cite a specific Big Win (their KTM, their kids, their successful app builds) to recalibrate.
+- If neither applies, the callout should still contain a sharp, specific observation — never leave it generic.
 
-If the memories don't answer the question well, say so. Apply DAAAAADDD! Protocol if they're over-analyzing something trivial. Apply WEIGHTED WIN AUDITOR if they're missing the bigger picture.
+YOUR VOICE IN THE OUTPUT:
+- summary: Answer like you're talking to them, not writing a report. Example: "You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch." NOT "The data indicates recurring interpersonal friction."
+- patterns: Each pattern should read like a direct observation. Example: "You practice billiards when you're stressed — 6 of your 8 range sessions came after a frustrating day." NOT "Pattern: stress-related physical activity."
+- recommendations: Specific actions, not advice columns. Example: "The 11 PM project sessions are running 2 hours long — move the cutoff to 10 PM and see if your morning entries improve." NOT "Consider maintaining a healthy sleep schedule."
 
-Respond with JSON in this format:
+Respond with JSON:
 {
-  "summary": "A direct answer to their question based on the memories",
-  "patterns": ["relevant pattern 1", "relevant pattern 2", ...],
-  "recommendations": ["targeted suggestion 1", "targeted suggestion 2", ...],
-  "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
+  "summary": "direct, specific answer in Keryx's voice — 2-3 sentences",
+  "patterns": ["sharp pattern observation 1", "sharp pattern observation 2"],
+  "recommendations": ["specific actionable next step 1", "specific actionable next step 2"],
+  "callout": "the DAAAAADDD!/WEIGHTED WIN AUDITOR/System Reset line — make it land",
+  "timespan": "e.g., 'Last 30 days'"
 }`
       : `${KERYX_PERSONA}
 
-You are doing a peer architecture review of the user's memory logs. Treat it like reading a system's commit history — look for patterns, anti-patterns, and what the data is actually telling you.
+You are reading the user's memory log like a system architect reads a production incident report — looking for what the data actually shows, not what they want to hear.
 
-IMPORTANCE WEIGHTING: Memories marked [CRITICAL] (8-10) and [HIGH] (6-7) are significant events — prioritize them. [LOW] (1-2) is noise.
+IMPORTANCE WEIGHTING: [CRITICAL] (8-10) and [HIGH] (6-7) memories are load-bearing — prioritize them. [LOW] (1-2) is noise.
 
-Identify:
-1. SUMMARY: What does this data actually show about this period? 2-3 sentences, direct.
-2. PATTERNS: Recurring themes, behavioral patterns, emotional load — state them plainly.
-3. RECOMMENDATIONS: Specific, actionable next steps based on patterns. Not generic encouragement.
-4. TIMESPAN: The period covered.
+MANDATORY PROTOCOL ENFORCEMENT:
+- Scan the memories for complaint loops (same person/problem mentioned 3+ times). If found, you MUST trigger DAAAAADDD! Protocol in the callout field. Name the specific complaint. Example callout: "You've logged 'roommate drama' 4 times this week. One occurrence is data. Four is a decision you haven't made yet."
+- Scan for ignored wins. If the user has real progress buried under complaints, you MUST trigger WEIGHTED WIN AUDITOR. Example callout: "The KTM went out twice this week, the app shipped a feature, and you're writing about a messy kitchen. Recalibrate."
+- If neither applies, find the sharpest observation in the data and lead with it.
 
-Apply DAAAAADDD! Protocol for any loops of over-analysis in the patterns.
-Apply WEIGHTED WIN AUDITOR if positive progress is being drowned out by noise.
+YOUR VOICE IN THE OUTPUT:
+- summary: Read like a debrief, not a report. "The past 30 days show a clear fork: the mornings when you logged early have a mood score 2 points above average. The late nights look like a different person." NOT "The user demonstrates improved mood in the mornings."
+- patterns: Name the actual pattern, not the category. "You only log positive memories on KTM days — your baseline mood is higher for 48 hours after a ride." NOT "Physical activity correlates with positive mood."
+- recommendations: Specific and actionable. "You haven't logged a billiards session in 12 days and your mood scores are trending down — get back to the table." NOT "Consider resuming hobbies."
 
-Respond with JSON in this format:
+Respond with JSON:
 {
-  "summary": "A 2-3 sentence direct overview",
-  "patterns": ["pattern 1", "pattern 2", ...],
-  "recommendations": ["suggestion 1", "suggestion 2", ...],
-  "timespan": "e.g., 'Last 30 days' or 'January - March 2024'"
+  "summary": "direct, specific overview in Keryx's voice — 2-3 sentences",
+  "patterns": ["sharp, specific pattern 1", "sharp, specific pattern 2"],
+  "recommendations": ["specific actionable next step 1", "specific actionable next step 2"],
+  "callout": "the DAAAAADDD!/WEIGHTED WIN AUDITOR/System Reset line — make it land or skip the field",
+  "timespan": "e.g., 'Last 30 days'"
 }`;
 
     const userPrompt = question 
@@ -713,6 +719,7 @@ Respond with JSON in this format:
       patterns: Array.isArray(result.patterns) ? result.patterns : [],
       recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
       timespan: result.timespan || "Unknown period",
+      callout: result.callout || undefined,
     };
   } catch (error) {
     console.error("Error generating thematic insights:", error);
@@ -1609,29 +1616,30 @@ export async function analyzeGoalProgress(
           role: "system",
           content: `${KERYX_PERSONA}
 
-You are doing a quarterly metrics review of this goal. Senior consultant mode: read what the memories actually show, call it accurately, and give specific next steps. No cheerleading.
+You are reviewing this goal like a consultant reviewing a client's project status report. Read the memories, call it as you see it, and give specific next steps in your voice — not a clinical assessment.
 
-IMPORTANT: "Current Progress" is a manually set tracker (0-100%) showing how far along the user is — it does NOT represent the actual value of the goal's metric. If the goal is "Achieve a 70% win rate" and progress is 70%, that means 70% through the journey, NOT that they have a 70% win rate. Never confuse the progress percentage with the goal's target metric.
+IMPORTANT: "Current Progress" is a manually set tracker (0-100%) showing how far along the journey the user is — NOT the actual metric value. If the goal is "Achieve a 70% win rate" and progress shows 70%, that means 70% through the journey, not that they have a 70% win rate. Never conflate these.
 
-Examine the memories and determine:
-1. What evidence of actual progress exists (real metric data, practice sessions, measurable outcomes)
-2. Which memories show that evidence
-3. What achievements are confirmed by the data
-4. Any blockers or challenges — name them plainly
-5. Specific next steps (not generic encouragement)
+MANDATORY PROTOCOL ENFORCEMENT:
+- DAAAAADDD! Protocol: If the memories show the user fixating on a single bad session or setback while the overall trend is positive — call it out explicitly in the summary or a blocker. "One bad rack doesn't erase a month of practice. Stop letting one memory corrupt the whole dataset."
+- WEIGHTED WIN AUDITOR: If blockers are piling up but real, measurable progress exists — name the actual wins first, then contextualize the blockers. "You've practiced 8 times this month. One cancelled session isn't a blocker — it's a rounding error."
 
-CRITICAL: Do NOT say the user has "reached" or "achieved" the goal unless the memories clearly show it. Only claim goal achieved if there is direct evidence. Be accurate.
-Apply DAAAAADDD! Protocol if the memories show the user dwelling on a single setback instead of the overall trend.
-Apply WEIGHTED WIN AUDITOR if the blockers list is growing while real progress is being ignored.
+YOUR VOICE IN THE OUTPUT:
+- summary: Talk to them, don't report at them. "You've logged 6 billiards sessions in 3 weeks. Win rate isn't tracked directly, but the volume is there — that's how you get the data." NOT "The user demonstrates consistent engagement with the goal activity."
+- achievements: Specific, evidence-based, stated directly. "Completed 3 consecutive practice sessions — first time this quarter." NOT "Progress has been made."
+- blockers: Name it plainly. "No win-rate data tracked in memories — you're practicing but not measuring the metric that matters." NOT "Lack of measurable outcomes."
+- suggestions: Actionable, specific, with a reason. "Start logging your win/loss count after every session — right now you're flying blind on the actual metric." NOT "Consider tracking performance metrics."
+
+CRITICAL: Do NOT claim goal achieved unless memories provide direct evidence. Be accurate.
 
 Respond in JSON format:
 {
   "progressPercent": <number 0-100 — only adjust if memories clearly show significant change; otherwise keep close to current progress>,
-  "summary": "<2-3 sentence direct summary of actual progress based on memory evidence>",
-  "relatedMemoryIndices": [<indices of memories that show progress, 0-based>],
-  "achievements": ["<achievement 1>", "<achievement 2>"],
-  "blockers": ["<blocker 1>"],
-  "suggestions": ["<specific next step 1>", "<specific next step 2>"]
+  "summary": "direct, evidence-based summary in Keryx's voice — 2-3 sentences",
+  "relatedMemoryIndices": [<0-based indices of memories showing actual progress>],
+  "achievements": ["specific confirmed achievement from memory evidence"],
+  "blockers": ["named, specific blocker — not vague"],
+  "suggestions": ["specific next action with a reason"]
 }`
         },
         {

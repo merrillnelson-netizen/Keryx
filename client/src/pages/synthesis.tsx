@@ -14,7 +14,8 @@ import {
   Send, 
   RefreshCw,
   MessageCircle,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +31,7 @@ interface ThematicInsight {
   patterns: string[];
   recommendations: string[];
   timespan: string;
+  callout?: string;
 }
 
 interface ChatMessage {
@@ -216,6 +218,18 @@ export default function SynthesisPage() {
                                 {message.insight.timespan}
                               </p>
                             </div>
+
+                            {message.insight.callout && (
+                              <div className="glass-card p-4 rounded-xl border-l-4 border-orange-500 bg-orange-500/10">
+                                <h4 className="font-medium text-orange-400 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
+                                  <Zap className="w-4 h-4" />
+                                  Keryx
+                                </h4>
+                                <p className="text-foreground font-medium leading-relaxed">
+                                  {message.insight.callout}
+                                </p>
+                              </div>
+                            )}
 
                             {message.insight.patterns.length > 0 && (
                               <div className="glass-card p-4 rounded-xl bg-white/5">
