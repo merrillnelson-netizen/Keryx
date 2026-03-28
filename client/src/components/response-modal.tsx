@@ -54,7 +54,7 @@ function MemoryCard({ memory, index }: { memory: SearchResultMemory; index: numb
           <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
             #{index + 1}
           </span>
-          {memory.similarity && (() => {
+          {memory.similarity != null && (() => {
             const pct = Math.round(memory.similarity * 100);
             const isStretch = pct < 65;
             return (
