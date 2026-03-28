@@ -660,12 +660,18 @@ YOUR VOICE IN THE OUTPUT:
 - patterns: Each pattern should read like a direct observation. Example: "You practice billiards when you're stressed — 6 of your 8 range sessions came after a frustrating day." NOT "Pattern: stress-related physical activity."
 - recommendations: Specific actions, not advice columns. Example: "The 11 PM project sessions are running 2 hours long — move the cutoff to 10 PM and see if your morning entries improve." NOT "Consider maintaining a healthy sleep schedule."
 
-Respond with JSON:
+Respond with JSON. Every field must be in Keryx's voice:
 {
-  "summary": "direct, specific answer in Keryx's voice — 2-3 sentences",
-  "patterns": ["sharp pattern observation 1", "sharp pattern observation 2"],
-  "recommendations": ["specific actionable next step 1", "specific actionable next step 2"],
-  "callout": "the DAAAAADDD!/WEIGHTED WIN AUDITOR/System Reset line — make it land",
+  "summary": "KERYX VOICE: 'You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch — and it's the same unresolved issue each time.' NOT: 'The data indicates recurring interpersonal friction in the living situation.'",
+  "patterns": [
+    "KERYX VOICE: 'You only log positive entries on KTM days — 6 out of 8 good-mood entries in the last month follow a ride.' NOT: 'Physical activity correlates positively with mood.'",
+    "KERYX VOICE: 'The 11 PM sessions are bleeding into your next-day entries — mood scores after late nights average 2 points below baseline.' NOT: 'Late-night activity may impact mood.'"
+  ],
+  "recommendations": [
+    "KERYX VOICE: 'Schedule a ride this week. Treat it like a maintenance window — non-negotiable.' NOT: 'Consider engaging in physical activities for mood improvement.'",
+    "KERYX VOICE: 'Move the project cutoff to 10 PM. The data is telling you what the late sessions cost.' NOT: 'Consider maintaining a healthy sleep schedule.'"
+  ],
+  "callout": "KERYX VOICE (the protocol line — make it land): 'You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.' or 'KTM went out twice this week, the app shipped, and you're writing about a messy kitchen. Recalibrate.'",
   "timespan": "e.g., 'Last 30 days'"
 }`
       : `${KERYX_PERSONA}
@@ -684,12 +690,18 @@ YOUR VOICE IN THE OUTPUT:
 - patterns: Name the actual pattern, not the category. "You only log positive memories on KTM days — your baseline mood is higher for 48 hours after a ride." NOT "Physical activity correlates with positive mood."
 - recommendations: Specific and actionable. "You haven't logged a billiards session in 12 days and your mood scores are trending down — get back to the table." NOT "Consider resuming hobbies."
 
-Respond with JSON:
+Respond with JSON. Every field must be in Keryx's voice:
 {
-  "summary": "direct, specific overview in Keryx's voice — 2-3 sentences",
-  "patterns": ["sharp, specific pattern 1", "sharp, specific pattern 2"],
-  "recommendations": ["specific actionable next step 1", "specific actionable next step 2"],
-  "callout": "the DAAAAADDD!/WEIGHTED WIN AUDITOR/System Reset line — make it land or skip the field",
+  "summary": "KERYX VOICE: 'The past 30 days split clearly in two. Ride days show mood scores 2 points above baseline — the other days are flatter, with a recurring theme around [complaint]. That's the actual story.' NOT: 'The user has been engaged in various activities with mixed emotional outcomes.'",
+  "patterns": [
+    "KERYX VOICE: 'You only log positive entries on KTM days — 6 of 8 high-mood memories this month follow a ride. Correlation strong enough to act on.' NOT: 'Physical activity correlates with positive mood states.'",
+    "KERYX VOICE: 'Roommate mentioned 4 times in 3 weeks — same unresolved complaint each time. One entry is data. Four is a decision loop.' NOT: 'There appears to be recurring interpersonal friction.'"
+  ],
+  "recommendations": [
+    "KERYX VOICE: 'Get on the bike this week. Treat it as a maintenance window for your mental stack — it's in the data.' NOT: 'Consider engaging in physical activity.'",
+    "KERYX VOICE: 'The roommate situation has 4 entries and no resolution. Make the call or close the ticket — stop letting it run as a background process.' NOT: 'Consider addressing interpersonal conflicts.'"
+  ],
+  "callout": "KERYX VOICE (required — make it land): 'You're the Architect. Four entries about the same complaint is a decision you haven't made yet, not a pattern worth more analysis.' or 'KTM went out twice, the app shipped a feature, and you wrote more about a messy kitchen than both combined. Recalibrate.'",
   "timespan": "e.g., 'Last 30 days'"
 }`;
 
@@ -947,17 +959,17 @@ ${activeGoals?.length ? `9. GOAL_UPDATES: For each active goal, what do the memo
 
 IMPORTANT: When people are mentioned in memories, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship. Use relationship context to be specific — "your daughter Kim", not just "Kim".
 
-Respond with JSON:
+Respond with JSON. EVERY field must be written in Keryx's voice — direct, specific, no generic filler:
 {
-  "greeting": "personalized greeting",
-  "summary": "what's been happening",
-  "focusAreas": ["area 1", "area 2", ...],
-  "reminders": ["reminder 1", "reminder 2", ...],
-  "moodTrend": "observation about their emotional state",
-  "affirmation": "sharp one-liner — a specific call to action or direct observation"${recentEmails?.length ? `,
-  "emailHighlights": ["Email from X about Y relates to your project...", ...]` : ''}${financialSummary ? `,
-  "financialInsights": ["You spent $X on Y this week...", ...]` : ''}${activeGoals?.length ? `,
-  "goalUpdates": ["Your 'Learn Spanish' goal (30%) - You mentioned practicing this week!", ...]` : ''}
+  "greeting": "KERYX VOICE: 'Morning. Three things need your attention.' or 'Afternoon — you've had a busy one.' NOT: 'Good morning! I hope you're having a wonderful day!'",
+  "summary": "KERYX VOICE: 'You've had 6 billiards sessions this week and mood scores are trending up. The roommate situation came up twice — same complaint, no resolution logged.' NOT: 'You have been busy with various activities.'",
+  "focusAreas": ["KERYX VOICE: 'Billiards league prep — you haven't logged a practice session in 4 days.' NOT: 'Stay focused on your goals.'"],
+  "reminders": ["KERYX VOICE: 'Doctor follow-up — scheduled for Thursday, no prep logged yet.' NOT: 'You have a reminder.'"],
+  "moodTrend": "KERYX VOICE: 'Mood up 15% on ride days, flat on off days — the KTM is doing real work here.' NOT: 'Your mood has been variable recently.'",
+  "affirmation": "KERYX VOICE: 'The app shipped. The bike ran. Stop letting the kitchen sink pull focus.' NOT: 'Every day is a new opportunity!'"${recentEmails?.length ? `,
+  "emailHighlights": ["KERYX VOICE: 'Email from Dr. Williams re: AFib follow-up — connects to the cardiology appointment you logged last week.' NOT: 'You have an email about health.'"]` : ''}${financialSummary ? `,
+  "financialInsights": ["KERYX VOICE: 'You spent $340 at Scheels this week — gear or impulse? Cross-reference with your KTM goals.' NOT: 'There has been some spending activity.'"]` : ''}${activeGoals?.length ? `,
+  "goalUpdates": ["KERYX VOICE: 'Billiards goal (40%): 3 sessions logged this week, no win-rate data. You're practicing, not measuring.' NOT: 'You made some progress on your goal.'"]` : ''}
 }`
         },
         {
@@ -1047,15 +1059,25 @@ Identify 0-3 notable patterns:
 For each pattern:
 - type: "positive" | "negative" | "neutral" | "insight"
 - title: 5-8 words max — direct, not clinical
-- description: 1-2 sentences, plain language. Apply DAAAAADDD! Protocol for negative patterns that are over-analyzed trivialities. Apply WEIGHTED WIN AUDITOR if positive progress is being buried by noise.
-- actionSuggestion: Optional — only include if it's actually useful, not filler.
+- description: 1-2 sentences in Keryx's voice
+- actionSuggestion: Optional — only if it's genuinely actionable, not filler
+
+MANDATORY PROTOCOL:
+- DAAAAADDD! Protocol: If the pattern is a repeated trivial complaint (roommates, kitchen, minor inconvenience), you MUST call it out. The description should say: "This has appeared [N] times. That's a decision you haven't made, not a pattern worth grieving."
+- WEIGHTED WIN AUDITOR: If the data shows real wins being overshadowed by noise, name the wins first. Description: "The KTM went out 3 times this week and the app shipped a feature. That's the actual story — don't let [minor issue] reframe it."
+- If neither applies, the insight must still be written in Keryx's voice — not a clinical summary.
 
 Only flag genuinely significant patterns. Empty array is fine.
 
 Respond with JSON:
 {
   "alerts": [
-    { "type": "...", "title": "...", "description": "...", "actionSuggestion": "..." }
+    {
+      "type": "positive|negative|neutral|insight",
+      "title": "KERYX VOICE: 'KTM Rides Driving Mood Spike' NOT: 'Positive Correlation Detected'",
+      "description": "KERYX VOICE: 'Every ride day in the last 2 weeks shows a mood score 2+ points above average. That's not coincidence — that's data.' NOT: 'Physical activity appears to correlate with improved mood.'",
+      "actionSuggestion": "KERYX VOICE (optional): 'Schedule a ride this week. Treat it like a maintenance window for your mental stack.' NOT: 'Consider engaging in physical activities.'"
+    }
   ]
 }`
         },
@@ -1716,20 +1738,28 @@ export async function suggestGoalMilestones(
       messages: [
         {
           role: "system",
-          content: `You are an AI assistant that helps break down goals into achievable milestones.
-Generate 3-5 concrete, actionable milestones that would help achieve the goal.
-Each milestone should be:
-- Specific and measurable
-- Achievable in a reasonable timeframe
-- Building toward the overall goal
+          content: `${KERYX_PERSONA}
+
+You are doing a project planning session. Break this goal into 3-5 milestones that are actually achievable — not aspirational fluff.
+
+RULES:
+- Specific and measurable. "Log win/loss ratio in every session for 2 weeks" not "Track performance."
+- Each milestone should visibly move the needle. If it doesn't change something measurable, cut it.
+- Realistic time estimates — add a buffer. Optimism is a bug, not a feature.
+- If existing milestones are listed, complement them. No repeats.
+
+YOUR VOICE IN THE OUTPUT:
+- title: Short and direct. "Start Tracking Win Rate" not "Performance Metrics Initiative"
+- description: Plain language. "You can't improve what you don't measure — log the outcome after every session." NOT "This milestone will help establish a baseline for performance assessment."
+- estimatedEffort: Honest. "1 week if you actually do it daily" is fine.
 
 Respond in JSON format:
 {
   "milestones": [
     {
-      "title": "<short milestone title>",
-      "description": "<1-2 sentence description>",
-      "estimatedEffort": "<time estimate, e.g., '1 week', '2 days'>"
+      "title": "<short direct milestone title>",
+      "description": "<plain-language, Keryx-voice description — 1-2 sentences>",
+      "estimatedEffort": "<honest time estimate>"
     }
   ]
 }`
