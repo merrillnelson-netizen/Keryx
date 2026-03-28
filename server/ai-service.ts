@@ -553,7 +553,7 @@ export async function synthesizeSearchAnswer(
 ): Promise<string> {
   try {
     if (memories.length === 0) {
-      return "Nothing came back on that query. Either you haven't logged it, or your search terms are off — try broader keywords or a different angle. The system found no matches, not zero memories.";
+      return `Query logic is flawed or the data isn't there. Two scenarios: (1) You haven't logged it — this system can only surface what you've put in. (2) Your search terms are too narrow — emotional CPU overheating over a cache miss. Broaden the query or check a different angle.`;
     }
 
     const memorySummaries = memories
