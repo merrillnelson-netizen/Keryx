@@ -318,13 +318,13 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
           similarity: r.similarity
         }));
 
-        if (results.length === 0) {
+        // Use GPT-synthesized answer if available, otherwise fall back gracefully
+        if (data.aiAnswer) {
+          responseMessage = data.aiAnswer;
+        } else if (results.length === 0) {
           responseMessage = "No matching memories found.";
-        } else if (results.length === 1) {
-          const memory = results[0];
-          responseMessage = `Found: ${memory.memoryText}`;
         } else {
-          responseMessage = `Found ${results.length} matching memories. The most relevant is: ${results[0].memoryText}`;
+          responseMessage = `Found ${results.length} matching memories.`;
         }
 
         newResponseData = {

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder } from "@shared/schema";
 import { z } from "zod";
-import { openai, extractMetadata, generateEmbedding, decomposeQuery, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone } from "./ai-service";
+import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth } from "./auth";
@@ -901,19 +901,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { semanticComponent, structuredFilters } = decomposed;
 
-      // Perform hybrid search
+      // Perform vector similarity search (topicTag intentionally NOT passed as SQL filter)
       const results = await storage.searchMemories(
         user.id,
         queryVector,
-        structuredFilters.topicTag,
+        undefined, // topicTag excluded from SQL filter — vector similarity handles relevance
         structuredFilters.timestampFilter?.start,
         structuredFilters.timestampFilter?.end,
         structuredFilters.metadataFilters,
         10 // limit to top 10 results
       );
 
+      // Generate a real AI synthesis answer using retrieved memories
+      const memoriesForSynthesis = results
+        .filter((r) => r.memoryText)
+        .map((r) => ({ memoryText: r.memoryText as string, timestamp: r.timestamp, similarity: r.similarity }));
+      const aiAnswer = await synthesizeSearchAnswer(queryText, memoriesForSynthesis);
+
       res.json({
         status: 'success',
+        aiAnswer,
         data: results,
         query: {
           original: queryText,

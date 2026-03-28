@@ -572,7 +572,7 @@ export class DatabaseStorage implements IStorage {
   async searchMemories(
     userId: string,
     queryVector: number[],
-    topicTag?: string,
+    _topicTag?: string,
     timestampStart?: Date,
     timestampEnd?: Date,
     metadataFilters?: Record<string, any>,
@@ -580,11 +580,13 @@ export class DatabaseStorage implements IStorage {
   ): Promise<Array<Partial<LogEntry> & { similarity: number }>> {
     try {
       // Build the WHERE clause conditions - always include userId filter
-      const conditions: any[] = [eq(logEntries.userId, userId)];
-
-      if (topicTag) {
-        conditions.push(eq(logEntries.topicTag, topicTag));
-      }
+      // NOTE: topicTag is intentionally NOT used as a hard SQL filter — it would eliminate
+      // semantically relevant results if the AI guessed the wrong tag. Vector similarity
+      // handles relevance; topic tags are shown in results only.
+      const conditions: any[] = [
+        eq(logEntries.userId, userId),
+        sql`${logEntries.embeddingVector} IS NOT NULL`,
+      ];
 
       if (timestampStart) {
         conditions.push(gte(logEntries.timestamp, timestampStart));
@@ -597,7 +599,6 @@ export class DatabaseStorage implements IStorage {
       // Build metadata JSON filter conditions
       if (metadataFilters && Object.keys(metadataFilters).length > 0) {
         for (const [key, value] of Object.entries(metadataFilters)) {
-          // Use jsonb contains operator for filtering
           conditions.push(sql`${logEntries.metadataJson}->>'${sql.raw(key)}' = ${value}`);
         }
       }
@@ -605,7 +606,7 @@ export class DatabaseStorage implements IStorage {
       // Convert query vector to pgvector format
       const vectorString = `[${queryVector.join(',')}]`;
 
-      // Perform hybrid search: vector similarity + filters
+      // Perform pure vector similarity search
       // Note: embeddingVector is excluded from results for performance (1536 floats per record)
       const result = await db
         .select({
@@ -627,6 +628,14 @@ export class DatabaseStorage implements IStorage {
         .where(and(...conditions))
         .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
         .limit(limit);
+
+      // Log similarity scores for diagnostics
+      if (result.length > 0) {
+        const scores = result.map((r: any) => `${Math.round((r.similarity ?? 0) * 100)}%`).join(', ');
+        console.log(`[search] Top ${result.length} similarity scores: ${scores}`);
+      } else {
+        console.log(`[search] No results found with embeddings for user ${userId}`);
+      }
 
       return result as Array<Partial<LogEntry> & { similarity: number }>;
     } catch (error) {
@@ -937,7 +946,7 @@ export class DatabaseStorage implements IStorage {
       const current = await this.getPersonById(userId, id);
       if (current) {
         const isRename = data.name && data.name !== current.name;
-        const userSuppliedAliases: string[] = data.aliases !== undefined ? data.aliases : (current.aliases || []);
+        const userSuppliedAliases: string[] = data.aliases !== undefined ? (data.aliases ?? []) : (current.aliases ?? []);
         const aliasSet = new Set(userSuppliedAliases);
         if (isRename) {
           aliasSet.add(current.name);

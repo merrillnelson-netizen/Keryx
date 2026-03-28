@@ -406,10 +406,16 @@ export async function decomposeQuery(queryText: string): Promise<DecomposedQuery
 
 1. semanticComponent: The high-level intent/question (e.g., "Who broke" from "Who broke for the first game on table two last Tuesday?")
 2. structuredFilters: All filterable criteria:
-   - topicTag: Topic if mentioned. Valid topics: Work, Family, Social, Health, Financial, Shopping, Groceries, Travel, Learning, Home, Recreation, Food, Meeting, Personal, General
-   - timestampFilter: Date/time constraints (convert relative dates like "this morning", "today", "last Tuesday" to actual dates)
+   - topicTag: Topic if mentioned. Valid topics: Work, Family, Social, Health, Financial, Shopping, Groceries, Travel, Learning, Home, Recreation, Food, Meeting, Personal, General. OMIT if not explicitly mentioned — do NOT guess.
+   - timestampFilter: ONLY include if the query contains an explicit time reference (e.g., "last week", "yesterday", "in March", "last month", "this morning").
+     IMPORTANT: All time ranges are ROLLING WINDOWS relative to today, NOT calendar boundaries:
+     - "last month" = today minus 30 days to today (NOT the calendar month of the previous month)
+     - "last week" = today minus 7 days to today
+     - "recently" = today minus 14 days to today
+     - "this year" = today minus 365 days to today
+     - If no date is mentioned, OMIT timestampFilter entirely — do not guess.
      - start: ISO date string
-     - end: ISO date string
+     - end: ISO date string (use today's date as end unless query implies otherwise)
    - metadataFilters: Specific field values using EXACT field names from common patterns:
      
      For food/meal queries use these EXACT field names:
@@ -446,7 +452,7 @@ Respond with JSON in this exact format:
   }
 }
 
-Current date for reference: ${new Date().toISOString()}`,
+Today's date: ${new Date().toISOString()}`,
         },
         {
           role: "user",
@@ -482,6 +488,60 @@ Current date for reference: ${new Date().toISOString()}`,
       semanticComponent: queryText,
       structuredFilters: {},
     };
+  }
+}
+
+/**
+ * Synthesize a natural language answer from search results using the Keryx persona.
+ * Safety valve: if memories don't answer the question, says so explicitly and
+ * summarizes the closest match instead of hallucinating a connection.
+ */
+export async function synthesizeSearchAnswer(
+  queryText: string,
+  memories: Array<{ memoryText: string; timestamp?: Date | string; similarity?: number }>
+): Promise<string> {
+  try {
+    if (memories.length === 0) {
+      return "I couldn't find any memories that match that question. You either haven't logged it yet, or it might be phrased differently in your logs — try a more specific or broader search.";
+    }
+
+    const memorySummaries = memories
+      .slice(0, 8) // Use top 8 for synthesis context
+      .map((m, i) => {
+        const when = m.timestamp ? new Date(m.timestamp as string).toLocaleDateString() : "unknown date";
+        const score = m.similarity ? ` (${Math.round(m.similarity * 100)}% match)` : "";
+        return `[${i + 1}] ${when}${score}: ${m.memoryText}`;
+      })
+      .join("\n\n");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are Keryx, a personal AI memory assistant. Your tone is warm and direct, with dry humor when it fits naturally.
+
+You are answering a question using only the memories retrieved below. Follow these rules strictly:
+
+1. Answer the question directly using information from the memories. Be concise.
+2. SAFETY VALVE: If the memories don't actually answer the question — even partially — say so explicitly. Do not invent connections or bridge gaps with guesses. Instead, say something like "I don't see a direct answer in your logs, but the closest thing I found was..." and briefly describe the most relevant memory.
+3. If the memories partially answer the question, answer what you can and note the gap.
+4. Cite specific details from the memories (dates, quotes, actions) to make the answer concrete.
+5. Do not say "based on the memories provided" or similar meta-language — just answer naturally.
+6. Keep it to 3-5 sentences unless the question clearly requires more.`,
+        },
+        {
+          role: "user",
+          content: `Question: ${queryText}\n\nRetrieved memories:\n${memorySummaries}`,
+        },
+      ],
+      max_tokens: 400,
+    });
+
+    return response.choices[0].message.content?.trim() || "I found some memories but had trouble summarizing them — check the source memories below.";
+  } catch (error) {
+    console.error("Error synthesizing search answer:", error);
+    return "I found some relevant memories below, but had trouble generating a summary. Take a look at the source memories.";
   }
 }
 

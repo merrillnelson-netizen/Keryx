@@ -54,11 +54,15 @@ function MemoryCard({ memory, index }: { memory: SearchResultMemory; index: numb
           <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded">
             #{index + 1}
           </span>
-          {memory.similarity && (
-            <span className="text-xs text-muted-foreground">
-              {Math.round(memory.similarity * 100)}% match
-            </span>
-          )}
+          {memory.similarity && (() => {
+            const pct = Math.round(memory.similarity * 100);
+            const isStretch = pct < 65;
+            return (
+              <span className={`text-xs font-medium ${isStretch ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground"}`}>
+                {pct}% match{isStretch ? " (stretch)" : ""}
+              </span>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="w-3 h-3" />
