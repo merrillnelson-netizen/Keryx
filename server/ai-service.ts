@@ -947,7 +947,7 @@ Respond with JSON:
   "focusAreas": ["area 1", "area 2", ...],
   "reminders": ["reminder 1", "reminder 2", ...],
   "moodTrend": "observation about their emotional state",
-  "affirmation": "encouraging statement"${recentEmails?.length ? `,
+  "affirmation": "sharp one-liner — a specific call to action or direct observation"${recentEmails?.length ? `,
   "emailHighlights": ["Email from X about Y relates to your project...", ...]` : ''}${financialSummary ? `,
   "financialInsights": ["You spent $X on Y this week...", ...]` : ''}${activeGoals?.length ? `,
   "goalUpdates": ["Your 'Learn Spanish' goal (30%) - You mentioned practicing this week!", ...]` : ''}
@@ -957,7 +957,7 @@ Respond with JSON:
           role: "user",
           content: recentMemories.length > 0 
             ? `Here are my recent memories from the past week:\n\n${memorySummary}${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}${remindersContext}\n\nGenerate my ${timeOfDay} briefing.`
-            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}${remindersContext}\n\nGenerate a welcoming ${timeOfDay} briefing encouraging me to start logging.`
+            : `I don't have any recent memories logged.${peopleContext}${activeProjectsContext}${emailContext}${financialContext}${locationCtx}${goalsContext}${remindersContext}\n\nNo memories on record. Generate a ${timeOfDay} briefing with whatever context is available and a direct push to start logging.`
         },
       ],
       response_format: { type: "json_object" },
@@ -971,7 +971,7 @@ Respond with JSON:
       focusAreas: Array.isArray(result.focusAreas) ? result.focusAreas : [],
       reminders: Array.isArray(result.reminders) ? result.reminders : [],
       moodTrend: result.moodTrend || "Log some memories to track your emotional patterns.",
-      affirmation: result.affirmation || "Every day is a new opportunity.",
+      affirmation: result.affirmation || "No data, no briefing. Start logging.",
       emailHighlights: Array.isArray(result.emailHighlights) ? result.emailHighlights : undefined,
       financialInsights: Array.isArray(result.financialInsights) ? result.financialInsights : undefined,
       goalUpdates: Array.isArray(result.goalUpdates) ? result.goalUpdates : undefined,
