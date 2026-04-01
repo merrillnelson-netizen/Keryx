@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { motion, animate } from "framer-motion";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -53,12 +53,15 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
   const thumbColor = getThumbColor(displayValue);
   const currentLabel = getLabelForValue(displayValue);
 
-  const [visualPos, setVisualPos] = useState(displayValue);
+  const thumbX = useMotionValue(displayValue);
+  const thumbLeft = useTransform(thumbX, (v) => `${v}%`);
+
   const [isBouncing, setIsBouncing] = useState(false);
+  const [showUpgradeHint, setShowUpgradeHint] = useState(false);
 
   useEffect(() => {
     if (!isBouncing) {
-      setVisualPos(displayValue);
+      animate(thumbX, displayValue, { type: "spring", stiffness: 300, damping: 30 });
     }
   }, [displayValue, isBouncing]);
 
@@ -74,13 +77,25 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
     if (newVal > cap) {
       if (isBouncing) return;
       setIsBouncing(true);
-      setVisualPos(newVal);
-      setTimeout(() => {
-        setVisualPos(cap);
-        setTimeout(() => setIsBouncing(false), 500);
-      }, 120);
+      setShowUpgradeHint(true);
+      animate(thumbX, newVal, {
+        duration: 0.12,
+        ease: "easeOut",
+        onComplete: () => {
+          animate(thumbX, cap, {
+            type: "spring",
+            stiffness: 500,
+            damping: 18,
+            onComplete: () => {
+              setIsBouncing(false);
+              setTimeout(() => setShowUpgradeHint(false), 1500);
+            },
+          });
+        },
+      });
       return;
     }
+    thumbX.set(newVal);
     onChange(newVal);
   };
 
@@ -141,22 +156,15 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
           />
           <motion.div
             className="absolute top-1/2 w-5 h-5 rounded-full border-2 border-white shadow-lg -translate-y-1/2 -translate-x-1/2 pointer-events-none"
-            style={{ top: "50%" }}
-            animate={{
-              left: `${visualPos}%`,
+            style={{
+              left: thumbLeft,
+              top: "50%",
               backgroundColor: thumbColor,
             }}
-            transition={
-              isBouncing && visualPos === cap
-                ? { type: "spring", stiffness: 500, damping: 18 }
-                : isBouncing
-                ? { duration: 0.1, ease: "easeOut" }
-                : { type: "spring", stiffness: 300, damping: 30 }
-            }
           />
         </div>
 
-        {isBouncing && upgradeTooltip && (
+        {showUpgradeHint && upgradeTooltip && (
           <motion.div
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}

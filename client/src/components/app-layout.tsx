@@ -82,25 +82,34 @@ function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <Button
-      data-testid="button-promode-toggle-sidebar"
-      onClick={() => toggleMutation.mutate()}
-      disabled={toggleMutation.isPending}
-      variant="ghost"
-      className={cn(
-        "flex-1 justify-start gap-2 hover:bg-white/5 transition-colors",
-        isProfessional
-          ? "text-orange-400 hover:text-orange-300"
-          : "text-muted-foreground hover:text-foreground"
-      )}
-    >
-      {isProfessional ? (
-        <ShieldCheck className="w-4 h-4" />
-      ) : (
-        <ShieldOff className="w-4 h-4" />
-      )}
-      {isProfessional ? "Pro Mode On" : "Mute Keryx"}
-    </Button>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            data-testid="button-promode-toggle-sidebar"
+            onClick={() => toggleMutation.mutate()}
+            disabled={toggleMutation.isPending}
+            variant="ghost"
+            className={cn(
+              "flex-1 justify-start gap-2 hover:bg-white/5 transition-colors",
+              isProfessional
+                ? "text-orange-400 hover:text-orange-300"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {isProfessional ? (
+              <ShieldCheck className="w-4 h-4" />
+            ) : (
+              <ShieldOff className="w-4 h-4" />
+            )}
+            {isProfessional ? "Pro Mode On" : "Mute Keryx"}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="text-xs">
+          {isProfessional ? "Keryx is muted — click to restore personality" : "Click to mute Keryx's personality"}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

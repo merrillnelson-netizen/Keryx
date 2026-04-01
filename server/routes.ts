@@ -788,7 +788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Detects financial queries and routes them to financial analysis
    * Requires authentication
    */
-  app.post("/api/memories/search", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.post("/api/memories/search", requireAuth, requireTier('pro'), aiLimiter, withSettings, async (req, res) => {
     try {
       const { queryText } = req.body;
       const user = req.user as User;
@@ -798,7 +798,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if this is a financial query
-      const userSettings = await storage.getSettings(user.id);
+      const userSettings = req.userSettings;
       const isFinancial = isFinancialQuery(queryText);
       
       if (isFinancial) {
@@ -2303,7 +2303,7 @@ Respond with JSON only.`
    * Body: { question?: string, days?: number }
    * Requires authentication
    */
-  app.post("/api/insights", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.post("/api/insights", requireAuth, requireTier('pro'), aiLimiter, withSettings, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = insightsQuerySchema.safeParse(req.body);
@@ -2344,7 +2344,7 @@ Respond with JSON only.`
         }));
 
       // Get user timezone from settings
-      const userSettings = await storage.getSettings(user.id);
+      const userSettings = req.userSettings;
       const userTimezone = userSettings?.userTimezone || 'America/Denver';
 
       // Generate insights - filter and type-guard the light memories
@@ -2389,7 +2389,7 @@ Respond with JSON only.`
    * reminders, mood trends, email highlights, and an encouraging affirmation.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/briefing", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.get("/api/briefing", requireAuth, requireTier('pro'), aiLimiter, withSettings, async (req, res) => {
     try {
       const user = req.user as User;
       const localHour = parseInt(req.query.localHour as string) || new Date().getHours();
@@ -2397,7 +2397,7 @@ Respond with JSON only.`
       const queryTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : undefined;
       
       // Cache key based on user's LOCAL date (not UTC) to avoid wrong day boundary
-      const settingsForCache = await storage.getSettings(user.id);
+      const settingsForCache = req.userSettings;
       const briefingTimezone = queryTimezone || settingsForCache?.userTimezone || 'America/Denver';
       const today = formatDateForTimezone(new Date(), briefingTimezone);
       const cacheKey = `${today}-${briefingTimezone}`;
@@ -2669,7 +2669,7 @@ Respond with JSON only.`
    * to create news-style stories about the user's personal ecosystem.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/news-feed", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.get("/api/news-feed", requireAuth, requireTier('pro'), aiLimiter, withSettings, async (req, res) => {
     try {
       const user = req.user as User;
       const forceRefresh = req.query.refresh === 'true';
@@ -2701,11 +2701,11 @@ Respond with JSON only.`
       }
       
       // OPTIMIZED: Fetch independent data sources in parallel (using lightweight query)
-      const [recentMemories, userSettings, userPeople] = await Promise.all([
+      const [recentMemories, userPeople] = await Promise.all([
         storage.getRecentLogEntriesLight(user.id, 7, 100),
-        storage.getSettings(user.id),
         storage.getPeople(user.id)
       ]);
+      const userSettings = req.userSettings;
       
       const knownPeople = userPeople.map(p => ({
         name: p.name,
@@ -3146,7 +3146,7 @@ Respond with JSON only.`
    * and returns actionable alerts.
    * Uses caching to avoid regenerating on every request (30-minute TTL).
    */
-  app.get("/api/alerts", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.get("/api/alerts", requireAuth, requireTier('pro'), aiLimiter, withSettings, async (req, res) => {
     try {
       const user = req.user as User;
       const days = parseInt(req.query.days as string) || 14;
@@ -3233,7 +3233,7 @@ Respond with JSON only.`
       
       // Get user timezone from query param or settings
       const queryTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : undefined;
-      const userSettings = await storage.getSettings(user.id);
+      const userSettings = req.userSettings;
       const userTimezone = queryTimezone || userSettings?.userTimezone || 'America/Denver';
       
       const alerts = await detectPatternAlerts(alertMemories, userTimezone, userSettings?.sassLevel ?? 50, userSettings?.professionalMode ?? false);
