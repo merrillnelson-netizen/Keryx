@@ -282,10 +282,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashedPassword = await bcrypt.hash(password, 10);
       
       // Create user
-      const user = await storage.createUser({
+      let user = await storage.createUser({
         username,
         password: hashedPassword,
       });
+
+      // During early access (billing enforcement off), grant life_os so the UI shows
+      // full access. When BILLING_ENFORCEMENT=true is set, new users will start on free.
+      if (process.env.BILLING_ENFORCEMENT !== 'true') {
+        user = await storage.updateUser(user.id, {
+          subscriptionTier: 'life_os',
+          subscriptionStatus: 'active',
+        });
+      }
       
       // Log the user in
       req.login(user, (err) => {
