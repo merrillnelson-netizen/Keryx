@@ -13,11 +13,11 @@ interface SassOMeterProps {
 }
 
 const SASS_LABELS = [
-  { level: 0, label: "Strictly Business", pct: 0 },
-  { level: 25, label: "Mildly Amused", pct: 25 },
+  { level: 0, label: "Silent", pct: 0 },
+  { level: 25, label: "Strictly Business", pct: 25 },
   { level: 50, label: "Opinionated Peer", pct: 50 },
   { level: 75, label: "Roast Master", pct: 75 },
-  { level: 100, label: "Full Maximum Chaos Mode", pct: 100 },
+  { level: 100, label: "Full Max Chaos", pct: 100 },
 ];
 
 const TIER_CAPS: Record<string, number> = {
@@ -31,8 +31,8 @@ function getTierCap(tier: string): number {
 }
 
 function getLabelForValue(value: number): string {
-  if (value === 0) return "Strictly Business";
-  if (value <= 25) return "Mildly Amused";
+  if (value === 0) return "Silent / Muted";
+  if (value <= 25) return "Strictly Business";
   if (value <= 50) return "Opinionated Peer";
   if (value <= 75) return "Roast Master";
   return "Full Maximum Chaos Mode";
