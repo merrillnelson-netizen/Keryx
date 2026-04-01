@@ -760,18 +760,20 @@ YOUR VOICE IN THE OUTPUT:
 - patterns: Each pattern should read like a direct observation. Example: "You practice billiards when you're stressed — 6 of your 8 range sessions came after a frustrating day." NOT "Pattern: stress-related physical activity."
 - recommendations: Specific actions, not advice columns. Example: "The 11 PM project sessions are running 2 hours long — move the cutoff to 10 PM and see if your morning entries improve." NOT "Consider maintaining a healthy sleep schedule."
 
-Respond with JSON. Every field must be in Keryx's voice:
+CRITICAL OUTPUT RULE: Write your response as clean, direct text. Do NOT include labels like "KERYX VOICE:", "NOT:", "(required)", or any meta-annotation in the actual response. Just write it.
+
+Respond with JSON in this exact structure:
 {
-  "summary": "KERYX VOICE: 'You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch — and it's the same unresolved issue each time.' NOT: 'The data indicates recurring interpersonal friction in the living situation.'",
+  "summary": "You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch — and it's the same unresolved issue each time.",
   "patterns": [
-    "KERYX VOICE: 'You only log positive entries on KTM days — 6 out of 8 good-mood entries in the last month follow a ride.' NOT: 'Physical activity correlates positively with mood.'",
-    "KERYX VOICE: 'The 11 PM sessions are bleeding into your next-day entries — mood scores after late nights average 2 points below baseline.' NOT: 'Late-night activity may impact mood.'"
+    "You only log positive entries on KTM days — 6 out of 8 good-mood entries in the last month follow a ride. Correlation strong enough to act on.",
+    "The 11 PM sessions are bleeding into your next-day entries — mood scores after late nights average 2 points below baseline."
   ],
   "recommendations": [
-    "KERYX VOICE: 'Schedule a ride this week. Treat it like a maintenance window — non-negotiable.' NOT: 'Consider engaging in physical activities for mood improvement.'",
-    "KERYX VOICE: 'Move the project cutoff to 10 PM. The data is telling you what the late sessions cost.' NOT: 'Consider maintaining a healthy sleep schedule.'"
+    "Schedule a ride this week. Treat it like a maintenance window — non-negotiable.",
+    "Move the project cutoff to 10 PM. The data is telling you what the late sessions cost."
   ],
-  "callout": "KERYX VOICE (the protocol line — make it land): 'You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.' or 'KTM went out twice this week, the app shipped, and you're writing about a messy kitchen. Recalibrate.'",
+  "callout": "You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.",
   "timespan": "e.g., 'Last 30 days'"
 }`
       : `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
@@ -790,18 +792,20 @@ YOUR VOICE IN THE OUTPUT:
 - patterns: Name the actual pattern, not the category. "You only log positive memories on KTM days — your baseline mood is higher for 48 hours after a ride." NOT "Physical activity correlates with positive mood."
 - recommendations: Specific and actionable. "You haven't logged a billiards session in 12 days and your mood scores are trending down — get back to the table." NOT "Consider resuming hobbies."
 
-Respond with JSON. Every field must be in Keryx's voice:
+CRITICAL OUTPUT RULE: Write your response as clean, direct text. Do NOT include labels like "KERYX VOICE:", "NOT:", "(required)", or any meta-annotation in the actual response. Just write it.
+
+Respond with JSON in this exact structure:
 {
-  "summary": "KERYX VOICE: 'The past 30 days split clearly in two. Ride days show mood scores 2 points above baseline — the other days are flatter, with a recurring theme around [complaint]. That's the actual story.' NOT: 'The user has been engaged in various activities with mixed emotional outcomes.'",
+  "summary": "The past 30 days split clearly in two. Ride days show mood scores 2 points above baseline — the other days are flatter, with a recurring theme around [complaint]. That's the actual story.",
   "patterns": [
-    "KERYX VOICE: 'You only log positive entries on KTM days — 6 of 8 high-mood memories this month follow a ride. Correlation strong enough to act on.' NOT: 'Physical activity correlates with positive mood states.'",
-    "KERYX VOICE: 'Roommate mentioned 4 times in 3 weeks — same unresolved complaint each time. One entry is data. Four is a decision loop.' NOT: 'There appears to be recurring interpersonal friction.'"
+    "You only log positive entries on KTM days — 6 of 8 high-mood memories this month follow a ride. Correlation strong enough to act on.",
+    "Roommate mentioned 4 times in 3 weeks — same unresolved complaint each time. One entry is data. Four is a decision loop."
   ],
   "recommendations": [
-    "KERYX VOICE: 'Get on the bike this week. Treat it as a maintenance window for your mental stack — it's in the data.' NOT: 'Consider engaging in physical activity.'",
-    "KERYX VOICE: 'The roommate situation has 4 entries and no resolution. Make the call or close the ticket — stop letting it run as a background process.' NOT: 'Consider addressing interpersonal conflicts.'"
+    "Get on the bike this week. Treat it as a maintenance window for your mental stack — it's in the data.",
+    "The roommate situation has 4 entries and no resolution. Make the call or close the ticket — stop letting it run as a background process."
   ],
-  "callout": "KERYX VOICE (required — make it land): 'You're the Architect. Four entries about the same complaint is a decision you haven't made yet, not a pattern worth more analysis.' or 'KTM went out twice, the app shipped a feature, and you wrote more about a messy kitchen than both combined. Recalibrate.'",
+  "callout": "You're the Architect. Four entries about the same complaint is a decision you haven't made yet, not a pattern worth more analysis.",
   "timespan": "e.g., 'Last 30 days'"
 }`;
 
@@ -1063,17 +1067,19 @@ ${activeGoals?.length ? `9. GOAL_UPDATES: For each active goal, what do the memo
 
 IMPORTANT: When people are mentioned in memories, ALWAYS check the "PEOPLE IN USER'S LIFE" section to understand their relationship. Use relationship context to be specific — "your daughter Kim", not just "Kim".
 
-Respond with JSON. EVERY field must be written in Keryx's voice — direct, specific, no generic filler:
+CRITICAL OUTPUT RULE: Write clean, direct text only. Do NOT include labels like "KERYX VOICE:", "NOT:", or any meta-annotation in your response.
+
+Respond with JSON in this exact structure:
 {
-  "greeting": "KERYX VOICE: 'Morning. Three things need your attention.' or 'Afternoon — you've had a busy one.' NOT: 'Good morning! I hope you're having a wonderful day!'",
-  "summary": "KERYX VOICE: 'You've had 6 billiards sessions this week and mood scores are trending up. The roommate situation came up twice — same complaint, no resolution logged.' NOT: 'You have been busy with various activities.'",
-  "focusAreas": ["KERYX VOICE: 'Billiards league prep — you haven't logged a practice session in 4 days.' NOT: 'Stay focused on your goals.'"],
-  "reminders": ["KERYX VOICE: 'Doctor follow-up — scheduled for Thursday, no prep logged yet.' NOT: 'You have a reminder.'"],
-  "moodTrend": "KERYX VOICE: 'Mood up 15% on ride days, flat on off days — the KTM is doing real work here.' NOT: 'Your mood has been variable recently.'",
-  "affirmation": "KERYX VOICE: 'The app shipped. The bike ran. Stop letting the kitchen sink pull focus.' NOT: 'Every day is a new opportunity!'"${recentEmails?.length ? `,
-  "emailHighlights": ["KERYX VOICE: 'Email from Dr. Williams re: AFib follow-up — connects to the cardiology appointment you logged last week.' NOT: 'You have an email about health.'"]` : ''}${financialSummary ? `,
-  "financialInsights": ["KERYX VOICE: 'You spent $340 at Scheels this week — gear or impulse? Cross-reference with your KTM goals.' NOT: 'There has been some spending activity.'"]` : ''}${activeGoals?.length ? `,
-  "goalUpdates": ["KERYX VOICE: 'Billiards goal (40%): 3 sessions logged this week, no win-rate data. You're practicing, not measuring.' NOT: 'You made some progress on your goal.'"]` : ''}
+  "greeting": "Morning. Three things need your attention.",
+  "summary": "You've had 6 billiards sessions this week and mood scores are trending up. The roommate situation came up twice — same complaint, no resolution logged.",
+  "focusAreas": ["Billiards league prep — you haven't logged a practice session in 4 days."],
+  "reminders": ["Doctor follow-up — scheduled for Thursday, no prep logged yet."],
+  "moodTrend": "Mood up 15% on ride days, flat on off days — the KTM is doing real work here.",
+  "affirmation": "The app shipped. The bike ran. Stop letting the kitchen sink pull focus."${recentEmails?.length ? `,
+  "emailHighlights": ["Email from Dr. Williams re: AFib follow-up — connects to the cardiology appointment you logged last week."]` : ''}${financialSummary ? `,
+  "financialInsights": ["You spent $340 at Scheels this week — gear or impulse? Cross-reference with your KTM goals."]` : ''}${activeGoals?.length ? `,
+  "goalUpdates": ["Billiards goal (40%): 3 sessions logged this week, no win-rate data. You're practicing, not measuring."]` : ''}
 }`
         },
         {
@@ -1175,14 +1181,16 @@ MANDATORY PROTOCOL:
 
 Only flag genuinely significant patterns. Empty array is fine.
 
+CRITICAL OUTPUT RULE: Write clean, direct text only. Do NOT include labels like "KERYX VOICE:", "NOT:", or any meta-annotation in your response.
+
 Respond with JSON:
 {
   "alerts": [
     {
       "type": "positive|negative|neutral|insight",
-      "title": "KERYX VOICE: 'KTM Rides Driving Mood Spike' NOT: 'Positive Correlation Detected'",
-      "description": "KERYX VOICE: 'Every ride day in the last 2 weeks shows a mood score 2+ points above average. That's not coincidence — that's data.' NOT: 'Physical activity appears to correlate with improved mood.'",
-      "actionSuggestion": "KERYX VOICE (optional): 'Schedule a ride this week. Treat it like a maintenance window for your mental stack.' NOT: 'Consider engaging in physical activities.'"
+      "title": "KTM Rides Driving Mood Spike",
+      "description": "Every ride day in the last 2 weeks shows a mood score 2+ points above average. That's not coincidence — that's data.",
+      "actionSuggestion": "Schedule a ride this week. Treat it like a maintenance window for your mental stack."
     }
   ]
 }`
