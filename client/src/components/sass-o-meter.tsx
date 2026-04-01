@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -58,6 +58,13 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
 
   const [isBouncing, setIsBouncing] = useState(false);
   const [showUpgradeHint, setShowUpgradeHint] = useState(false);
+  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isBouncing) {
@@ -90,7 +97,7 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
             damping: 18,
             onComplete: () => {
               setIsBouncing(false);
-              setTimeout(() => setShowUpgradeHint(false), 1500);
+              hintTimeoutRef.current = setTimeout(() => setShowUpgradeHint(false), 1500);
             },
           });
         },

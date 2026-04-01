@@ -74,7 +74,7 @@ function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs">
-            {isProfessional ? "Keryx is muted — tap to restore personality" : "Tap to mute Keryx"}
+            {isProfessional ? "Keryx is muted" : "Tap to mute Keryx"}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -106,7 +106,7 @@ function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right" className="text-xs">
-          {isProfessional ? "Keryx is muted — click to restore personality" : "Click to mute Keryx's personality"}
+          {isProfessional ? "Keryx is muted" : "Click to mute Keryx"}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
