@@ -10,7 +10,15 @@ import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcrypt';
 import { Request, Response, NextFunction } from 'express';
 import { storage } from './storage';
-import { User } from '@shared/schema';
+import { User, Settings } from '@shared/schema';
+
+declare global {
+  namespace Express {
+    interface Request {
+      userSettings?: Settings | null;
+    }
+  }
+}
 
 /**
  * Configure Passport local strategy for username/password authentication
@@ -71,4 +79,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     status: 'error',
     timestamp: new Date().toISOString()
   });
+}
+
+/**
+ * Middleware that loads and caches user settings on req.userSettings.
+ * Use after requireAuth on routes that need sass/persona params to avoid
+ * a separate storage.getSettings() call inside the route handler.
+ */
+export async function withSettings(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user as User;
+    if (!user?.id) return next();
+    req.userSettings = await storage.getSettings(user.id);
+    next();
+  } catch (err) {
+    next(err);
+  }
 }

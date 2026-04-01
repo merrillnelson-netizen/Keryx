@@ -3,12 +3,16 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
-import { Menu, X, Mic, History, Settings, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
 import { KeryxCapabilitiesModal } from "@/components/keryx-capabilities-modal";
 import { KeryxStoryModal } from "@/components/keryx-story-modal";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Settings } from "@shared/schema";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -27,8 +31,78 @@ const navigation = [
   { name: "Timeline", href: "/timeline", icon: Calendar },
   { name: "Messages", href: "/messages", icon: MessageCircle },
   { name: "Locations", href: "/locations", icon: MapPin },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
+
+function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+  });
+
+  const isProfessional = settings?.professionalMode ?? false;
+
+  const toggleMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", "/api/settings", { professionalMode: !isProfessional }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+    },
+  });
+
+  if (compact) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              data-testid="button-promode-toggle"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "p-2 hover:bg-white/10 transition-colors",
+                isProfessional && "text-orange-400 hover:text-orange-300"
+              )}
+              onClick={() => toggleMutation.mutate()}
+              disabled={toggleMutation.isPending}
+              aria-label={isProfessional ? "Disable Professional Mode" : "Enable Professional Mode"}
+            >
+              {isProfessional ? (
+                <ShieldCheck className="w-5 h-5" />
+              ) : (
+                <ShieldOff className="w-5 h-5 opacity-50" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            {isProfessional ? "Keryx is muted — tap to restore personality" : "Tap to mute Keryx"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return (
+    <Button
+      data-testid="button-promode-toggle-sidebar"
+      onClick={() => toggleMutation.mutate()}
+      disabled={toggleMutation.isPending}
+      variant="ghost"
+      className={cn(
+        "flex-1 justify-start gap-2 hover:bg-white/5 transition-colors",
+        isProfessional
+          ? "text-orange-400 hover:text-orange-300"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {isProfessional ? (
+        <ShieldCheck className="w-4 h-4" />
+      ) : (
+        <ShieldOff className="w-4 h-4" />
+      )}
+      {isProfessional ? "Pro Mode On" : "Mute Keryx"}
+    </Button>
+  );
+}
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
@@ -111,6 +185,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </div>
             </div>
             <div className="flex gap-2">
+              <ProfessionalModeToggle />
               <Button
                 data-testid="button-theme-toggle"
                 onClick={toggleTheme}
@@ -120,16 +195,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                 {theme === "light" ? "Dark" : "Light"}
               </Button>
-              <Button
-                data-testid="button-logout"
-                onClick={handleLogout}
-                variant="ghost"
-                className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
             </div>
+            <Button
+              data-testid="button-logout"
+              onClick={handleLogout}
+              variant="ghost"
+              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
           </div>
         </div>
       </aside>
@@ -221,6 +296,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <ProfessionalModeToggle />
                         <Button
                           data-testid="button-theme-toggle-mobile"
                           onClick={toggleTheme}
@@ -230,16 +306,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
                           {theme === "light" ? "Dark" : "Light"}
                         </Button>
-                        <Button
-                          data-testid="button-logout-mobile"
-                          onClick={handleLogout}
-                          variant="ghost"
-                          className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          Logout
-                        </Button>
                       </div>
+                      <Button
+                        data-testid="button-logout-mobile"
+                        onClick={handleLogout}
+                        variant="ghost"
+                        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </Button>
                     </div>
                   </div>
                 </SheetContent>
@@ -254,6 +330,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </div>
               </Link>
             </div>
+
+            {/* Mobile top bar right side: Pro Mode toggle */}
+            <ProfessionalModeToggle compact />
           </div>
         </div>
       </header>

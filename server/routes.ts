@@ -6,7 +6,7 @@ import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
-import { requireAuth } from "./auth";
+import { requireAuth, withSettings } from "./auth";
 import rateLimit from "express-rate-limit";
 import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpcomingEvents, findRelevantEvent, createCalendarEvent, findDuplicateEvent } from "./calendar-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
@@ -4926,7 +4926,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Analyze goal progress using AI
-  app.post("/api/goals/:id/analyze", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/goals/:id/analyze", requireAuth, withSettings, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -4935,19 +4935,16 @@ Return ONLY the JSON array, no other text.`;
       }
       
       // Get recent memories to analyze for progress
-      const [recentMemoriesRaw, goalUserSettings] = await Promise.all([
-        storage.getRecentLogEntriesLight(user.id, 30, 100),
-        storage.getSettings(user.id)
-      ]);
+      const recentMemoriesRaw = await storage.getRecentLogEntriesLight(user.id, 30, 100);
       const recentMemories = recentMemoriesRaw
         .filter(m => m.memoryText)
         .map(m => ({ id: m.id, memoryText: m.memoryText!, timestamp: m.timestamp, topicTag: m.topicTag }));
       
-      // Call AI to analyze progress
+      // Call AI to analyze progress (use settings cached by withSettings middleware)
       const analysis = await analyzeGoalProgress({
         ...goal,
         milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
-      }, recentMemories, goalUserSettings?.sassLevel ?? 50, goalUserSettings?.professionalMode ?? false);
+      }, recentMemories, req.userSettings?.sassLevel ?? 50, req.userSettings?.professionalMode ?? false);
       
       // Update the goal with AI analysis
       const updated = await storage.updateGoal(req.params.id, user.id, {
@@ -4967,7 +4964,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get suggested milestones for a goal
-  app.post("/api/goals/:id/suggest-milestones", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/goals/:id/suggest-milestones", requireAuth, withSettings, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -4975,11 +4972,10 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Goal not found");
       }
       
-      const milestoneUserSettings = await storage.getSettings(user.id);
       const suggestions = await suggestGoalMilestones({
         ...goal,
         milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
-      }, milestoneUserSettings?.sassLevel ?? 50, milestoneUserSettings?.professionalMode ?? false);
+      }, req.userSettings?.sassLevel ?? 50, req.userSettings?.professionalMode ?? false);
       res.json({ suggestions });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to generate milestone suggestions", error);

@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { motion, animate } from "framer-motion";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,10 +39,6 @@ function getLabelForValue(value: number): string {
   return "Full Maximum Chaos Mode";
 }
 
-function getGradientPosition(value: number): string {
-  return `${value}%`;
-}
-
 function getThumbColor(value: number): string {
   if (value <= 25) return "#3b82f6";
   if (value <= 50) return "#22c55e";
@@ -56,11 +53,14 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
   const thumbColor = getThumbColor(displayValue);
   const currentLabel = getLabelForValue(displayValue);
 
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVal = parseInt(e.target.value, 10);
-    if (newVal > cap) return;
-    onChange(newVal);
-  };
+  const [visualPos, setVisualPos] = useState(displayValue);
+  const [isBouncing, setIsBouncing] = useState(false);
+
+  useEffect(() => {
+    if (!isBouncing) {
+      setVisualPos(displayValue);
+    }
+  }, [displayValue, isBouncing]);
 
   const upgradeTooltip =
     tier === "free"
@@ -68,6 +68,21 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
       : tier === "pro"
       ? "Upgrade to Life OS for full 100% Maximum Chaos Mode"
       : null;
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVal = parseInt(e.target.value, 10);
+    if (newVal > cap) {
+      if (isBouncing) return;
+      setIsBouncing(true);
+      setVisualPos(newVal);
+      setTimeout(() => {
+        setVisualPos(cap);
+        setTimeout(() => setIsBouncing(false), 500);
+      }, 120);
+      return;
+    }
+    onChange(newVal);
+  };
 
   return (
     <div className="space-y-4">
@@ -126,15 +141,34 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
           />
           <motion.div
             className="absolute top-1/2 w-5 h-5 rounded-full border-2 border-white shadow-lg -translate-y-1/2 -translate-x-1/2 pointer-events-none"
-            style={{
-              left: `${displayValue}%`,
+            style={{ top: "50%" }}
+            animate={{
+              left: `${visualPos}%`,
               backgroundColor: thumbColor,
-              top: "50%",
             }}
-            animate={{ left: `${displayValue}%`, backgroundColor: thumbColor }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            transition={
+              isBouncing && visualPos === cap
+                ? { type: "spring", stiffness: 500, damping: 18 }
+                : isBouncing
+                ? { duration: 0.1, ease: "easeOut" }
+                : { type: "spring", stiffness: 300, damping: 30 }
+            }
           />
         </div>
+
+        {isBouncing && upgradeTooltip && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="text-center"
+          >
+            <span className="text-xs px-2 py-1 rounded-full bg-amber-500/15 text-amber-500 border border-amber-500/30 inline-block">
+              🔒 {upgradeTooltip}
+            </span>
+          </motion.div>
+        )}
 
         <div className="flex justify-between relative">
           {SASS_LABELS.map(({ pct, label }) => {
