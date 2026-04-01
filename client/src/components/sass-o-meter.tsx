@@ -78,6 +78,8 @@ export function SassOMeter({ value, onChange, isMuted, onMuteChange, tier }: Sas
       if (isBouncing) return;
       setIsBouncing(true);
       setShowUpgradeHint(true);
+      // Commit cap as the actual value so displayValue=cap after bounce
+      onChange(cap);
       animate(thumbX, newVal, {
         duration: 0.12,
         ease: "easeOut",
