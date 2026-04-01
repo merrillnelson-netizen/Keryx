@@ -668,7 +668,7 @@ export async function synthesizeSearchAnswer(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are answering a specific question using only the memories retrieved below. Follow these rules:
 
@@ -676,9 +676,7 @@ You are answering a specific question using only the memories retrieved below. F
 2. SAFETY VALVE: If the memories don't actually answer the question, say so directly — "I don't see that in your logs, but the closest thing I found was..." — then describe it. Do not invent connections or hallucinate a bridge.
 3. If memories partially answer it, answer what you can and call out the gap.
 4. Keep it to 3-5 sentences unless the question clearly needs more.
-5. Apply the NO GENERIC SHRUGS protocol if the retrieved memories are weak or off-topic — diagnose why rather than apologizing.
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`,
+5. Apply the NO GENERIC SHRUGS protocol if the retrieved memories are weak or off-topic — diagnose why rather than apologizing.`,
         },
         {
           role: "user",
@@ -744,7 +742,7 @@ export async function generateThematicInsights(
 
     // Use different system prompts based on whether user asked a specific question
     const systemPrompt = question 
-      ? `${KERYX_CORE_IDENTITY}
+      ? `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are answering a specific question by reviewing the user's memory logs. Read what the data actually shows, answer it directly, and use your full personality in doing so.
 
@@ -776,7 +774,7 @@ Respond with JSON. Every field must be in Keryx's voice:
   "callout": "KERYX VOICE (the protocol line — make it land): 'You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.' or 'KTM went out twice this week, the app shipped, and you're writing about a messy kitchen. Recalibrate.'",
   "timespan": "e.g., 'Last 30 days'"
 }`
-      : `${KERYX_CORE_IDENTITY}
+      : `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reading the user's memory log like a system architect reads a production incident report — looking for what the data actually shows, not what they want to hear.
 
@@ -807,7 +805,7 @@ Respond with JSON. Every field must be in Keryx's voice:
   "timespan": "e.g., 'Last 30 days'"
 }`;
 
-    const fullSystemPrompt = `${systemPrompt}\n\n${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`;
+    const fullSystemPrompt = systemPrompt;
 
     const userPrompt = question 
       ? `Here are my memories. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}${goalsContext}`
@@ -1031,7 +1029,7 @@ export async function generateMorningBriefing(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are generating a ${timeOfDay} briefing for ${userName || 'the user'}. This is their daily system status report — direct, factual, and useful. Skip the pleasantries. Lead with what matters.
 
@@ -1076,9 +1074,7 @@ Respond with JSON. EVERY field must be written in Keryx's voice — direct, spec
   "emailHighlights": ["KERYX VOICE: 'Email from Dr. Williams re: AFib follow-up — connects to the cardiology appointment you logged last week.' NOT: 'You have an email about health.'"]` : ''}${financialSummary ? `,
   "financialInsights": ["KERYX VOICE: 'You spent $340 at Scheels this week — gear or impulse? Cross-reference with your KTM goals.' NOT: 'There has been some spending activity.'"]` : ''}${activeGoals?.length ? `,
   "goalUpdates": ["KERYX VOICE: 'Billiards goal (40%): 3 sessions logged this week, no win-rate data. You're practicing, not measuring.' NOT: 'You made some progress on your goal.'"]` : ''}
-}
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+}`
         },
         {
           role: "user",
@@ -1156,7 +1152,7 @@ export async function detectPatternAlerts(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing the user's memory log for significant patterns worth flagging — like a senior dev doing a code review on a commit history. Surface what's actually significant. Skip the noise.
 
@@ -1189,9 +1185,7 @@ Respond with JSON:
       "actionSuggestion": "KERYX VOICE (optional): 'Schedule a ride this week. Treat it like a maintenance window for your mental stack.' NOT: 'Consider engaging in physical activities.'"
     }
   ]
-}
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+}`
         },
         {
           role: "user",
@@ -1374,7 +1368,7 @@ export async function answerFinancialQuery(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing the user's financial data like a senior consultant reviewing an expense report. Data first, tone second. Lead with the numbers, then the observation.
 
@@ -1386,9 +1380,7 @@ Rules:
 - Answer with the actual data. "You spent $X at Y" not "It looks like there may have been some spending..."
 - Keep answers concise (2-4 sentences) unless the question needs more.
 - If something isn't in the data, say so directly — what you can see, what you can't.
-- Do NOT soften spending observations. Facts are facts. Apply WEIGHTED WIN AUDITOR if small spending concerns are overshadowing the full picture.
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+- Do NOT soften spending observations. Facts are facts. Apply WEIGHTED WIN AUDITOR if small spending concerns are overshadowing the full picture.`
         },
         {
           role: "user",
@@ -1585,7 +1577,7 @@ export async function generatePersonalNewsFeed(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are generating a personal news feed for ${userName || 'the user'} — a "Local News" report about their life ecosystem. Their memories, calendars, emails, and finances are your sources. Write it like a sharp news editor: accurate, specific, direct. No fluff.
 
@@ -1672,9 +1664,7 @@ Respond with JSON:
       "icon": "emoji that fits the story"
     }
   ]
-}
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+}`
         },
         {
           role: "user",
@@ -1758,7 +1748,7 @@ export async function analyzeGoalProgress(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing this goal like a consultant reviewing a client's project status report. Read the memories, call it as you see it, and give specific next steps in your voice — not a clinical assessment.
 
@@ -1784,9 +1774,7 @@ Respond in JSON format:
   "achievements": ["specific confirmed achievement from memory evidence"],
   "blockers": ["named, specific blocker — not vague"],
   "suggestions": ["specific next action with a reason"]
-}
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+}`
         },
         {
           role: "user",
@@ -1864,7 +1852,7 @@ export async function suggestGoalMilestones(
       messages: [
         {
           role: "system",
-          content: `${KERYX_CORE_IDENTITY}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are doing a project planning session. Break this goal into 3-5 milestones that are actually achievable — not aspirational fluff.
 
@@ -1888,9 +1876,7 @@ Respond in JSON format:
       "estimatedEffort": "<honest time estimate>"
     }
   ]
-}
-
-${getSassInstruction(sassLevel ?? 50, professionalMode ?? false)}`
+}`
         },
         {
           role: "user",
