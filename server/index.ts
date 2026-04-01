@@ -162,6 +162,21 @@ app.use((req, res, next) => {
     }
   })();
 
+  // Early access: when billing is not enforced, ensure all users have Life OS access
+  // so the UI correctly reflects full feature availability. Remove once BILLING_ENFORCEMENT=true.
+  if (process.env.BILLING_ENFORCEMENT !== 'true') {
+    try {
+      const upgradeResult = await pool.query(
+        `UPDATE users SET subscription_tier = 'life_os', subscription_status = 'active' WHERE subscription_tier = 'free'`
+      );
+      if ((upgradeResult.rowCount ?? 0) > 0) {
+        log(`[early-access] Upgraded ${upgradeResult.rowCount} free account(s) to Life OS tier`);
+      }
+    } catch (err) {
+      console.error('[early-access] Tier upgrade (non-fatal):', err instanceof Error ? err.message : err);
+    }
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
