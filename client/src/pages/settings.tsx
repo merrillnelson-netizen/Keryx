@@ -411,7 +411,7 @@ export default function SettingsPage() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const { data: billingStatus } = useQuery<{ tier: string; isFoundingMember: boolean; currentPeriodEnd: string | null }>({
+  const { data: billingStatus, isPending: billingPending } = useQuery<{ tier: string; isFoundingMember: boolean; currentPeriodEnd: string | null }>({
     queryKey: ["/api/billing/status"],
     staleTime: 60_000,
   });
@@ -975,17 +975,23 @@ export default function SettingsPage() {
                 Controls how much personality Keryx brings to its responses — from strictly factual to full chaos mode.
                 Changes take effect on the next AI response.
               </p>
-              <SassOMeter
-                value={settings.sassLevel ?? 50}
-                onChange={(val) => {
-                  const cap = userTier === "life_os" ? 100 : userTier === "pro" ? 75 : 25;
-                  const capped = Math.min(val, cap);
-                  setSettings(prev => ({ ...prev, sassLevel: capped }));
-                }}
-                isMuted={settings.professionalMode ?? false}
-                onMuteChange={(muted) => setSettings(prev => ({ ...prev, professionalMode: muted }))}
-                tier={userTier}
-              />
+              {billingPending ? (
+                <div className="h-16 flex items-center justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <SassOMeter
+                  value={settings.sassLevel ?? 50}
+                  onChange={(val) => {
+                    const cap = userTier === "life_os" ? 100 : userTier === "pro" ? 75 : 25;
+                    const capped = Math.min(val, cap);
+                    setSettings(prev => ({ ...prev, sassLevel: capped }));
+                  }}
+                  isMuted={settings.professionalMode ?? false}
+                  onMuteChange={(muted) => setSettings(prev => ({ ...prev, professionalMode: muted }))}
+                  tier={userTier}
+                />
+              )}
               <div className="pt-2">
                 <Button
                   onClick={() => updateSettingsMutation.mutate({ sassLevel: settings.sassLevel, professionalMode: settings.professionalMode })}
