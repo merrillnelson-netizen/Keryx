@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone, FileText } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone, FileText, Gauge } from "lucide-react";
+import { SassOMeter } from "@/components/sass-o-meter";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -409,6 +410,12 @@ export default function SettingsPage() {
     queryKey: ["/api/settings"],
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
+
+  const { data: billingStatus } = useQuery<{ tier: string; isFoundingMember: boolean; currentPeriodEnd: string | null }>({
+    queryKey: ["/api/billing/status"],
+    staleTime: 60_000,
+  });
+  const userTier = (billingStatus?.tier ?? "free") as "free" | "pro" | "life_os";
 
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -955,6 +962,48 @@ export default function SettingsPage() {
 
         {/* Settings Cards */}
         <div className="max-w-2xl space-y-6">
+          {/* AI Personality Card */}
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Gauge className="w-5 h-5 text-orange-500" />
+                AI Personality
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Controls how much personality Keryx brings to its responses — from strictly factual to full chaos mode.
+                Changes take effect on the next AI response.
+              </p>
+              <SassOMeter
+                value={settings.sassLevel ?? 50}
+                onChange={(val) => {
+                  const cap = userTier === "life_os" ? 100 : userTier === "pro" ? 75 : 25;
+                  const capped = Math.min(val, cap);
+                  setSettings(prev => ({ ...prev, sassLevel: capped }));
+                }}
+                isMuted={settings.professionalMode ?? false}
+                onMuteChange={(muted) => setSettings(prev => ({ ...prev, professionalMode: muted }))}
+                tier={userTier}
+              />
+              <div className="pt-2">
+                <Button
+                  onClick={() => updateSettingsMutation.mutate({ sassLevel: settings.sassLevel, professionalMode: settings.professionalMode })}
+                  disabled={updateSettingsMutation.isPending}
+                  size="sm"
+                  className="w-full sm:w-auto"
+                >
+                  {updateSettingsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save Personality Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="glass-card border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

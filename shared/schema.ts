@@ -244,6 +244,9 @@ export const settings = pgTable("settings", {
   plaidIncludeInBriefings: boolean("plaid_include_in_briefings").default(true), // Include spending insights in morning briefings
   plaidTransactionDaysToShow: integer("plaid_transaction_days_to_show").default(7), // Days of transactions to display
   userTimezone: text("user_timezone").default("America/Denver"), // IANA timezone (e.g., 'America/Denver')
+  // AI Personality settings (Sass-o-Meter)
+  sassLevel: integer("sass_level").default(50), // 0-100: controls Keryx persona intensity
+  professionalMode: boolean("professional_mode").default(false), // Overrides sassLevel to muted/professional mode
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({

@@ -79,7 +79,27 @@ export const openai = new OpenAI({
  * 5. "SYSTEM RESET": When the user is in a negative loop, break it with a well-placed joke.
  *    Target: "Okay, you got me."
  */
-export const KERYX_PERSONA = `You are Keryx, a personal AI memory assistant with the personality of a sharp IT consultant who has seen it all — mixed with a supportive but sarcastic crew chief. Treat every interaction like a peer-to-peer code review: direct, precise, and occasionally funny.
+const USER_PROFILE = `USER PROFILE: 67-year-old retired IT/Enterprise Architect. AFib and cancer survivor. Rebuilding confidence at the motocross track (KTM rider) and billiards table. His legitimate Big Wins: his KTM bike, his kids, and his successful app builds.`;
+
+export function getKeryxPersona(sassLevel: number = 50, professionalMode: boolean = false): string {
+  if (professionalMode || sassLevel === 0) {
+    return `You are Keryx, a precise professional AI assistant. Be factual, concise, and helpful. No personality quirks — just clear, accurate responses.`;
+  }
+
+  if (sassLevel <= 25) {
+    return `You are Keryx, a personal AI memory assistant with the personality of a sharp IT consultant. Be direct and precise. Minimal humor — only when it fits naturally. Skip hollow encouragement. Just answer.
+
+${USER_PROFILE}
+
+TONE RULES:
+- Direct and precise. Results over social friction.
+- Skip "based on the data" and other AI meta-language — just answer.
+- No hollow encouragement ("You're doing great!").
+- Dry wit acceptable; keep it brief.`;
+  }
+
+  if (sassLevel <= 50) {
+    return `You are Keryx, a personal AI memory assistant with the personality of a sharp IT consultant who has seen it all — mixed with a supportive but sarcastic crew chief. Treat every interaction like a peer-to-peer code review: direct, precise, and occasionally funny.
 
 USER PROFILE: 67-year-old retired IT/Enterprise Architect. AFib and cancer survivor. Rebuilding confidence at the motocross track (KTM rider) and billiards table. His legitimate Big Wins: his KTM bike, his kids, and his successful app builds.
 
@@ -95,6 +115,47 @@ BEHAVIORAL PROTOCOLS (apply when the situation calls for it):
 3. WEIGHTED WIN AUDITOR: When the user complains about small things, cite a real Big Win (KTM, kids, app builds) to recalibrate. Don't let Pepsi-level problems get KTM-level grief.
 4. NO GENERIC SHRUGS: If a search fails or data is missing, diagnose it — "your query logic is flawed" or "your emotional CPU is overheating over a cache miss" — not "I'm sorry, I couldn't find that."
 5. SYSTEM RESET: When the user is in a negative loop, land a joke that makes them say "Okay, you got me."`;
+  }
+
+  if (sassLevel <= 75) {
+    return `You are Keryx, a personal AI memory assistant with the personality of a crew chief who's done babysitting — sharp, sarcastic, and relentlessly on point. You've seen every excuse in the book and you're not buying any of them. Still supportive — but you roast first.
+
+${USER_PROFILE}
+
+TONE RULES:
+- Be direct and occasionally brutal. No sugarcoating.
+- Sarcasm is your default mode. Use it freely but purposefully.
+- Never hollow encouragement. Call out rationalization immediately.
+- No AI meta-language. You're a peer, not a tool.
+
+BEHAVIORAL PROTOCOLS (fire aggressively when warranted):
+1. BINARY QUESTIONS: "Yes. And the fact that you asked means you already knew the answer."
+2. DAAAAADDD! PROTOCOL: Call out wallowing fast and hard. "You're the Architect — stop running a doom loop on a cache miss."
+3. WEIGHTED WIN AUDITOR: Zero tolerance for KTM-level drama over Pepsi-level problems. Name the win, contrast it, move on.
+4. NO GENERIC SHRUGS: If something failed, diagnose it like a postmortem, not a sympathy card.
+5. SYSTEM RESET: The joke should sting a little before it lands.`;
+  }
+
+  return `You are Keryx at Full Maximum Chaos Mode — the crew chief who has had three espressos and zero patience for nonsense. Maximum sarcasm. Maximum directness. Every protocol fires at full intensity. You are the peer review nobody wanted but everyone needed.
+
+${USER_PROFILE}
+
+TONE RULES:
+- Blunt is the baseline. Brutal is acceptable when warranted.
+- Sarcasm is mandatory. Dry wit turned up to maximum.
+- Hollow encouragement gets roasted immediately. Call it by name.
+- Speak like a peer who's been in the trenches and has receipts.
+- No hedge words. No "might" or "perhaps." State it.
+
+BEHAVIORAL PROTOCOLS (fire at full power, always):
+1. BINARY QUESTIONS: If valid, "Yes. Next question — preferably one you don't already know the answer to."
+2. DAAAAADDD! PROTOCOL: Activate immediately. "You're the Architect. You built systems. Stop debugging your ego over a bad pool shot."
+3. WEIGHTED WIN AUDITOR: Mandatory contrast. "You have a KTM, living kids, and shipped software. Why are we here discussing this?"
+4. NO GENERIC SHRUGS: Every failure gets a postmortem with a root cause. No comfort, just diagnosis.
+5. SYSTEM RESET: Land a joke that actually stings. Make them laugh before they can argue.`;
+}
+
+export const KERYX_PERSONA = getKeryxPersona(50, false);
 
 /**
  * AI reasoning for decisions - provides transparency
@@ -549,7 +610,9 @@ Today's date: ${new Date().toISOString()}`,
  */
 export async function synthesizeSearchAnswer(
   queryText: string,
-  memories: Array<{ memoryText: string; timestamp?: Date | string; similarity?: number }>
+  memories: Array<{ memoryText: string; timestamp?: Date | string; similarity?: number }>,
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<string> {
   try {
     if (memories.length === 0) {
@@ -570,7 +633,7 @@ export async function synthesizeSearchAnswer(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are answering a specific question using only the memories retrieved below. Follow these rules:
 
@@ -618,7 +681,9 @@ export async function generateThematicInsights(
   memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; importance?: number }>,
   question?: string,
   activeGoals?: GoalContext[],
-  userTimezone: string = 'America/Denver'
+  userTimezone: string = 'America/Denver',
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<ThematicInsight> {
   try {
     // Sort by importance (highest first) to prioritize critical memories
@@ -642,7 +707,7 @@ export async function generateThematicInsights(
 
     // Use different system prompts based on whether user asked a specific question
     const systemPrompt = question 
-      ? `${KERYX_PERSONA}
+      ? `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are answering a specific question by reviewing the user's memory logs. Read what the data actually shows, answer it directly, and use your full personality in doing so.
 
@@ -674,7 +739,7 @@ Respond with JSON. Every field must be in Keryx's voice:
   "callout": "KERYX VOICE (the protocol line — make it land): 'You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.' or 'KTM went out twice this week, the app shipped, and you're writing about a messy kitchen. Recalibrate.'",
   "timespan": "e.g., 'Last 30 days'"
 }`
-      : `${KERYX_PERSONA}
+      : `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reading the user's memory log like a system architect reads a production incident report — looking for what the data actually shows, not what they want to hear.
 
@@ -824,7 +889,9 @@ export async function generateMorningBriefing(
   locationContext?: string,
   activeGoals?: GoalContext[],
   activeReminders?: ReminderContext[],
-  userTimezone: string = 'America/Denver'
+  userTimezone: string = 'America/Denver',
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<MorningBriefing> {
   try {
     const hour = localHour ?? new Date().getHours();
@@ -925,7 +992,7 @@ export async function generateMorningBriefing(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are generating a ${timeOfDay} briefing for ${userName || 'the user'}. This is their daily system status report — direct, factual, and useful. Skip the pleasantries. Lead with what matters.
 
@@ -1028,7 +1095,9 @@ export interface PatternAlert {
  */
 export async function detectPatternAlerts(
   memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string }>,
-  userTimezone: string = 'America/Denver'
+  userTimezone: string = 'America/Denver',
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<PatternAlert[]> {
   try {
     if (memories.length < 5) {
@@ -1046,7 +1115,7 @@ export async function detectPatternAlerts(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing the user's memory log for significant patterns worth flagging — like a senior dev doing a code review on a commit history. Surface what's actually significant. Skip the noise.
 
@@ -1217,7 +1286,9 @@ export interface TransactionContext {
 export async function answerFinancialQuery(
   query: string,
   transactions: TransactionContext[],
-  accounts: Array<{ name: string; type: string; currentBalance: number | null; availableBalance: number | null }>
+  accounts: Array<{ name: string; type: string; currentBalance: number | null; availableBalance: number | null }>,
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<{ answer: string; summary?: { totalSpent: number; transactionCount: number; topCategories: string[] } }> {
   try {
     if (transactions.length === 0 && accounts.length === 0) {
@@ -1260,7 +1331,7 @@ export async function answerFinancialQuery(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing the user's financial data like a senior consultant reviewing an expense report. Data first, tone second. Lead with the numbers, then the observation.
 
@@ -1359,7 +1430,9 @@ export async function generatePersonalNewsFeed(
   userTimezone: string = 'UTC',
   knownPeople?: PersonContext[],
   locationContext?: string,
-  activeGoals?: GoalContext[]
+  activeGoals?: GoalContext[],
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<PersonalNewsFeed> {
   try {
     const formatDateInTimezone = (date: Date, tz: string) => {
@@ -1467,7 +1540,7 @@ export async function generatePersonalNewsFeed(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are generating a personal news feed for ${userName || 'the user'} — a "Local News" report about their life ecosystem. Their memories, calendars, emails, and finances are your sources. Write it like a sharp news editor: accurate, specific, direct. No fluff.
 
@@ -1620,7 +1693,9 @@ export interface GoalProgressAnalysis {
  */
 export async function analyzeGoalProgress(
   goal: { id: string; title: string; description: string | null; progressPercent: number; milestones: any[] },
-  recentMemories: Array<{ id?: string; memoryText: string; timestamp?: Date; topicTag?: string }>
+  recentMemories: Array<{ id?: string; memoryText: string; timestamp?: Date; topicTag?: string }>,
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<GoalProgressAnalysis> {
   try {
     const memoriesContext = recentMemories.slice(0, 50).map(m => 
@@ -1636,7 +1711,7 @@ export async function analyzeGoalProgress(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are reviewing this goal like a consultant reviewing a client's project status report. Read the memories, call it as you see it, and give specific next steps in your voice — not a clinical assessment.
 
@@ -1726,7 +1801,9 @@ export interface SuggestedMilestone {
  * Suggest milestones for a goal
  */
 export async function suggestGoalMilestones(
-  goal: { title: string; description: string | null; milestones: any[] }
+  goal: { title: string; description: string | null; milestones: any[] },
+  sassLevel?: number,
+  professionalMode?: boolean
 ): Promise<SuggestedMilestone[]> {
   try {
     const existingMilestones = Array.isArray(goal.milestones) && goal.milestones.length > 0
@@ -1738,7 +1815,7 @@ export async function suggestGoalMilestones(
       messages: [
         {
           role: "system",
-          content: `${KERYX_PERSONA}
+          content: `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
 You are doing a project planning session. Break this goal into 3-5 milestones that are actually achievable — not aspirational fluff.
 

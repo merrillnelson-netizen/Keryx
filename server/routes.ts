@@ -845,7 +845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 availableBalance: a.availableBalance
               }));
 
-            const financialAnswer = await answerFinancialQuery(queryText, txContext, accountContext);
+            const financialAnswer = await answerFinancialQuery(queryText, txContext, accountContext, userSettings?.sassLevel ?? 50, userSettings?.professionalMode ?? false);
 
             return res.json({
               status: 'success',
@@ -916,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const memoriesForSynthesis = results
         .filter((r) => r.memoryText)
         .map((r) => ({ memoryText: r.memoryText as string, timestamp: r.timestamp, similarity: r.similarity }));
-      const aiAnswer = await synthesizeSearchAnswer(queryText, memoriesForSynthesis);
+      const aiAnswer = await synthesizeSearchAnswer(queryText, memoriesForSynthesis, userSettings?.sassLevel ?? 50, userSettings?.professionalMode ?? false);
 
       res.json({
         status: 'success',
@@ -2360,7 +2360,9 @@ Respond with JSON only.`
           })),
         question,
         activeGoals.length > 0 ? activeGoals : undefined,
-        userTimezone
+        userTimezone,
+        userSettings?.sassLevel ?? 50,
+        userSettings?.professionalMode ?? false
       );
       
       res.json({
@@ -2604,7 +2606,9 @@ Respond with JSON only.`
         locationContext,
         activeGoals.length > 0 ? activeGoals : undefined,
         activeReminders.length > 0 ? activeReminders : undefined,
-        userTimezone
+        userTimezone,
+        userSettings?.sassLevel ?? 50,
+        userSettings?.professionalMode ?? false
       );
 
       // Cache the result (30 minute TTL)
@@ -2865,7 +2869,9 @@ Respond with JSON only.`
         userTimezone,
         knownPeople.length > 0 ? knownPeople : undefined,
         locationContext,
-        activeGoals.length > 0 ? activeGoals : undefined
+        activeGoals.length > 0 ? activeGoals : undefined,
+        userSettings?.sassLevel ?? 50,
+        userSettings?.professionalMode ?? false
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
@@ -3230,7 +3236,7 @@ Respond with JSON only.`
       const userSettings = await storage.getSettings(user.id);
       const userTimezone = queryTimezone || userSettings?.userTimezone || 'America/Denver';
       
-      const alerts = await detectPatternAlerts(alertMemories, userTimezone);
+      const alerts = await detectPatternAlerts(alertMemories, userTimezone, userSettings?.sassLevel ?? 50, userSettings?.professionalMode ?? false);
 
       // Cache the result (30 minute TTL)
       const memoriesHash = recentMemories.filter(m => m.id).map(m => m.id).join(',');
@@ -4276,9 +4282,10 @@ Respond with JSON only.`
       }
       
       // Get recent transactions (30 days) and accounts
-      const [transactions, accounts] = await Promise.all([
+      const [transactions, accounts, plaidUserSettings] = await Promise.all([
         plaidService.getRecentTransactions(user.id, 30, 100),
-        plaidService.getAccounts(user.id)
+        plaidService.getAccounts(user.id),
+        storage.getSettings(user.id)
       ]);
       
       const result = await answerFinancialQuery(
@@ -4295,7 +4302,9 @@ Respond with JSON only.`
           type: a.type,
           currentBalance: a.currentBalance ?? null,
           availableBalance: a.availableBalance ?? null
-        }))
+        })),
+        plaidUserSettings?.sassLevel ?? 50,
+        plaidUserSettings?.professionalMode ?? false
       );
       
       res.json({
@@ -4926,7 +4935,10 @@ Return ONLY the JSON array, no other text.`;
       }
       
       // Get recent memories to analyze for progress
-      const recentMemoriesRaw = await storage.getRecentLogEntriesLight(user.id, 30, 100);
+      const [recentMemoriesRaw, goalUserSettings] = await Promise.all([
+        storage.getRecentLogEntriesLight(user.id, 30, 100),
+        storage.getSettings(user.id)
+      ]);
       const recentMemories = recentMemoriesRaw
         .filter(m => m.memoryText)
         .map(m => ({ id: m.id, memoryText: m.memoryText!, timestamp: m.timestamp, topicTag: m.topicTag }));
@@ -4935,7 +4947,7 @@ Return ONLY the JSON array, no other text.`;
       const analysis = await analyzeGoalProgress({
         ...goal,
         milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
-      }, recentMemories);
+      }, recentMemories, goalUserSettings?.sassLevel ?? 50, goalUserSettings?.professionalMode ?? false);
       
       // Update the goal with AI analysis
       const updated = await storage.updateGoal(req.params.id, user.id, {
@@ -4963,10 +4975,11 @@ Return ONLY the JSON array, no other text.`;
         return sendErrorResponse(res, 404, "Goal not found");
       }
       
+      const milestoneUserSettings = await storage.getSettings(user.id);
       const suggestions = await suggestGoalMilestones({
         ...goal,
         milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
-      });
+      }, milestoneUserSettings?.sassLevel ?? 50, milestoneUserSettings?.professionalMode ?? false);
       res.json({ suggestions });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to generate milestone suggestions", error);

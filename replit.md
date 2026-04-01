@@ -1,7 +1,7 @@
 # Keryx - Replit Configuration
 
 ## Overview
-Keryx (Kinetic Enterprise & Resource Yielding X-system) is an AI-powered, mobile-first voice logging and search system. It allows users to record free-form natural language memories via voice or text, which are then processed by AI to extract topic tags and structured metadata. The system offers semantic search using AI embeddings combined with structured filters. The project aims to deliver a robust, production-ready application with a modern UI/UX, focusing on cognitive search, proactive insights, calendar/email integration, and AI task execution.
+Keryx (Kinetic Enterprise & Resource Yielding X-system) is an AI-powered, mobile-first voice logging and search system. It allows users to record free-form natural language memories via voice or text, which are then processed by AI to extract topic tags and structured metadata. The system offers semantic search using AI embeddings combined with structured filters. The project aims to deliver a robust, production-ready application with a modern UI/UX, focusing on cognitive search, proactive insights, calendar/email integration, and AI task execution, ultimately providing a comprehensive "Life OS" experience.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -13,10 +13,10 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 ### Frontend
 - **Framework**: React 18 with TypeScript, Vite.
 - **UI**: Tailwind CSS, shadcn/ui components, glassmorphism design, dark/light theme.
-- **Routing**: Wouter.
 - **State Management**: TanStack Query.
-- **Speech APIs**: Browser's native Web Speech API for recognition and synthesis.
-- **Companion App**: React Native project for Meta Glasses integration, located in `/companion-app/`.
+- **Speech APIs**: Browser's native Web Speech API.
+- **Companion App**: React Native project for Meta Glasses integration.
+- **PWA Support**: Full PWA capabilities including manifest, service worker, Web Share Target, App Shortcuts, App Badge API, Haptic Feedback, Screen Wake Lock, and Offline Action Queuing.
 
 ### Backend
 - **Runtime**: Node.js with Express.js (TypeScript, ES modules).
@@ -24,105 +24,53 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Database ORM**: Drizzle ORM for PostgreSQL.
 - **Session Management**: Express sessions with PostgreSQL store.
 - **Rate Limiting**: Per-user rate limiting on AI routes.
-- **Environment**: Validation for critical environment variables.
 
-### Monetization (Stripe — Phase 1: Built, Enforcement Off)
-- **Tiers**: Free (100 memories/month), Pro ($12/mo), Life OS ($24/mo)
-- **Enforcement toggle**: `BILLING_ENFORCEMENT=false` env var — all routes pass through when false; flip to `true` when ready to go live
-- **Stripe credentials**: Managed via Replit Stripe integration connector (NOT env vars). `server/stripe-client.ts` fetches keys from `REPLIT_CONNECTORS_HOSTNAME` using `getUncachableStripeClient()`. Never cache the client — tokens expire.
-- **stripe-replit-sync**: Handles managed webhooks, syncs Stripe data to `stripe` schema in PostgreSQL. Init runs on startup in `server/index.ts` (runMigrations → getStripeSync → findOrCreateManagedWebhook → syncBackfill). No manual webhook setup in Stripe Dashboard needed.
-- **Stripe service**: `server/stripe-service.ts` — checkout sessions, customer portal, webhook handler (uses `StripeSync.processWebhook()` for HMAC validation)
-- **Tier middleware**: `server/tier-middleware.ts` — `requireTier()` and `requireMemoryQuota()` Express middlewares
-- **Route gating**: Pro routes: `/api/briefing`, `/api/news-feed`, `/api/alerts`, `/api/insights`, `/api/memories/search`, `/api/people/ai-search`; Life OS routes: `/api/discoveries`, all `/api/plaid/*` (except status), `/api/companion/action`
-- **Webhook**: `POST /api/stripe/webhook` registered BEFORE `express.json()` in `server/index.ts` using `express.raw()`
-- **Billing routes**: `GET /api/billing/status`, `POST /api/billing/checkout`, `POST /api/billing/portal`
-- **Frontend**: `client/src/pages/billing.tsx` (3-tier pricing page), `client/src/components/upgrade-prompt.tsx`, billing card in settings, founding member banner in `dashboard.tsx`
-- **Products created**: Keryx Pro (`STRIPE_PRICE_PRO`) $12/mo, Keryx Life OS (`STRIPE_PRICE_LIFE_OS`) $24/mo — both set as env vars
-- **FOUNDING8 coupon**: Created in Stripe — 33% off Life OS forever, max 50 redemptions
-- **Seed script**: `scripts/seed-stripe-products.ts` — idempotent, run to recreate products if needed
-- **Existing users**: All grandfathered to Life OS permanently (`current_period_end=NULL` = never expires)
-- **To go live**: Set `BILLING_ENFORCEMENT=true` env var + redeploy — no code changes needed
+### Monetization
+- **Stripe Integration**: Supports Free, Pro, and Life OS tiers with per-route gating based on user subscription. Managed through Replit Stripe integration connector and `stripe-replit-sync` for webhook handling and data synchronization.
+
+### AI Personality Control (Sass-o-Meter)
+- **Dynamic Persona**: AI persona adjusted via `sassLevel` and `professionalMode` settings, influencing AI responses across various features.
+- **Tiered Access**: UI caps `sassLevel` based on user's subscription tier.
 
 ### Database
 - **Database**: PostgreSQL (Neon serverless).
-- **Schema**: Includes tables for `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `aiActionPreferences`, `ai_cache`, `location_history`, `frequent_places`, `pushSubscriptions`, `ideas`, `ideaTasks`, `goals`, `reminders`, `messageConversations`, `messages`, `messageImports`.
+- **Schema**: Comprehensive schema including `users`, `log_entries`, `settings`, `categories`, `people`, `aiActions`, `ai_cache`, `location_history`, `pushSubscriptions`, `ideas`, `goals`, `reminders`, `messageConversations`, `messages`.
 - **Features**: Strategic indexes, JSONB for metadata, vector type for embeddings, user data isolation.
 
 ### Timezone Handling
-- **Storage**: All timestamps in PostgreSQL are stored in UTC (`timestamp without time zone`, defaulting to `now()` in UTC).
-- **User Timezone**: Stored in `settings.userTimezone` (IANA format, e.g., `America/Denver`). Auto-synced from browser on login via `useTimezoneSync()` in App.tsx.
-- **AI Prompts**: Memory timestamps are converted to user's local timezone using `formatDateForTimezone()` before being passed to AI (briefings, insights, alerts, news feed). This prevents UTC date mismatch (e.g., 11 PM Mountain showing as next day in UTC).
-- **Reminder times in briefing**: Formatted using `formatDateTimeForTimezone()` before inclusion in the AI briefing prompt so the AI sees local time, not UTC ISO strings.
-- **Frontend Display**: Uses browser's native `toLocaleString()` / `date-fns format()` which auto-convert UTC to local time.
-- **Calendar Events**: Created with user's timezone passed as IANA string to Google/Outlook APIs.
-- **Reminders**: Trigger times stored in UTC, AI extracts reminder times by converting from user's local to UTC.
-- **On This Day (Time Capsule)**: `getOnThisDayMemories()` accepts `userTimezone` and uses `AT TIME ZONE` in SQL `EXTRACT` calls so the local calendar date is used, not UTC date. Route fetches user settings before the query.
-- **Mood Trend chart**: `getMoodTrend()` accepts `userTimezone` and uses `date_trunc('day', timestamp AT TIME ZONE 'UTC' AT TIME ZONE tz)` to bucket entries by local calendar day, not UTC day. **Important**: uses `sql.raw()` for the timezone literal — Drizzle parameterizes `${tz}` differently in SELECT vs GROUP BY/ORDER BY causing PostgreSQL grouping errors; inlining it as a raw literal fixes this.
-- **Key Helpers**: `formatDateForTimezone(date, tz)` and `formatDateTimeForTimezone(date, tz)` in `server/ai-service.ts`.
-
-### Performance Optimizations
-- **AI Caching**: 30-minute TTL cache for briefings and alerts.
-- **Frontend Pagination**: `useInfiniteQuery` with "Load More" buttons.
-- **Embedding Optimization**: Embeddings regenerated only when `memoryText` changes.
-- **Lightweight Endpoints**: Consolidated `/api/dashboard/stats` endpoint.
-- **Parallel Data Fetching**: AI endpoints use `Promise.all` for parallel data retrieval.
-- **Lightweight Memory Queries**: Excludes heavy fields for AI prompt assembly.
-- **Frontend Query Caching**: `staleTime` configured for major queries.
-
-### Code Quality Notes
-- **Deleted unused components**: `mobile-layout.tsx`, `sidebar.tsx`, `command-examples.tsx`, `recent-activity.tsx`, `upgrade-prompt.tsx` (all confirmed unused, not imported anywhere)
-- **Parallel embeddings**: `server/message-ai-service.ts` now generates embeddings in parallel via `Promise.allSettled` instead of sequential `await` loop
-- **Error resilience**: `ContextualDiscoveries` widget in `dashboard.tsx` wrapped with `ErrorBoundary` (fallback=null) so a render failure hides the widget silently without crashing the dashboard
+- **UTC Storage**: All timestamps stored in UTC in PostgreSQL.
+- **User Timezone**: Stored in `settings.userTimezone` and used for AI prompts, frontend display, calendar events, and "On This Day" features to ensure local time context.
 
 ### Core Features & Design Principles
-- **AI Processing**: OpenAI GPT for metadata extraction and action detection; `text-embedding-3-small` for embeddings.
-- **Voice Processing**: Browser SpeechRecognition API, OpenAI Whisper API for Telegram voice notes.
+- **AI Processing**: OpenAI GPT for metadata extraction, action detection, and semantic search embeddings (`text-embedding-3-small`).
+- **Voice Processing**: Browser SpeechRecognition API, OpenAI Whisper for voice notes.
 - **Hybrid Search**: Combines semantic similarity with structured filters.
-- **Application Structure**: Monorepo with shared schema, full TypeScript coverage with Zod validation.
-- **Key Capabilities**: AI-powered voice input, manual categorization, hybrid search, real-time feedback, mobile-first design, robust error recovery.
 - **Cognitive Search**: Mood tracking, people detection, mood distribution charts.
-- **Memory Importance Levels**: AI-assigned 1-10 scale, user-adjustable, influencing prioritization in briefings and insights.
-- **Expanded Categories**: 15 specific topic categories for memory organization, with AI guidance.
-- **AI Thematic Synthesis**: Dedicated page for deep pattern analysis with interactive Q&A.
-- **Ideas & Workspace**: Versatile workspace supporting Ideas, Notes, Lists, and Documents with type-aware AI assistance.
-- **Goals Tracking System**: Manages long-term goals with AI-powered progress tracking, milestones, and integration into briefings.
-- **Reminders System**: Manages time-based and location-based reminders, AI auto-detection from input, and integration into briefings.
-- **Proactive Features**: AI-generated morning briefings, pattern alerts, goal pattern alerts, contextual discoveries.
-- **Personal Insights**: AI-generated insights from user data (memories, calendars, emails, finances).
-- **Contextual Discoveries**: Uses Tavily AI Search for personalized content based on user insights.
-- **People Closeness Score**: Priority system (1-10) for people, enabling High-Signal Alerts.
-- **AI People Search**: Natural language search/sort/filter on People page via GPT-4o-mini with voice input support. Supports queries like "sort by closeness", "show family", "who haven't I talked to". Endpoint: POST /api/people/ai-search.
-- **AI Duplicate Detection**: Scans all people records for potential duplicates (similar names, shared phone numbers, name variations). Shows grouped suggestion cards with confidence levels and one-click merge. Endpoint: POST /api/people/find-duplicates.
-- **People Merge UX**: Floating action bar appears at bottom when 2+ people are selected in merge mode; shows selection count, tappable name badges for target selection, merge and clear buttons. Eliminates need to scroll back to top.
-- **Calendar & Email Integration**: Multi-provider support for auto-linking memories to events.
-- **AI Task Execution**: Detection of actionable requests with policy-based approval.
-- **Telegram Integration**: Record memories via text/voice notes, account linking, outbound notifications.
-- **Meta Glasses Integration**: MCP Protocol 2025-01 compliant payloads, geolocation capture.
-- **Location History**: Google Timeline import, automatic capture, frequent place detection, location clustering.
-- **Web Push Notifications**: For briefings, alerts, and approvals, handled by a service worker.
-- **PWA Support**: Installable as a Progressive Web App with manifest.json, app icons (72-512px), service worker caching, and install prompts on landing page, settings, and global banner. iOS instructions included.
-- **PWA Native-Feel Enhancements**: Web Share Target (Android share sheet → share SMS/GPS files directly into Keryx at `/share-import`); App Shortcuts (long-press icon for New Memory/Voice Record/New Reminder); App Badge API (`useAppBadge` hook — overdue reminder count on icon); Haptic Feedback (`useHaptic` hook — vibrate on save/complete/record); Screen Wake Lock (`useWakeLock` hook — screen stays on during voice recording, integrated inline into `use-voice-input.ts`); Offline Action Queuing (IndexedDB + Background Sync in service-worker.js for failed memory saves, `SYNC_COMPLETE` postMessage on reconnect). Key files: `client/src/hooks/useHaptic.ts`, `useWakeLock.ts`, `useAppBadge.ts`, `client/src/pages/share-import.tsx`, `client/public/service-worker.js` (keryx-v2 cache), `client/public/manifest.json`.
-- **Life Purpose Suggestion**: AI detects existential themes and suggests a companion app.
-- **Text Message Integration**: Import SMS/MMS/RCS messages via SMS Import/Export Android app (NDJSON/ZIP format), AI-powered conversation analysis (topics, mood, importance, people), conversation browsing with chat bubble UI, deduplication across imports, message context feeds into morning briefings. Search, sort, and table/card view toggle on conversations list. Key files: `server/sms-import-service.ts`, `server/message-ai-service.ts`, `client/src/pages/messages.tsx`.
+- **Memory Management**: AI-assigned importance levels, expanded categories, AI thematic synthesis.
+- **Productivity Tools**: Ideas & Workspace, Goals Tracking System, Reminders System (time-based and location-based).
+- **Proactive Features**: AI-generated morning briefings, pattern alerts, contextual discoveries (using Tavily AI Search).
+- **Personal Insights**: AI-generated insights from various data sources.
+- **People Management**: Closeness scores, AI People Search (natural language queries), AI Duplicate Detection, and a streamlined People Merge UX.
+- **Integrations**: Multi-provider Calendar & Email integration, Telegram for memory recording and notifications, Meta Glasses integration (MCP Protocol 2025-01).
+- **Location Features**: Google Timeline import, automatic capture, frequent place detection.
+- **Messaging**: SMS/MMS/RCS import with AI-powered conversation analysis, chat bubble UI.
 
 ### Security Measures
-- **Authentication**: All API routes require session authentication.
-- **User Data Isolation**: All database queries filter by `userId`.
-- **Direct Object Reference Prevention**: Validates object ownership before modification.
-- **Telegram Webhook Protection**: HMAC-SHA256 signature validation.
-- **Rate Limiting**: Per-user rate limiting on AI routes.
-- **Input Validation**: Zod schemas validate all API request bodies.
+- **Authentication**: Session-based authentication for all API routes.
+- **Data Isolation**: All database queries filter by `userId`.
+- **Authorization**: Direct Object Reference Prevention.
+- **Webhook Validation**: HMAC-SHA256 signature validation for Telegram.
+- **Input Validation**: Zod schemas for all API request bodies.
 
 ## External Dependencies
 
 ### Core Technologies
-- **AI**: OpenAI GPT (various models).
+- **AI**: OpenAI GPT.
 - **Database**: Neon PostgreSQL.
 - **ORM**: Drizzle ORM.
 - **UI Components**: Radix UI primitives (via shadcn/ui).
 - **Styling**: Tailwind CSS.
 - **Icons**: Lucide React.
-- **Session Store**: `connect-pg-simple`.
 
 ### Browser APIs
 - **Speech Recognition**: Web Speech API.
@@ -136,9 +84,10 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Gmail**: Replit google-mail connector.
 - **Telegram**: Telegram Bot API.
 - **Wake Word Detection**: Picovoice Porcupine SDK.
-- **Google Places API**: For reverse geocoding (optional).
-- **Plaid**: Financial integration for bank accounts, spending insights, and transaction browser with account/category filtering.
+- **Google Places API**: For reverse geocoding.
+- **Plaid**: Financial integration.
 - **Tavily AI Search**: For contextual discoveries.
+- **Stripe**: Payment processing and subscription management.
 
 ### Analytics
 - **Google Analytics 4**: For user behavior tracking.
