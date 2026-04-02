@@ -1097,6 +1097,7 @@ export const oauthNonces = pgTable("oauth_nonces", {
   nonce: varchar("nonce", { length: 64 }).notNull().unique(),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   provider: text("provider").notNull(),
+  redirectUri: text("redirect_uri"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

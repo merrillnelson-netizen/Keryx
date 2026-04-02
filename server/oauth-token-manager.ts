@@ -38,10 +38,13 @@ function cacheKey(userId: string, provider: string): string {
 /**
  * Generate a cryptographically random nonce, store it in the DB with a TTL,
  * and return the nonce string to embed in the OAuth `state` param.
+ * The redirectUri is stored alongside so the callback can use the same URI
+ * for token exchange regardless of which server (dev vs prod) handles it.
  */
 export async function generateOauthState(
   userId: string,
-  provider: "google" | "microsoft"
+  provider: "google" | "microsoft",
+  redirectUri: string
 ): Promise<string> {
   const nonce = crypto.randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + NONCE_TTL_MS);
@@ -49,18 +52,18 @@ export async function generateOauthState(
   // Clean up expired nonces first (best-effort)
   await db.delete(oauthNonces).where(lt(oauthNonces.expiresAt, new Date())).catch(() => {});
 
-  await db.insert(oauthNonces).values({ nonce, userId, provider, expiresAt });
+  await db.insert(oauthNonces).values({ nonce, userId, provider, redirectUri, expiresAt });
   return nonce;
 }
 
 /**
- * Validate an OAuth callback state string. Returns the userId if valid,
+ * Validate an OAuth callback state string. Returns the userId and redirectUri if valid,
  * throws an error if invalid, expired, or tampered.
  */
 export async function validateOauthState(
   nonce: string,
   provider: "google" | "microsoft"
-): Promise<string> {
+): Promise<{ userId: string; redirectUri: string | null }> {
   if (!nonce || nonce.length !== 64 || !/^[0-9a-f]+$/.test(nonce)) {
     throw new Error("Invalid OAuth state format");
   }
@@ -83,7 +86,7 @@ export async function validateOauthState(
   // One-time use: delete after successful validation
   await db.delete(oauthNonces).where(eq(oauthNonces.nonce, nonce));
 
-  return row.userId;
+  return { userId: row.userId, redirectUri: row.redirectUri ?? null };
 }
 
 // ============================================================
@@ -323,12 +326,11 @@ async function refreshToken(
 // OAuth authorization URL builders
 // ============================================================
 
-export function getGoogleAuthUrl(nonce: string): string {
+export function getGoogleAuthUrl(nonce: string, redirectUri: string): string {
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
-  if (!clientId || !redirectUri) {
-    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI not configured");
+  if (!clientId) {
+    throw new Error("GOOGLE_CLIENT_ID not configured");
   }
 
   const params = new URLSearchParams({
@@ -350,12 +352,11 @@ export function getGoogleAuthUrl(nonce: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export function getMicrosoftAuthUrl(nonce: string): string {
+export function getMicrosoftAuthUrl(nonce: string, redirectUri: string): string {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
-  const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
 
-  if (!clientId || !redirectUri) {
-    throw new Error("MICROSOFT_CLIENT_ID or MICROSOFT_REDIRECT_URI not configured");
+  if (!clientId) {
+    throw new Error("MICROSOFT_CLIENT_ID not configured");
   }
 
   const params = new URLSearchParams({
@@ -379,12 +380,11 @@ export function getMicrosoftAuthUrl(nonce: string): string {
 // Code exchange helpers
 // ============================================================
 
-export async function exchangeGoogleCode(userId: string, code: string): Promise<void> {
+export async function exchangeGoogleCode(userId: string, code: string, redirectUri: string): Promise<void> {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
-  if (!clientId || !clientSecret || !redirectUri) {
+  if (!clientId || !clientSecret) {
     throw new Error("Google OAuth credentials not configured");
   }
 
@@ -436,12 +436,11 @@ export async function exchangeGoogleCode(userId: string, code: string): Promise<
   console.log(`[OAuth] Google tokens stored for user ${userId} (${accountEmail ?? "email unknown"})`);
 }
 
-export async function exchangeMicrosoftCode(userId: string, code: string): Promise<void> {
+export async function exchangeMicrosoftCode(userId: string, code: string, redirectUri: string): Promise<void> {
   const clientId = process.env.MICROSOFT_CLIENT_ID;
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET;
-  const redirectUri = process.env.MICROSOFT_REDIRECT_URI;
 
-  if (!clientId || !clientSecret || !redirectUri) {
+  if (!clientId || !clientSecret) {
     throw new Error("Microsoft OAuth credentials not configured");
   }
 

@@ -1386,8 +1386,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/google", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const nonce = await generateOauthState(user.id, 'google');
-      const url = getGoogleAuthUrl(nonce);
+      const proto = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const redirectUri = `${proto}://${host}/api/auth/google/callback`;
+      const nonce = await generateOauthState(user.id, 'google', redirectUri);
+      const url = getGoogleAuthUrl(nonce, redirectUri);
       res.redirect(url);
     } catch (error: any) {
       console.error('[OAuth] Google start error:', error);
@@ -1413,15 +1416,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate nonce — throws if invalid/expired/tampered
       let userId: string;
+      let redirectUri: string | null;
       try {
-        userId = await validateOauthState(state, 'google');
+        ({ userId, redirectUri } = await validateOauthState(state, 'google'));
       } catch (e) {
         console.error('[OAuth] Google state validation failed:', e);
         return res.redirect('/settings?error=google_invalid');
       }
 
+      // Fall back to building redirect URI from current request if not stored
+      if (!redirectUri) {
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        redirectUri = `${proto}://${host}/api/auth/google/callback`;
+      }
+
       try {
-        await exchangeGoogleCode(userId, code);
+        await exchangeGoogleCode(userId, code, redirectUri);
       } catch (e) {
         console.error('[OAuth] Google code exchange failed:', e);
         return res.redirect('/settings?error=google_failed');
@@ -1453,8 +1464,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/microsoft", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const nonce = await generateOauthState(user.id, 'microsoft');
-      const url = getMicrosoftAuthUrl(nonce);
+      const proto = req.headers['x-forwarded-proto'] || req.protocol;
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const redirectUri = `${proto}://${host}/api/auth/microsoft/callback`;
+      const nonce = await generateOauthState(user.id, 'microsoft', redirectUri);
+      const url = getMicrosoftAuthUrl(nonce, redirectUri);
       res.redirect(url);
     } catch (error: any) {
       console.error('[OAuth] Microsoft start error:', error);
@@ -1480,15 +1494,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate nonce — throws if invalid/expired/tampered
       let userId: string;
+      let redirectUri: string | null;
       try {
-        userId = await validateOauthState(state, 'microsoft');
+        ({ userId, redirectUri } = await validateOauthState(state, 'microsoft'));
       } catch (e) {
         console.error('[OAuth] Microsoft state validation failed:', e);
         return res.redirect('/settings?error=microsoft_invalid');
       }
 
+      // Fall back to building redirect URI from current request if not stored
+      if (!redirectUri) {
+        const proto = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers['x-forwarded-host'] || req.get('host');
+        redirectUri = `${proto}://${host}/api/auth/microsoft/callback`;
+      }
+
       try {
-        await exchangeMicrosoftCode(userId, code);
+        await exchangeMicrosoftCode(userId, code, redirectUri);
       } catch (e) {
         console.error('[OAuth] Microsoft code exchange failed:', e);
         return res.redirect('/settings?error=microsoft_failed');
@@ -1530,12 +1552,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'success',
         google: {
           connected: googleConnected,
-          configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
+          configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
           accountEmail: googleConnected ? googleEmail : null,
         },
         microsoft: {
           connected: microsoftConnected,
-          configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && process.env.MICROSOFT_REDIRECT_URI),
+          configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET),
           accountEmail: microsoftConnected ? microsoftEmail : null,
         },
       });
