@@ -1079,13 +1079,28 @@ export const oauthTokens = pgTable("oauth_tokens", {
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token"),
   expiresAt: timestamp("expires_at"),
-  scope: text("scope"),
+  scopes: text("scopes"),
   tokenType: text("token_type").default('Bearer'),
+  accountEmail: text("account_email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   userIdProviderIdx: uniqueIndex("oauth_tokens_user_provider_idx").on(table.userId, table.provider),
   userIdIdx: index("oauth_tokens_user_id_idx").on(table.userId),
+}));
+
+/**
+ * OAuth Nonces table - short-lived CSRF protection for OAuth state param
+ */
+export const oauthNonces = pgTable("oauth_nonces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nonce: varchar("nonce", { length: 64 }).notNull().unique(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: text("provider").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  nonceIdx: uniqueIndex("oauth_nonces_nonce_idx").on(table.nonce),
 }));
 
 export const oauthTokensRelations = relations(oauthTokens, ({ one }) => ({

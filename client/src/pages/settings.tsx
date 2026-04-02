@@ -443,8 +443,8 @@ export default function SettingsPage() {
   });
 
   const { data: oauthStatus, refetch: refetchOauth } = useQuery<{
-    google: { connected: boolean; configured: boolean };
-    microsoft: { connected: boolean; configured: boolean };
+    google: { connected: boolean; configured: boolean; accountEmail: string | null };
+    microsoft: { connected: boolean; configured: boolean; accountEmail: string | null };
   }>({
     queryKey: ["/api/auth/oauth/status"],
     staleTime: 1000 * 30,
@@ -1511,60 +1511,74 @@ export default function SettingsPage() {
               )}
 
               <div className="pt-2 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Connect accounts</p>
-                <div className="flex flex-wrap gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Connected accounts</p>
+                <div className="space-y-2">
                   {oauthStatus?.google.configured ? (
                     oauthStatus.google.connected ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        onClick={() => disconnectGoogleMutation.mutate()}
-                        disabled={disconnectGoogleMutation.isPending}
-                      >
-                        {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                        Disconnect Google
-                      </Button>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <div>
+                          <p className="text-xs font-medium text-green-500">Google connected</p>
+                          {oauthStatus.google.accountEmail && (
+                            <p className="text-xs text-muted-foreground">{oauthStatus.google.accountEmail}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-red-500 hover:text-red-500 hover:bg-red-500/10 h-7"
+                          onClick={() => disconnectGoogleMutation.mutate()}
+                          disabled={disconnectGoogleMutation.isPending}
+                        >
+                          {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
-                        onClick={() => window.location.href = "/api/auth/google"}
+                        className="text-xs border-blue-500/30 text-blue-500 hover:bg-blue-500/10 w-full"
+                        onClick={() => { window.location.href = "/api/auth/google"; }}
                       >
-                        Connect Google
+                        Connect Google Account
                       </Button>
                     )
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Google OAuth not configured (add GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET)
+                      Google OAuth not configured. Add GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET to enable.
                     </p>
                   )}
                   {oauthStatus?.microsoft.configured ? (
                     oauthStatus.microsoft.connected ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        onClick={() => disconnectMicrosoftMutation.mutate()}
-                        disabled={disconnectMicrosoftMutation.isPending}
-                      >
-                        {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                        Disconnect Microsoft
-                      </Button>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <div>
+                          <p className="text-xs font-medium text-green-500">Microsoft connected</p>
+                          {oauthStatus.microsoft.accountEmail && (
+                            <p className="text-xs text-muted-foreground">{oauthStatus.microsoft.accountEmail}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-red-500 hover:text-red-500 hover:bg-red-500/10 h-7"
+                          onClick={() => disconnectMicrosoftMutation.mutate()}
+                          disabled={disconnectMicrosoftMutation.isPending}
+                        >
+                          {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
-                        onClick={() => window.location.href = "/api/auth/microsoft"}
+                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10 w-full"
+                        onClick={() => { window.location.href = "/api/auth/microsoft"; }}
                       >
-                        Connect Microsoft
+                        Connect Microsoft Account
                       </Button>
                     )
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Microsoft OAuth not configured (add MICROSOFT_CLIENT_ID & MICROSOFT_CLIENT_SECRET)
+                      Microsoft OAuth not configured. Add MICROSOFT_CLIENT_ID & MICROSOFT_CLIENT_SECRET to enable.
                     </p>
                   )}
                 </div>
@@ -1745,26 +1759,33 @@ export default function SettingsPage() {
               )}
 
               <div className="pt-2 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Connect accounts</p>
-                <div className="flex flex-wrap gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Connected accounts</p>
+                <div className="space-y-2">
                   {oauthStatus?.google.configured ? (
                     oauthStatus.google.connected ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        onClick={() => disconnectGoogleMutation.mutate()}
-                        disabled={disconnectGoogleMutation.isPending}
-                      >
-                        {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                        Disconnect Google
-                      </Button>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <div>
+                          <p className="text-xs font-medium text-green-500">Gmail connected</p>
+                          {oauthStatus.google.accountEmail && (
+                            <p className="text-xs text-muted-foreground">{oauthStatus.google.accountEmail}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-red-500 hover:text-red-500 hover:bg-red-500/10 h-7"
+                          onClick={() => disconnectGoogleMutation.mutate()}
+                          disabled={disconnectGoogleMutation.isPending}
+                        >
+                          {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        onClick={() => window.location.href = "/api/auth/google"}
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10 w-full"
+                        onClick={() => { window.location.href = "/api/auth/google"; }}
                       >
                         Connect Gmail
                       </Button>
@@ -1772,22 +1793,29 @@ export default function SettingsPage() {
                   ) : null}
                   {oauthStatus?.microsoft.configured ? (
                     oauthStatus.microsoft.connected ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
-                        onClick={() => disconnectMicrosoftMutation.mutate()}
-                        disabled={disconnectMicrosoftMutation.isPending}
-                      >
-                        {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                        Disconnect Microsoft
-                      </Button>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <div>
+                          <p className="text-xs font-medium text-green-500">Outlook connected</p>
+                          {oauthStatus.microsoft.accountEmail && (
+                            <p className="text-xs text-muted-foreground">{oauthStatus.microsoft.accountEmail}</p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs text-red-500 hover:text-red-500 hover:bg-red-500/10 h-7"
+                          onClick={() => disconnectMicrosoftMutation.mutate()}
+                          disabled={disconnectMicrosoftMutation.isPending}
+                        >
+                          {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Disconnect"}
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
-                        onClick={() => window.location.href = "/api/auth/microsoft"}
+                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10 w-full"
+                        onClick={() => { window.location.href = "/api/auth/microsoft"; }}
                       >
                         Connect Outlook
                       </Button>

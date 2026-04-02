@@ -26,7 +26,7 @@ import { isStripeConfigured, createCheckoutSession, createPortalSession } from "
 import { 
   getGoogleAuthUrl, exchangeGoogleCode, 
   getMicrosoftAuthUrl, exchangeMicrosoftCode, 
-  deleteTokens, hasValidToken 
+  deleteTokens, hasValidToken, generateOauthState, validateOauthState, getAccountEmail
 } from "./oauth-token-manager";
 
 // Feature flags - Plaid integration controlled by environment
@@ -1381,53 +1381,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================
 
   /**
-   * GET /api/auth/google - Start Google OAuth flow
+   * GET /api/auth/google - Start Google OAuth flow (generates secure nonce)
    */
-  app.get("/api/auth/google", requireAuth, (req, res) => {
+  app.get("/api/auth/google", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString('base64url');
-      const url = getGoogleAuthUrl(state);
+      const nonce = await generateOauthState(user.id, 'google');
+      const url = getGoogleAuthUrl(nonce);
       res.redirect(url);
     } catch (error: any) {
-      res.redirect(`/settings?error=${encodeURIComponent(error.message || 'Google OAuth not configured')}`);
+      console.error('[OAuth] Google start error:', error);
+      res.redirect(`/settings?error=google_failed`);
     }
   });
 
   /**
-   * GET /api/auth/google/callback - Google OAuth callback
+   * GET /api/auth/google/callback - Google OAuth callback (validates nonce)
    */
   app.get("/api/auth/google/callback", async (req, res) => {
     try {
       const { code, state, error } = req.query as Record<string, string>;
-      
+
       if (error) {
         console.error('[OAuth] Google callback error:', error);
-        return res.redirect('/settings?tab=integrations&error=google_denied');
+        return res.redirect('/settings?error=google_denied');
       }
 
       if (!code || !state) {
-        return res.redirect('/settings?tab=integrations&error=google_invalid');
+        return res.redirect('/settings?error=google_invalid');
       }
 
-      // Decode state to get userId (without requiring session since redirect may lose it)
+      // Validate nonce — throws if invalid/expired/tampered
       let userId: string;
       try {
-        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
-        userId = decoded.userId;
-      } catch {
-        return res.redirect('/settings?tab=integrations&error=google_invalid');
+        userId = await validateOauthState(state, 'google');
+      } catch (e) {
+        console.error('[OAuth] Google state validation failed:', e);
+        return res.redirect('/settings?error=google_invalid');
       }
 
-      const success = await exchangeGoogleCode(userId, code);
-      if (!success) {
-        return res.redirect('/settings?tab=integrations&error=google_failed');
+      try {
+        await exchangeGoogleCode(userId, code);
+      } catch (e) {
+        console.error('[OAuth] Google code exchange failed:', e);
+        return res.redirect('/settings?error=google_failed');
       }
 
-      res.redirect('/settings?tab=integrations&connected=google');
+      res.redirect('/settings?connected=google');
     } catch (error) {
       console.error('[OAuth] Google callback exception:', error);
-      res.redirect('/settings?tab=integrations&error=google_failed');
+      res.redirect('/settings?error=google_failed');
     }
   });
 
@@ -1445,52 +1448,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * GET /api/auth/microsoft - Start Microsoft OAuth flow
+   * GET /api/auth/microsoft - Start Microsoft OAuth flow (generates secure nonce)
    */
-  app.get("/api/auth/microsoft", requireAuth, (req, res) => {
+  app.get("/api/auth/microsoft", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString('base64url');
-      const url = getMicrosoftAuthUrl(state);
+      const nonce = await generateOauthState(user.id, 'microsoft');
+      const url = getMicrosoftAuthUrl(nonce);
       res.redirect(url);
     } catch (error: any) {
-      res.redirect(`/settings?error=${encodeURIComponent(error.message || 'Microsoft OAuth not configured')}`);
+      console.error('[OAuth] Microsoft start error:', error);
+      res.redirect(`/settings?error=microsoft_failed`);
     }
   });
 
   /**
-   * GET /api/auth/microsoft/callback - Microsoft OAuth callback
+   * GET /api/auth/microsoft/callback - Microsoft OAuth callback (validates nonce)
    */
   app.get("/api/auth/microsoft/callback", async (req, res) => {
     try {
       const { code, state, error } = req.query as Record<string, string>;
-      
+
       if (error) {
         console.error('[OAuth] Microsoft callback error:', error);
-        return res.redirect('/settings?tab=integrations&error=microsoft_denied');
+        return res.redirect('/settings?error=microsoft_denied');
       }
 
       if (!code || !state) {
-        return res.redirect('/settings?tab=integrations&error=microsoft_invalid');
+        return res.redirect('/settings?error=microsoft_invalid');
       }
 
+      // Validate nonce — throws if invalid/expired/tampered
       let userId: string;
       try {
-        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
-        userId = decoded.userId;
-      } catch {
-        return res.redirect('/settings?tab=integrations&error=microsoft_invalid');
+        userId = await validateOauthState(state, 'microsoft');
+      } catch (e) {
+        console.error('[OAuth] Microsoft state validation failed:', e);
+        return res.redirect('/settings?error=microsoft_invalid');
       }
 
-      const success = await exchangeMicrosoftCode(userId, code);
-      if (!success) {
-        return res.redirect('/settings?tab=integrations&error=microsoft_failed');
+      try {
+        await exchangeMicrosoftCode(userId, code);
+      } catch (e) {
+        console.error('[OAuth] Microsoft code exchange failed:', e);
+        return res.redirect('/settings?error=microsoft_failed');
       }
 
-      res.redirect('/settings?tab=integrations&connected=microsoft');
+      res.redirect('/settings?connected=microsoft');
     } catch (error) {
       console.error('[OAuth] Microsoft callback exception:', error);
-      res.redirect('/settings?tab=integrations&error=microsoft_failed');
+      res.redirect('/settings?error=microsoft_failed');
     }
   });
 
@@ -1508,24 +1515,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
-   * GET /api/auth/oauth/status - Get OAuth connection status for current user
+   * GET /api/auth/oauth/status - Get OAuth connection status + account emails
    */
   app.get("/api/auth/oauth/status", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const [googleConnected, microsoftConnected] = await Promise.all([
+      const [googleConnected, microsoftConnected, googleEmail, microsoftEmail] = await Promise.all([
         hasValidToken(user.id, 'google'),
         hasValidToken(user.id, 'microsoft'),
+        getAccountEmail(user.id, 'google'),
+        getAccountEmail(user.id, 'microsoft'),
       ]);
       res.json({
         status: 'success',
         google: {
           connected: googleConnected,
           configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+          accountEmail: googleConnected ? googleEmail : null,
         },
         microsoft: {
           connected: microsoftConnected,
           configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET),
+          accountEmail: microsoftConnected ? microsoftEmail : null,
         },
       });
     } catch (error) {
