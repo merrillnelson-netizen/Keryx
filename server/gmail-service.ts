@@ -1,74 +1,22 @@
 /**
  * Gmail Service for Google Mail Integration
- * Provides email operations via Gmail API using Replit connector
- * 
- * Integration: google-mail connector via Replit
+ * Provides email operations via Gmail API using self-contained OAuth
  */
 
 import { google, gmail_v1 } from 'googleapis';
+import { getAccessToken as getOAuthAccessToken, hasValidToken } from './oauth-token-manager';
 
-interface ReplitConnectorSettings {
-  settings?: {
-    access_token?: string;
-    expires_at?: string;
-    oauth?: {
-      credentials?: {
-        access_token?: string;
-      };
-    };
-  };
+async function getAccessToken(userId: string): Promise<string> {
+  const token = await getOAuthAccessToken(userId, 'google');
+  if (!token) throw new Error('Gmail not connected');
+  return token;
 }
 
-let gmailConnectionSettings: ReplitConnectorSettings | null = null;
-
-async function getAccessToken(): Promise<string> {
-  if (gmailConnectionSettings && 
-      gmailConnectionSettings.settings?.expires_at && 
-      gmailConnectionSettings.settings?.access_token &&
-      new Date(gmailConnectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return gmailConnectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken || !hostname) {
-    throw new Error('Gmail connection not available');
-  }
-
-  const response = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-mail',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
-    }
-  );
-  
-  const data = await response.json();
-  gmailConnectionSettings = data.items?.[0];
-
-  const accessToken = gmailConnectionSettings?.settings?.access_token || 
-                      gmailConnectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!gmailConnectionSettings || !accessToken) {
-    throw new Error('Gmail not connected');
-  }
-  return accessToken;
-}
-
-async function getGmailClient(): Promise<gmail_v1.Gmail> {
-  const accessToken = await getAccessToken();
+async function getGmailClient(userId: string): Promise<gmail_v1.Gmail> {
+  const accessToken = await getAccessToken(userId);
 
   const oauth2Client = new google.auth.OAuth2();
-  oauth2Client.setCredentials({
-    access_token: accessToken
-  });
+  oauth2Client.setCredentials({ access_token: accessToken });
 
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
@@ -76,61 +24,58 @@ async function getGmailClient(): Promise<gmail_v1.Gmail> {
 /**
  * Check if Gmail is connected and available
  */
-export async function isGmailConnected(): Promise<boolean> {
+export async function isGmailConnected(userId?: string): Promise<boolean> {
+  if (!userId) return false;
   try {
-    await getAccessToken();
-    return true;
+    return await hasValidToken(userId, 'google');
   } catch {
     return false;
   }
 }
 
-// Track whether we've tested read permissions
-let gmailReadCapabilityTested = false;
-let gmailCanRead = false;
+// Track whether we've tested read permissions (per-user)
+const gmailReadCapabilityCache = new Map<string, boolean>();
 
 /**
  * Check Gmail capabilities (send vs read permissions)
- * Returns detailed capability info based on actual OAuth scopes
  */
-export async function getGmailCapabilities(): Promise<{
+export async function getGmailCapabilities(userId?: string): Promise<{
   connected: boolean;
   canSend: boolean;
   canRead: boolean;
   message?: string;
 }> {
+  if (!userId) return { connected: false, canSend: false, canRead: false };
   try {
-    const connected = await isGmailConnected();
+    const connected = await isGmailConnected(userId);
     if (!connected) {
       return { connected: false, canSend: false, canRead: false };
     }
     
-    // Gmail send is always available with the connector
     const canSend = true;
     
-    // Test read capability if not already tested
-    if (!gmailReadCapabilityTested) {
+    if (!gmailReadCapabilityCache.has(userId)) {
       try {
-        const gmail = await getGmailClient();
+        const gmail = await getGmailClient(userId);
         await gmail.users.messages.list({
           userId: 'me',
           maxResults: 1,
           labelIds: ['INBOX'],
         });
-        gmailCanRead = true;
+        gmailReadCapabilityCache.set(userId, true);
       } catch (error: any) {
         if (error?.status === 403 || error?.code === 403 || error?.message?.includes('Insufficient Permission')) {
-          gmailCanRead = false;
+          gmailReadCapabilityCache.set(userId, false);
+        } else {
+          gmailReadCapabilityCache.set(userId, true);
         }
       }
-      gmailReadCapabilityTested = true;
     }
     
-    const message = gmailCanRead 
-      ? undefined 
-      : 'Gmail has send-only permissions. Email reading uses Outlook.';
+    const canRead = gmailReadCapabilityCache.get(userId) ?? false;
+    const message = canRead ? undefined : 'Gmail has send-only permissions.';
     
-    return { connected, canSend, canRead: gmailCanRead, message };
+    return { connected, canSend, canRead, message };
   } catch {
     return { connected: false, canSend: false, canRead: false };
   }
@@ -159,9 +104,9 @@ export interface SendEmailParams {
 /**
  * Get user's email address
  */
-export async function getGmailUserEmail(): Promise<string | null> {
+export async function getGmailUserEmail(userId: string): Promise<string | null> {
   try {
-    const gmail = await getGmailClient();
+    const gmail = await getGmailClient(userId);
     const profile = await gmail.users.getProfile({ userId: 'me' });
     return profile.data.emailAddress || null;
   } catch (error) {
@@ -170,15 +115,12 @@ export async function getGmailUserEmail(): Promise<string | null> {
   }
 }
 
-let gmailReadPermissionWarned = false;
-
 /**
  * Fetch recent emails from inbox
- * Note: Gmail connector may have send-only permissions, in which case this returns empty array
  */
-export async function getRecentEmails(maxResults: number = 10): Promise<EmailMessage[]> {
+export async function getRecentEmails(userId: string, maxResults: number = 10): Promise<EmailMessage[]> {
   try {
-    const gmail = await getGmailClient();
+    const gmail = await getGmailClient(userId);
     
     const response = await gmail.users.messages.list({
       userId: 'me',
@@ -219,10 +161,7 @@ export async function getRecentEmails(maxResults: number = 10): Promise<EmailMes
     return emails;
   } catch (error: any) {
     if (error?.status === 403 || error?.code === 403 || error?.message?.includes('Insufficient Permission')) {
-      if (!gmailReadPermissionWarned) {
-        console.info('[Gmail] Read access not available (send-only permissions). Using Outlook Mail for email features.');
-        gmailReadPermissionWarned = true;
-      }
+      console.info('[Gmail] Read access not available (send-only permissions).');
       return [];
     }
     console.error('Failed to fetch recent emails:', error);
@@ -233,9 +172,9 @@ export async function getRecentEmails(maxResults: number = 10): Promise<EmailMes
 /**
  * Send an email via Gmail
  */
-export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export async function sendEmail(userId: string, params: SendEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const gmail = await getGmailClient();
+    const gmail = await getGmailClient(userId);
     
     const emailLines = [
       `To: ${params.to.join(', ')}`,
@@ -255,9 +194,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
 
     const response = await gmail.users.messages.send({
       userId: 'me',
-      requestBody: {
-        raw: rawEmail,
-      },
+      requestBody: { raw: rawEmail },
     });
 
     return {
@@ -276,9 +213,9 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
 /**
  * Search emails by query
  */
-export async function searchEmails(query: string, maxResults: number = 10): Promise<EmailMessage[]> {
+export async function searchEmails(userId: string, query: string, maxResults: number = 10): Promise<EmailMessage[]> {
   try {
-    const gmail = await getGmailClient();
+    const gmail = await getGmailClient(userId);
     
     const response = await gmail.users.messages.list({
       userId: 'me',

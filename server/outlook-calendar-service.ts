@@ -1,69 +1,20 @@
 /**
  * Outlook Calendar Service for Microsoft Graph Calendar Integration
  * Fetches events around a given timestamp to enrich meeting memories
- * 
- * Integration: Outlook connector via Replit
+ * Uses self-contained OAuth token storage (oauth-token-manager)
  */
 
 import { Client } from '@microsoft/microsoft-graph-client';
+import { getAccessToken as getOAuthAccessToken, hasValidToken } from './oauth-token-manager';
 
-interface ReplitConnectorSettings {
-  settings?: {
-    access_token?: string;
-    expires_at?: string;
-    oauth?: {
-      credentials?: {
-        access_token?: string;
-      };
-    };
-  };
+async function getAccessToken(userId: string): Promise<string> {
+  const token = await getOAuthAccessToken(userId, 'microsoft');
+  if (!token) throw new Error('Outlook not connected');
+  return token;
 }
 
-let outlookConnectionSettings: ReplitConnectorSettings | null = null;
-
-async function getAccessToken(): Promise<string> {
-  if (outlookConnectionSettings && 
-      outlookConnectionSettings.settings?.expires_at && 
-      outlookConnectionSettings.settings?.access_token &&
-      new Date(outlookConnectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return outlookConnectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken || !hostname) {
-    throw new Error('Outlook connection not available');
-  }
-
-  const response = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=outlook',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
-    }
-  );
-  
-  const data = await response.json();
-  outlookConnectionSettings = data.items?.[0];
-
-  const accessToken = outlookConnectionSettings?.settings?.access_token || 
-                      outlookConnectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!outlookConnectionSettings || !accessToken) {
-    throw new Error('Outlook not connected');
-  }
-  return accessToken;
-}
-
-async function getOutlookClient(): Promise<Client> {
-  const accessToken = await getAccessToken();
+async function getOutlookClient(userId: string): Promise<Client> {
+  const accessToken = await getAccessToken(userId);
 
   return Client.initWithMiddleware({
     authProvider: {
@@ -86,10 +37,10 @@ export interface OutlookCalendarEvent {
 /**
  * Check if Outlook Calendar is connected and available
  */
-export async function isOutlookConnected(): Promise<boolean> {
+export async function isOutlookConnected(userId?: string): Promise<boolean> {
+  if (!userId) return false;
   try {
-    await getAccessToken();
-    return true;
+    return await hasValidToken(userId, 'microsoft');
   } catch {
     return false;
   }
@@ -97,14 +48,15 @@ export async function isOutlookConnected(): Promise<boolean> {
 
 /**
  * Fetch Outlook calendar events around a given timestamp
- * Returns events that overlap with the time window (±30 minutes by default)
  */
 export async function getOutlookEventsAroundTime(
   timestamp: Date,
-  windowMinutes: number = 30
+  windowMinutes: number = 30,
+  userId?: string
 ): Promise<OutlookCalendarEvent[]> {
+  if (!userId) return [];
   try {
-    const client = await getOutlookClient();
+    const client = await getOutlookClient(userId);
     
     const timeMin = new Date(timestamp.getTime() - windowMinutes * 60 * 1000);
     const timeMax = new Date(timestamp.getTime() + windowMinutes * 60 * 1000);
@@ -140,9 +92,10 @@ export async function getOutlookEventsAroundTime(
 /**
  * Get today's Outlook calendar events
  */
-export async function getOutlookTodaysEvents(): Promise<OutlookCalendarEvent[]> {
+export async function getOutlookTodaysEvents(userId?: string): Promise<OutlookCalendarEvent[]> {
+  if (!userId) return [];
   try {
-    const client = await getOutlookClient();
+    const client = await getOutlookClient(userId);
     
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -178,21 +131,18 @@ export async function getOutlookTodaysEvents(): Promise<OutlookCalendarEvent[]> 
 
 /**
  * Find a relevant Outlook calendar event for a memory timestamp
- * Returns the best matching event (during or closest to the timestamp)
  */
-export async function findOutlookRelevantEvent(timestamp: Date): Promise<OutlookCalendarEvent | null> {
-  const events = await getOutlookEventsAroundTime(timestamp, 60);
+export async function findOutlookRelevantEvent(timestamp: Date, userId?: string): Promise<OutlookCalendarEvent | null> {
+  const events = await getOutlookEventsAroundTime(timestamp, 60, userId);
   
   if (events.length === 0) return null;
   
-  // Find event that contains the timestamp, or the closest one
   for (const event of events) {
     if (timestamp >= event.startTime && timestamp <= event.endTime) {
       return event;
     }
   }
   
-  // Return closest event if none contains the timestamp
   return events[0];
 }
 
@@ -208,21 +158,20 @@ export async function createOutlookCalendarEvent(
     location?: string;
     description?: string;
     timezone?: string;
+    userId?: string;
   }
 ): Promise<OutlookCalendarEvent | null> {
+  const userId = options?.userId;
+  if (!userId) return null;
   try {
-    const client = await getOutlookClient();
+    const client = await getOutlookClient(userId);
     
-    // Use the user's timezone for proper time interpretation
     const userTimezone = options?.timezone || 'UTC';
     
-    // Format datetime for Outlook: remove Z suffix if present to treat as local time
     const formatLocalDateTime = (dateStr: string): string => {
-      // If it already has timezone offset, strip it (Outlook uses separate timeZone field)
       if (/[+-]\d{2}:\d{2}$/.test(dateStr)) {
         return dateStr.slice(0, -6);
       }
-      // Remove Z suffix if present
       if (dateStr.endsWith('Z')) {
         return dateStr.slice(0, -1);
       }

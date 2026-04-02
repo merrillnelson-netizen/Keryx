@@ -423,7 +423,7 @@ export default function SettingsPage() {
   });
 
   // Use combined providers status endpoint for all provider info
-  const { data: providersStatus } = useQuery<{
+  const { data: providersStatus, refetch: refetchProviders } = useQuery<{
     calendar: { google: boolean; outlook: boolean; activeProvider: string | null; userPreference: string | null };
     email: { 
       gmail: boolean; 
@@ -439,7 +439,15 @@ export default function SettingsPage() {
     providerSelectionMode: string;
   }>({
     queryKey: ["/api/providers/status"],
-    staleTime: 1000 * 60 * 5, // 5 minutes - provider status rarely changes
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: oauthStatus, refetch: refetchOauth } = useQuery<{
+    google: { connected: boolean; configured: boolean };
+    microsoft: { connected: boolean; configured: boolean };
+  }>({
+    queryKey: ["/api/auth/oauth/status"],
+    staleTime: 1000 * 30,
   });
 
   // Poll for backfill job status
@@ -845,6 +853,61 @@ export default function SettingsPage() {
       openPlaidLink();
     }
   }, [linkToken, plaidLinkReady, openPlaidLink]);
+
+  // OAuth disconnect mutations
+  const disconnectGoogleMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/auth/google"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/oauth/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/providers/status"] });
+      toast({ title: "Google account disconnected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect Google account", variant: "destructive" });
+    },
+  });
+
+  const disconnectMicrosoftMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/auth/microsoft"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/oauth/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/providers/status"] });
+      toast({ title: "Microsoft account disconnected" });
+    },
+    onError: () => {
+      toast({ title: "Failed to disconnect Microsoft account", variant: "destructive" });
+    },
+  });
+
+  // Handle OAuth redirect callback params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+
+    if (connected === "google") {
+      toast({ title: "Google account connected successfully" });
+      refetchOauth();
+      refetchProviders();
+      window.history.replaceState({}, "", "/settings");
+    } else if (connected === "microsoft") {
+      toast({ title: "Microsoft account connected successfully" });
+      refetchOauth();
+      refetchProviders();
+      window.history.replaceState({}, "", "/settings");
+    } else if (error) {
+      const messages: Record<string, string> = {
+        google_denied: "Google connection was cancelled",
+        google_failed: "Failed to connect Google account",
+        google_invalid: "Invalid Google callback",
+        microsoft_denied: "Microsoft connection was cancelled",
+        microsoft_failed: "Failed to connect Microsoft account",
+        microsoft_invalid: "Invalid Microsoft callback",
+      };
+      toast({ title: messages[error] || `OAuth error: ${error}`, variant: "destructive" });
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, []);
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -1429,11 +1492,65 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {!providersStatus?.calendar.google && !providersStatus?.calendar.outlook && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Calendars are connected via the Replit integrations panel.
-                </p>
-              )}
+              <div className="pt-2 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Connect accounts</p>
+                <div className="flex flex-wrap gap-2">
+                  {oauthStatus?.google.configured ? (
+                    oauthStatus.google.connected ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        onClick={() => disconnectGoogleMutation.mutate()}
+                        disabled={disconnectGoogleMutation.isPending}
+                      >
+                        {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Disconnect Google
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-blue-500/30 text-blue-500 hover:bg-blue-500/10"
+                        onClick={() => window.location.href = "/api/auth/google"}
+                      >
+                        Connect Google
+                      </Button>
+                    )
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Google OAuth not configured (add GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET)
+                    </p>
+                  )}
+                  {oauthStatus?.microsoft.configured ? (
+                    oauthStatus.microsoft.connected ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        onClick={() => disconnectMicrosoftMutation.mutate()}
+                        disabled={disconnectMicrosoftMutation.isPending}
+                      >
+                        {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Disconnect Microsoft
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
+                        onClick={() => window.location.href = "/api/auth/microsoft"}
+                      >
+                        Connect Microsoft
+                      </Button>
+                    )
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Microsoft OAuth not configured (add MICROSOFT_CLIENT_ID & MICROSOFT_CLIENT_SECRET)
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1609,11 +1726,62 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {!providersStatus?.email.gmail && !providersStatus?.email.outlook && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Email services are connected via the Replit integrations panel.
-                </p>
-              )}
+              <div className="pt-2 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Connect accounts</p>
+                <div className="flex flex-wrap gap-2">
+                  {oauthStatus?.google.configured ? (
+                    oauthStatus.google.connected ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        onClick={() => disconnectGoogleMutation.mutate()}
+                        disabled={disconnectGoogleMutation.isPending}
+                      >
+                        {disconnectGoogleMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Disconnect Google
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        onClick={() => window.location.href = "/api/auth/google"}
+                      >
+                        Connect Gmail
+                      </Button>
+                    )
+                  ) : null}
+                  {oauthStatus?.microsoft.configured ? (
+                    oauthStatus.microsoft.connected ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-red-500/30 text-red-500 hover:bg-red-500/10"
+                        onClick={() => disconnectMicrosoftMutation.mutate()}
+                        disabled={disconnectMicrosoftMutation.isPending}
+                      >
+                        {disconnectMicrosoftMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Disconnect Microsoft
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs border-cyan-500/30 text-cyan-500 hover:bg-cyan-500/10"
+                        onClick={() => window.location.href = "/api/auth/microsoft"}
+                      >
+                        Connect Outlook
+                      </Button>
+                    )
+                  ) : null}
+                  {!oauthStatus?.google.configured && !oauthStatus?.microsoft.configured && (
+                    <p className="text-xs text-muted-foreground">
+                      Configure OAuth credentials to enable email & calendar connections.
+                    </p>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 

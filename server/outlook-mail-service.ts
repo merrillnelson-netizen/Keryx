@@ -1,69 +1,19 @@
 /**
  * Outlook Mail Service for Microsoft Graph Mail Integration
- * Provides email operations via Microsoft Graph API using Replit connector
- * 
- * Integration: outlook connector via Replit
+ * Provides email operations via Microsoft Graph API using self-contained OAuth
  */
 
 import { Client } from '@microsoft/microsoft-graph-client';
+import { getAccessToken as getOAuthAccessToken, hasValidToken } from './oauth-token-manager';
 
-interface ReplitConnectorSettings {
-  settings?: {
-    access_token?: string;
-    expires_at?: string;
-    oauth?: {
-      credentials?: {
-        access_token?: string;
-      };
-    };
-  };
+async function getAccessToken(userId: string): Promise<string> {
+  const token = await getOAuthAccessToken(userId, 'microsoft');
+  if (!token) throw new Error('Outlook Mail not connected');
+  return token;
 }
 
-let outlookMailConnectionSettings: ReplitConnectorSettings | null = null;
-
-async function getAccessToken(): Promise<string> {
-  if (outlookMailConnectionSettings && 
-      outlookMailConnectionSettings.settings?.expires_at && 
-      outlookMailConnectionSettings.settings?.access_token &&
-      new Date(outlookMailConnectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return outlookMailConnectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken || !hostname) {
-    throw new Error('Outlook Mail connection not available');
-  }
-
-  const response = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=outlook',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
-    }
-  );
-  
-  const data = await response.json();
-  outlookMailConnectionSettings = data.items?.[0];
-
-  const accessToken = outlookMailConnectionSettings?.settings?.access_token || 
-                      outlookMailConnectionSettings?.settings?.oauth?.credentials?.access_token;
-
-  if (!outlookMailConnectionSettings || !accessToken) {
-    throw new Error('Outlook Mail not connected');
-  }
-  return accessToken;
-}
-
-async function getOutlookMailClient(): Promise<Client> {
-  const accessToken = await getAccessToken();
+async function getOutlookMailClient(userId: string): Promise<Client> {
+  const accessToken = await getAccessToken(userId);
 
   return Client.initWithMiddleware({
     authProvider: {
@@ -75,10 +25,10 @@ async function getOutlookMailClient(): Promise<Client> {
 /**
  * Check if Outlook Mail is connected and available
  */
-export async function isOutlookMailConnected(): Promise<boolean> {
+export async function isOutlookMailConnected(userId?: string): Promise<boolean> {
+  if (!userId) return false;
   try {
-    await getAccessToken();
-    return true;
+    return await hasValidToken(userId, 'microsoft');
   } catch {
     return false;
   }
@@ -107,9 +57,9 @@ export interface SendOutlookEmailParams {
 /**
  * Get user's Outlook email address
  */
-export async function getOutlookUserEmail(): Promise<string | null> {
+export async function getOutlookUserEmail(userId: string): Promise<string | null> {
   try {
-    const client = await getOutlookMailClient();
+    const client = await getOutlookMailClient(userId);
     const user = await client.api('/me').get();
     return user.mail || user.userPrincipalName || null;
   } catch (error) {
@@ -121,9 +71,9 @@ export async function getOutlookUserEmail(): Promise<string | null> {
 /**
  * Fetch recent emails from inbox
  */
-export async function getOutlookRecentEmails(maxResults: number = 10): Promise<OutlookEmailMessage[]> {
+export async function getOutlookRecentEmails(userId: string, maxResults: number = 10): Promise<OutlookEmailMessage[]> {
   try {
-    const client = await getOutlookMailClient();
+    const client = await getOutlookMailClient(userId);
     
     const response = await client
       .api('/me/mailFolders/inbox/messages')
@@ -153,9 +103,9 @@ export async function getOutlookRecentEmails(maxResults: number = 10): Promise<O
 /**
  * Send an email via Outlook
  */
-export async function sendOutlookEmail(params: SendOutlookEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export async function sendOutlookEmail(userId: string, params: SendOutlookEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const client = await getOutlookMailClient();
+    const client = await getOutlookMailClient(userId);
     
     const message = {
       subject: params.subject,
@@ -189,9 +139,9 @@ export async function sendOutlookEmail(params: SendOutlookEmailParams): Promise<
 /**
  * Search emails by query
  */
-export async function searchOutlookEmails(query: string, maxResults: number = 10): Promise<OutlookEmailMessage[]> {
+export async function searchOutlookEmails(userId: string, query: string, maxResults: number = 10): Promise<OutlookEmailMessage[]> {
   try {
-    const client = await getOutlookMailClient();
+    const client = await getOutlookMailClient(userId);
     
     const response = await client
       .api('/me/messages')

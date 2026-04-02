@@ -23,6 +23,11 @@ import { parseAndImportNDJSON } from "./sms-import-service";
 import { processMessageBatch } from "./message-ai-service";
 import { requireTier, requireMemoryQuota } from "./tier-middleware";
 import { isStripeConfigured, createCheckoutSession, createPortalSession } from "./stripe-service";
+import { 
+  getGoogleAuthUrl, exchangeGoogleCode, 
+  getMicrosoftAuthUrl, exchangeMicrosoftCode, 
+  deleteTokens, hasValidToken 
+} from "./oauth-token-manager";
 
 // Feature flags - Plaid integration controlled by environment
 // Dynamic check to handle runtime config changes
@@ -521,7 +526,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       try {
         if (settingsForCalendar?.calendarAutoLink !== false) {
-          const relevantEvent = await findRelevantEvent(new Date());
+          const relevantEvent = await findRelevantEvent(new Date(), user.id);
           if (relevantEvent) {
             calendarEventId = relevantEvent.id;
             calendarEventTitle = relevantEvent.title;
@@ -1371,15 +1376,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Handle calendar integration
    */
 
+  // ============================================================
+  // Self-contained OAuth 2.0 routes for Google and Microsoft
+  // ============================================================
+
+  /**
+   * GET /api/auth/google - Start Google OAuth flow
+   */
+  app.get("/api/auth/google", requireAuth, (req, res) => {
+    try {
+      const user = req.user as User;
+      const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString('base64url');
+      const url = getGoogleAuthUrl(state);
+      res.redirect(url);
+    } catch (error: any) {
+      res.redirect(`/settings?error=${encodeURIComponent(error.message || 'Google OAuth not configured')}`);
+    }
+  });
+
+  /**
+   * GET /api/auth/google/callback - Google OAuth callback
+   */
+  app.get("/api/auth/google/callback", async (req, res) => {
+    try {
+      const { code, state, error } = req.query as Record<string, string>;
+      
+      if (error) {
+        console.error('[OAuth] Google callback error:', error);
+        return res.redirect('/settings?tab=integrations&error=google_denied');
+      }
+
+      if (!code || !state) {
+        return res.redirect('/settings?tab=integrations&error=google_invalid');
+      }
+
+      // Decode state to get userId (without requiring session since redirect may lose it)
+      let userId: string;
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
+        userId = decoded.userId;
+      } catch {
+        return res.redirect('/settings?tab=integrations&error=google_invalid');
+      }
+
+      const success = await exchangeGoogleCode(userId, code);
+      if (!success) {
+        return res.redirect('/settings?tab=integrations&error=google_failed');
+      }
+
+      res.redirect('/settings?tab=integrations&connected=google');
+    } catch (error) {
+      console.error('[OAuth] Google callback exception:', error);
+      res.redirect('/settings?tab=integrations&error=google_failed');
+    }
+  });
+
+  /**
+   * DELETE /api/auth/google - Disconnect Google account
+   */
+  app.delete("/api/auth/google", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      await deleteTokens(user.id, 'google');
+      res.json({ status: 'success', message: 'Google account disconnected' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to disconnect Google account", error);
+    }
+  });
+
+  /**
+   * GET /api/auth/microsoft - Start Microsoft OAuth flow
+   */
+  app.get("/api/auth/microsoft", requireAuth, (req, res) => {
+    try {
+      const user = req.user as User;
+      const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString('base64url');
+      const url = getMicrosoftAuthUrl(state);
+      res.redirect(url);
+    } catch (error: any) {
+      res.redirect(`/settings?error=${encodeURIComponent(error.message || 'Microsoft OAuth not configured')}`);
+    }
+  });
+
+  /**
+   * GET /api/auth/microsoft/callback - Microsoft OAuth callback
+   */
+  app.get("/api/auth/microsoft/callback", async (req, res) => {
+    try {
+      const { code, state, error } = req.query as Record<string, string>;
+      
+      if (error) {
+        console.error('[OAuth] Microsoft callback error:', error);
+        return res.redirect('/settings?tab=integrations&error=microsoft_denied');
+      }
+
+      if (!code || !state) {
+        return res.redirect('/settings?tab=integrations&error=microsoft_invalid');
+      }
+
+      let userId: string;
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString());
+        userId = decoded.userId;
+      } catch {
+        return res.redirect('/settings?tab=integrations&error=microsoft_invalid');
+      }
+
+      const success = await exchangeMicrosoftCode(userId, code);
+      if (!success) {
+        return res.redirect('/settings?tab=integrations&error=microsoft_failed');
+      }
+
+      res.redirect('/settings?tab=integrations&connected=microsoft');
+    } catch (error) {
+      console.error('[OAuth] Microsoft callback exception:', error);
+      res.redirect('/settings?tab=integrations&error=microsoft_failed');
+    }
+  });
+
+  /**
+   * DELETE /api/auth/microsoft - Disconnect Microsoft account
+   */
+  app.delete("/api/auth/microsoft", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      await deleteTokens(user.id, 'microsoft');
+      res.json({ status: 'success', message: 'Microsoft account disconnected' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to disconnect Microsoft account", error);
+    }
+  });
+
+  /**
+   * GET /api/auth/oauth/status - Get OAuth connection status for current user
+   */
+  app.get("/api/auth/oauth/status", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const [googleConnected, microsoftConnected] = await Promise.all([
+        hasValidToken(user.id, 'google'),
+        hasValidToken(user.id, 'microsoft'),
+      ]);
+      res.json({
+        status: 'success',
+        google: {
+          connected: googleConnected,
+          configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+        },
+        microsoft: {
+          connected: microsoftConnected,
+          configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET),
+        },
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get OAuth status", error);
+    }
+  });
+
   /**
    * GET /api/calendar/status - Check if calendar is connected
    * Returns status for both Google and Outlook providers
    */
   app.get("/api/calendar/status", requireAuth, async (req, res) => {
     try {
+      const user = req.user as User;
       const [googleConnected, outlookConnected] = await Promise.all([
-        isGoogleCalendarConnected(),
-        isOutlookConnected()
+        isGoogleCalendarConnected(user.id),
+        isOutlookConnected(user.id)
       ]);
       
       // Active provider (Google preferred when both connected)
@@ -1411,9 +1574,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/email/status", requireAuth, async (req, res) => {
     try {
+      const user = req.user as User;
       const [gmailConnected, outlookConnected] = await Promise.all([
-        isGmailConnected(),
-        isOutlookMailConnected()
+        isGmailConnected(user.id),
+        isOutlookMailConnected(user.id)
       ]);
       
       // Active provider (Gmail preferred when both connected)
@@ -1450,12 +1614,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Fetch connection status and user settings in parallel
       const [googleCalendar, outlookCalendar, gmail, outlookMail, userSettings, gmailCaps] = await Promise.all([
-        isGoogleCalendarConnected(),
-        isOutlookConnected(),
-        isGmailConnected(),
-        isOutlookMailConnected(),
+        isGoogleCalendarConnected(user.id),
+        isOutlookConnected(user.id),
+        isGmailConnected(user.id),
+        isOutlookMailConnected(user.id),
         storage.getSettings(user.id),
-        getGmailCapabilities()
+        getGmailCapabilities(user.id)
       ]);
       
       // Check user's enabled/disabled settings for each provider
@@ -1550,7 +1714,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/calendar/events/today", requireAuth, async (req, res) => {
     try {
-      const events = await getTodaysEvents();
+      const user = req.user as User;
+      const events = await getTodaysEvents(user.id);
       res.json({
         status: 'success',
         data: events,
@@ -1566,7 +1731,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/calendar/events/current", requireAuth, async (req, res) => {
     try {
-      const event = await findRelevantEvent(new Date());
+      const user = req.user as User;
+      const event = await findRelevantEvent(new Date(), user.id);
       res.json({
         status: 'success',
         data: event,
@@ -1613,14 +1779,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { title, startDateTime, endDateTime, attendees, location, description, memoryId, timezone } = validation.data;
 
+      const user = req.user as User;
       // Check if calendar is connected
-      const connected = await isCalendarConnected();
+      const connected = await isCalendarConnected(user.id);
       if (!connected) {
         return sendErrorResponse(res, 400, "Google Calendar is not connected");
       }
 
       // Check for duplicate event
-      const duplicate = await findDuplicateEvent(title, startDateTime);
+      const duplicate = await findDuplicateEvent(title, startDateTime, 30, user.id);
       if (duplicate) {
         return res.json({
           status: 'success',
@@ -1640,6 +1807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         location,
         description,
         timezone,
+        userId: user.id,
       });
 
       if (!createdEvent) {
@@ -2458,21 +2626,20 @@ Respond with JSON only.`
       const fetchEmails = async (): Promise<{ emails: Array<{ subject: string; from: string; snippet: string; date: Date }>; source: string | null }> => {
         try {
           if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
-            const gmailConnected = await isGmailConnected();
+            const gmailConnected = await isGmailConnected(user.id);
             if (gmailConnected) {
-              const gmailCaps = await getGmailCapabilities();
+              const gmailCaps = await getGmailCapabilities(user.id);
               if (gmailCaps.canRead) {
-                const emails = await getRecentEmails(10);
+                const emails = await getRecentEmails(user.id, 10);
                 const mapped = emails.map(e => ({ subject: e.subject, from: e.from, snippet: e.snippet, date: e.date }));
                 if (mapped.length > 0) return { emails: mapped, source: 'gmail' };
               }
             }
           }
           if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
-            const outlookConnected = await isOutlookMailConnected();
+            const outlookConnected = await isOutlookMailConnected(user.id);
             if (outlookConnected) {
-
-              const emails = await getOutlookRecentEmails(10);
+              const emails = await getOutlookRecentEmails(user.id, 10);
               const mapped = emails.map(e => ({ subject: e.subject, from: e.from, snippet: e.snippet, date: e.date }));
               if (mapped.length > 0) return { emails: mapped, source: 'outlook' };
             }
@@ -2729,9 +2896,9 @@ Respond with JSON only.`
       const fetchEmails = async (): Promise<Array<{ subject: string; from: string; snippet: string; date: Date }>> => {
         try {
           if (!preferredEmailProvider || preferredEmailProvider === 'gmail') {
-            const gmailConnected = await isGmailConnected();
+            const gmailConnected = await isGmailConnected(user.id);
             if (gmailConnected) {
-              const emails = await getRecentEmails(10);
+              const emails = await getRecentEmails(user.id, 10);
               const mapped = emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
                 subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
               }));
@@ -2739,10 +2906,9 @@ Respond with JSON only.`
             }
           }
           if (!preferredEmailProvider || preferredEmailProvider === 'outlook') {
-            const outlookConnected = await isOutlookMailConnected();
+            const outlookConnected = await isOutlookMailConnected(user.id);
             if (outlookConnected) {
-
-              const emails = await getOutlookRecentEmails(10);
+              const emails = await getOutlookRecentEmails(user.id, 10);
               return emails.map((e: { subject: string; from: string; snippet: string; date: Date }) => ({
                 subject: e.subject, from: e.from, snippet: e.snippet, date: e.date
               }));
@@ -2754,9 +2920,9 @@ Respond with JSON only.`
       
       const fetchCalendar = async (): Promise<Array<{ title: string; startTime: Date; endTime: Date; attendees?: string[]; location?: string }>> => {
         try {
-          const calendarConnected = await isCalendarConnected();
+          const calendarConnected = await isCalendarConnected(user.id);
           if (calendarConnected) {
-            const events = await getUpcomingEvents(3);
+            const events = await getUpcomingEvents(3, user.id);
             const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
             return events
               .filter(e => new Date(e.startTime) >= cutoff)
@@ -2958,9 +3124,9 @@ Respond with JSON only.`
       // Get calendar events (next 14 days for travel/event insights)
       let calendarEvents: Array<{ summary?: string; location?: string; start?: { dateTime?: string; date?: string } }> = [];
       try {
-        const calendarConnected = await isCalendarConnected();
+        const calendarConnected = await isCalendarConnected(user.id);
         if (calendarConnected) {
-          const events = await getUpcomingEvents(14);
+          const events = await getUpcomingEvents(14, user.id);
           calendarEvents = events.map(e => ({
             summary: e.title,
             location: e.location,
@@ -2973,11 +3139,11 @@ Respond with JSON only.`
       
       let emails: Array<{ subject?: string; snippet?: string; from?: string }> = [];
       try {
-        const gmailConnected = await isGmailConnected();
+        const gmailConnected = await isGmailConnected(user.id);
         if (gmailConnected) {
-          const capabilities = await getGmailCapabilities();
+          const capabilities = await getGmailCapabilities(user.id);
           if (capabilities.canRead) {
-            const recentEmails = await getRecentEmails(10);
+            const recentEmails = await getRecentEmails(user.id, 10);
             emails = recentEmails.map(e => ({
               subject: e.subject,
               snippet: e.snippet,
@@ -3367,7 +3533,7 @@ Respond with JSON only.`
       // Run processing in background (don't await)
       (async () => {
         try {
-          const calendarConnected = includeCalendar ? await isCalendarConnected() : false;
+          const calendarConnected = includeCalendar ? await isCalendarConnected(user.id) : false;
           
           for (let i = 0; i < entriesNeedingBackfill.length; i++) {
             const entry = entriesNeedingBackfill[i];
@@ -3394,7 +3560,7 @@ Respond with JSON only.`
               // Calendar linking if enabled and not already linked
               if (calendarConnected && !entry.calendarEventId && entry.timestamp) {
                 try {
-                  const relevantEvent = await findRelevantEvent(entry.timestamp);
+                  const relevantEvent = await findRelevantEvent(entry.timestamp, user.id);
                   if (relevantEvent) {
                     updateData.calendarEventId = relevantEvent.id;
                     updateData.calendarEventTitle = relevantEvent.title;
@@ -3582,7 +3748,8 @@ Respond with JSON only.`
    */
   app.get("/api/actions/available", requireAuth, async (req, res) => {
     try {
-      const actionTypes = await getAvailableActionTypes();
+      const user = req.user as User;
+      const actionTypes = await getAvailableActionTypes(user.id);
       
       res.json({
         status: 'success',

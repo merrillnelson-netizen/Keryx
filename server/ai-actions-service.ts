@@ -375,6 +375,7 @@ async function executeCalendarCreate(action: AiAction): Promise<ActionExecutionR
         location: payload.location,
         description: payload.description,
         timezone: payload.timezone,
+        userId: action.userId,
       }
     );
     
@@ -414,12 +415,12 @@ async function executeEmailSend(action: AiAction): Promise<ActionExecutionResult
   
   try {
     if (provider === 'gmail') {
-      const isConnected = await isGmailConnected();
+      const isConnected = await isGmailConnected(action.userId);
       if (!isConnected) {
         return { success: false, errorMessage: 'Gmail not connected' };
       }
       
-      const result = await sendGmailEmail({
+      const result = await sendGmailEmail(action.userId, {
         to: payload.to,
         subject: payload.subject,
         body: payload.body,
@@ -436,12 +437,12 @@ async function executeEmailSend(action: AiAction): Promise<ActionExecutionResult
         resultData: { messageId: result.messageId, provider: 'gmail' },
       };
     } else if (provider === 'outlook') {
-      const isConnected = await isOutlookMailConnected();
+      const isConnected = await isOutlookMailConnected(action.userId);
       if (!isConnected) {
         return { success: false, errorMessage: 'Outlook Mail not connected' };
       }
       
-      const result = await sendOutlookEmail({
+      const result = await sendOutlookEmail(action.userId, {
         to: payload.to,
         subject: payload.subject,
         body: payload.body,
@@ -591,7 +592,7 @@ export async function processUserInputForActions(
 /**
  * Get available action types with connection status
  */
-export async function getAvailableActionTypes(): Promise<{
+export async function getAvailableActionTypes(userId?: string): Promise<{
   actionType: string;
   category: string;
   description: string;
@@ -599,10 +600,10 @@ export async function getAvailableActionTypes(): Promise<{
   provider?: string;
 }[]> {
   const [googleCalendar, outlookCalendar, gmail, outlookMail] = await Promise.all([
-    isGoogleCalendarConnected(),
-    isOutlookConnected(),
-    isGmailConnected(),
-    isOutlookMailConnected(),
+    isGoogleCalendarConnected(userId),
+    isOutlookConnected(userId),
+    isGmailConnected(userId),
+    isOutlookMailConnected(userId),
   ]);
   
   // Only return supported action types

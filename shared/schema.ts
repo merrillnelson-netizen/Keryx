@@ -1068,6 +1068,42 @@ export const messageImportsRelations = relations(messageImports, ({ one }) => ({
   }),
 }));
 
+/**
+ * OAuth Tokens table - stores OAuth 2.0 tokens for Google and Microsoft integrations
+ * Replaces Replit connector dependency for calendar and email access
+ */
+export const oauthTokens = pgTable("oauth_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: text("provider").notNull(), // 'google' | 'microsoft'
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at"),
+  scope: text("scope"),
+  tokenType: text("token_type").default('Bearer'),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdProviderIdx: uniqueIndex("oauth_tokens_user_provider_idx").on(table.userId, table.provider),
+  userIdIdx: index("oauth_tokens_user_id_idx").on(table.userId),
+}));
+
+export const oauthTokensRelations = relations(oauthTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertOauthTokenSchema = createInsertSchema(oauthTokens).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OauthToken = typeof oauthTokens.$inferSelect;
+export type InsertOauthToken = z.infer<typeof insertOauthTokenSchema>;
+
 export const insertMessageConversationSchema = createInsertSchema(messageConversations).omit({
   id: true,
   createdAt: true,

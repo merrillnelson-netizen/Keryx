@@ -1,9 +1,7 @@
 /**
  * Unified Calendar Service for Google Calendar and Outlook Integration
  * Fetches events around a given timestamp to enrich meeting memories
- * Supports both Google Calendar and Microsoft Outlook via Replit connectors
- * 
- * Integration: google-calendar and outlook connectors via Replit
+ * Supports both Google Calendar and Microsoft Outlook via self-contained OAuth
  */
 
 import { google, calendar_v3 } from 'googleapis';
@@ -15,114 +13,49 @@ import {
   createOutlookCalendarEvent,
   type OutlookCalendarEvent 
 } from './outlook-calendar-service';
-
-interface ReplitConnectorSettings {
-  settings?: {
-    access_token?: string;
-    expires_at?: string;
-    oauth?: {
-      credentials?: {
-        access_token?: string;
-      };
-    };
-  };
-}
+import { getAccessToken as getOAuthAccessToken, hasValidToken } from './oauth-token-manager';
 
 /**
  * Parse a date string correctly, handling all-day events vs timed events.
- * All-day events only have a date (YYYY-MM-DD) and should be treated as local dates.
- * Timed events have full ISO datetime strings with timezone info.
  */
 function parseCalendarDate(dateTime: string | null | undefined, date: string | null | undefined, fallback: Date): Date {
-  // Timed event - use the datetime directly (includes timezone info)
   if (dateTime) {
     return new Date(dateTime);
   }
-  
-  // All-day event - parse as local date to avoid timezone shift issues
-  // YYYY-MM-DD format, parsed as local midnight instead of UTC
   if (date) {
     const [year, month, day] = date.split('-').map(Number);
-    return new Date(year, month - 1, day, 12, 0, 0); // Noon local time to avoid day boundary issues
+    return new Date(year, month - 1, day, 12, 0, 0);
   }
-  
   return fallback;
 }
 
-let googleConnectionSettings: ReplitConnectorSettings | null = null;
-let lastTokenFetch: number = 0;
-const TOKEN_CACHE_TTL_MS = 30 * 1000; // Cache tokens for 30 seconds max to ensure freshness
-
 export type CalendarProvider = 'google' | 'outlook' | null;
 
+// userId context — set per-request via setCurrentUserId()
+let currentUserId: string | null = null;
+
+export function setCurrentUserId(userId: string | null): void {
+  currentUserId = userId;
+}
+
 export function clearGoogleCalendarTokenCache(): void {
-  googleConnectionSettings = null;
-  lastTokenFetch = 0;
+  // No-op: token caching is now handled in oauth-token-manager
 }
 
-async function getAccessToken(forceRefresh: boolean = false): Promise<string> {
-  const now = Date.now();
-  
-  // Use cached token if it's fresh and not forcing refresh
-  if (!forceRefresh && 
-      googleConnectionSettings && 
-      googleConnectionSettings.settings?.access_token &&
-      (now - lastTokenFetch) < TOKEN_CACHE_TTL_MS) {
-    // Also check if token hasn't expired according to its expiry time
-    const expiresAt = googleConnectionSettings.settings?.expires_at;
-    if (!expiresAt || new Date(expiresAt).getTime() > now + 60000) { // 1 minute buffer
-      return googleConnectionSettings.settings.access_token;
-    }
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
+async function getAccessToken(userId?: string): Promise<string> {
+  const uid = userId || currentUserId;
+  if (!uid) throw new Error('No user context for calendar');
 
-  if (!xReplitToken || !hostname) {
-    throw new Error('Calendar connection not available');
-  }
-
-  const response = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-calendar',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X-Replit-Token': xReplitToken
-      }
-    }
-  );
-  
-  const data = await response.json();
-  googleConnectionSettings = data.items?.[0];
-  lastTokenFetch = now;
-
-  const accessToken = googleConnectionSettings?.settings?.access_token || 
-                      googleConnectionSettings?.settings?.oauth?.credentials?.access_token;
-  const expiresAt = googleConnectionSettings?.settings?.expires_at;
-
-  if (!googleConnectionSettings || !accessToken) {
-    console.error('[Calendar] Google Calendar not connected or no access token. Connection data:', {
-      hasItems: !!data.items?.length,
-      hasSettings: !!googleConnectionSettings?.settings,
-      hasToken: !!accessToken
-    });
-    throw new Error('Google Calendar not connected');
-  }
-  
-  return accessToken;
+  const token = await getOAuthAccessToken(uid, 'google');
+  if (!token) throw new Error('Google Calendar not connected');
+  return token;
 }
 
-async function getCalendarClient(forceRefresh: boolean = false): Promise<calendar_v3.Calendar> {
-  const accessToken = await getAccessToken(forceRefresh);
+async function getCalendarClient(userId?: string): Promise<calendar_v3.Calendar> {
+  const accessToken = await getAccessToken(userId);
 
   const oauth2Client = new google.auth.OAuth2();
-  oauth2Client.setCredentials({
-    access_token: accessToken
-  });
+  oauth2Client.setCredentials({ access_token: accessToken });
 
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
@@ -139,12 +72,13 @@ export interface CalendarEvent {
 }
 
 /**
- * Check if Google Calendar is connected and available
+ * Check if Google Calendar is connected for a given user
  */
-export async function isGoogleCalendarConnected(): Promise<boolean> {
+export async function isGoogleCalendarConnected(userId?: string): Promise<boolean> {
+  const uid = userId || currentUserId;
+  if (!uid) return false;
   try {
-    await getAccessToken();
-    return true;
+    return await hasValidToken(uid, 'google');
   } catch {
     return false;
   }
@@ -152,15 +86,14 @@ export async function isGoogleCalendarConnected(): Promise<boolean> {
 
 /**
  * Check if any calendar (Google or Outlook) is connected
- * Returns the connected provider or null if neither is connected
  */
-export async function getConnectedCalendarProvider(): Promise<CalendarProvider> {
+export async function getConnectedCalendarProvider(userId?: string): Promise<CalendarProvider> {
+  const uid = userId || currentUserId;
   const [googleConnected, outlookConnected] = await Promise.all([
-    isGoogleCalendarConnected(),
-    isOutlookConnected()
+    isGoogleCalendarConnected(uid ?? undefined),
+    isOutlookConnected(uid ?? undefined)
   ]);
-  
-  // Prefer Google if both are connected
+
   if (googleConnected) return 'google';
   if (outlookConnected) return 'outlook';
   return null;
@@ -169,8 +102,8 @@ export async function getConnectedCalendarProvider(): Promise<CalendarProvider> 
 /**
  * Check if any calendar is connected (backwards compatible)
  */
-export async function isCalendarConnected(): Promise<boolean> {
-  const provider = await getConnectedCalendarProvider();
+export async function isCalendarConnected(userId?: string): Promise<boolean> {
+  const provider = await getConnectedCalendarProvider(userId);
   return provider !== null;
 }
 
@@ -180,10 +113,10 @@ export async function isCalendarConnected(): Promise<boolean> {
 async function getGoogleEventsAroundTime(
   timestamp: Date,
   windowMinutes: number = 30,
-  retryCount: number = 0
+  userId?: string
 ): Promise<CalendarEvent[]> {
   try {
-    const calendar = await getCalendarClient(retryCount > 0);
+    const calendar = await getCalendarClient(userId);
     
     const timeMin = new Date(timestamp.getTime() - windowMinutes * 60 * 1000);
     const timeMax = new Date(timestamp.getTime() + windowMinutes * 60 * 1000);
@@ -210,11 +143,6 @@ async function getGoogleEventsAroundTime(
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
   } catch (error: any) {
-    // Retry once with fresh token on 401 Unauthorized
-    if (error?.code === 401 && retryCount === 0) {
-      clearGoogleCalendarTokenCache();
-      return getGoogleEventsAroundTime(timestamp, windowMinutes, 1);
-    }
     console.error('Failed to fetch Google calendar events:', error);
     return [];
   }
@@ -225,14 +153,16 @@ async function getGoogleEventsAroundTime(
  */
 export async function getEventsAroundTime(
   timestamp: Date,
-  windowMinutes: number = 30
+  windowMinutes: number = 30,
+  userId?: string
 ): Promise<CalendarEvent[]> {
-  const provider = await getConnectedCalendarProvider();
+  const uid = userId || currentUserId;
+  const provider = await getConnectedCalendarProvider(uid ?? undefined);
   
   if (provider === 'google') {
-    return getGoogleEventsAroundTime(timestamp, windowMinutes);
+    return getGoogleEventsAroundTime(timestamp, windowMinutes, uid ?? undefined);
   } else if (provider === 'outlook') {
-    return getOutlookEventsAroundTime(timestamp, windowMinutes);
+    return getOutlookEventsAroundTime(timestamp, windowMinutes, uid ?? undefined);
   }
   
   return [];
@@ -240,21 +170,19 @@ export async function getEventsAroundTime(
 
 /**
  * Find the most relevant event for a given timestamp
- * Uses whichever calendar is connected (Google or Outlook)
  */
-export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent | null> {
-  const provider = await getConnectedCalendarProvider();
+export async function findRelevantEvent(timestamp: Date, userId?: string): Promise<CalendarEvent | null> {
+  const uid = userId || currentUserId;
+  const provider = await getConnectedCalendarProvider(uid ?? undefined);
   
   if (provider === 'outlook') {
-    return findOutlookRelevantEvent(timestamp);
+    return findOutlookRelevantEvent(timestamp, uid ?? undefined);
   }
   
-  // Default to Google behavior
-  const events = await getGoogleEventsAroundTime(timestamp, 60);
+  const events = await getGoogleEventsAroundTime(timestamp, 60, uid ?? undefined);
   
   if (events.length === 0) return null;
   
-  // Find events that contain the timestamp (currently happening)
   const currentEvents = events.filter(event => 
     event.startTime <= timestamp && event.endTime >= timestamp
   );
@@ -263,7 +191,6 @@ export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent 
     return currentEvents[0];
   }
   
-  // Otherwise return the closest event
   return events.reduce((closest, event) => {
     const closestDiff = Math.min(
       Math.abs(closest.startTime.getTime() - timestamp.getTime()),
@@ -279,7 +206,6 @@ export async function findRelevantEvent(timestamp: Date): Promise<CalendarEvent 
 
 /**
  * Create a new calendar event (uses connected provider)
- * Returns the created event or null if creation failed
  */
 export async function createCalendarEvent(
   title: string,
@@ -290,22 +216,22 @@ export async function createCalendarEvent(
     location?: string;
     description?: string;
     timezone?: string;
+    userId?: string;
   }
 ): Promise<CalendarEvent | null> {
-  const provider = await getConnectedCalendarProvider();
-  // Use provided timezone or default to UTC
+  const uid = options?.userId || currentUserId;
+  const provider = await getConnectedCalendarProvider(uid ?? undefined);
   const userTimezone = options?.timezone || 'UTC';
   
   if (provider === 'outlook') {
-    return createOutlookCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone });
+    return createOutlookCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone, userId: uid ?? undefined });
   }
   
-  // Default to Google Calendar
-  return createGoogleCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone });
+  return createGoogleCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone, userId: uid ?? undefined });
 }
 
 /**
- * Create a new Google calendar event with retry on auth failure
+ * Create a new Google calendar event
  */
 async function createGoogleCalendarEvent(
   title: string,
@@ -316,19 +242,15 @@ async function createGoogleCalendarEvent(
     location?: string;
     description?: string;
     timezone?: string;
-  },
-  retryCount: number = 0
+    userId?: string;
+  }
 ): Promise<CalendarEvent | null> {
   try {
-    // Force refresh token on retry
-    const calendar = await getCalendarClient(retryCount > 0);
+    const uid = options?.userId || currentUserId;
+    const calendar = await getCalendarClient(uid ?? undefined);
     
-    // Use the user's timezone for proper time interpretation
     const userTimezone = options?.timezone || 'UTC';
     
-    // Parse the datetime - keep original time, don't convert to UTC
-    // The datetime string should be in format like "2025-01-03T11:00:00" (local time)
-    // Google Calendar API will interpret it in the specified timezone
     const startDate = new Date(startDateTime);
     const endDate = new Date(endDateTime);
     
@@ -337,19 +259,13 @@ async function createGoogleCalendarEvent(
       return null;
     }
     
-    // Format datetime for Google Calendar: produce a plain local time string
-    // (no Z, no offset) so Google Calendar interprets it in the given timeZone field.
     const formatLocalDateTime = (dateStr: string, date: Date, tz: string): string => {
-      // If it already has a numeric timezone offset (e.g., +07:00), use as-is
       if (/[+-]\d{2}:\d{2}$/.test(dateStr)) {
         return dateStr;
       }
-      // If it's already a plain datetime (no Z, no offset), use as-is
       if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
         return dateStr;
       }
-      // Z-suffixed UTC datetime — convert to the user's local time in their timezone
-      // using Intl so we don't accidentally use the server's local clock (UTC on Replit)
       const parts = new Intl.DateTimeFormat('en-US', {
         timeZone: tz,
         year: 'numeric',
@@ -361,7 +277,7 @@ async function createGoogleCalendarEvent(
         hour12: false,
       }).formatToParts(date);
       const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
-      const hour = get('hour') === '24' ? '00' : get('hour'); // midnight edge case
+      const hour = get('hour') === '24' ? '00' : get('hour');
       return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}:${get('second')}`;
     };
 
@@ -377,16 +293,9 @@ async function createGoogleCalendarEvent(
       },
     };
 
-    if (options?.description) {
-      event.description = options.description;
-    }
-
-    if (options?.location) {
-      event.location = options.location;
-    }
-
+    if (options?.description) event.description = options.description;
+    if (options?.location) event.location = options.location;
     if (options?.attendees && options.attendees.length > 0) {
-      // Only add attendees that look like email addresses
       const validEmails = options.attendees.filter(a => a.includes('@'));
       if (validEmails.length > 0) {
         event.attendees = validEmails.map(email => ({ email }));
@@ -396,7 +305,7 @@ async function createGoogleCalendarEvent(
     const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: event,
-      sendUpdates: 'none', // Don't send invite emails automatically
+      sendUpdates: 'none',
     });
 
     const created = response.data;
@@ -411,12 +320,6 @@ async function createGoogleCalendarEvent(
       meetingLink: created.hangoutLink || undefined,
     };
   } catch (error: any) {
-    // Retry once with fresh token on 401 Unauthorized
-    if (error?.code === 401 && retryCount === 0) {
-      clearGoogleCalendarTokenCache();
-      return createGoogleCalendarEvent(title, startDateTime, endDateTime, options, 1);
-    }
-    
     console.error('[Calendar] Failed to create event:', {
       message: error?.message,
       code: error?.code,
@@ -429,19 +332,18 @@ async function createGoogleCalendarEvent(
 
 /**
  * Check if a similar event already exists in the calendar
- * Returns the existing event if found, null otherwise
  */
 export async function findDuplicateEvent(
   title: string,
   startDateTime: string,
   toleranceMinutes: number = 30,
-  retryCount: number = 0
+  userId?: string
 ): Promise<CalendarEvent | null> {
   try {
-    const calendar = await getCalendarClient(retryCount > 0);
+    const uid = userId || currentUserId;
+    const calendar = await getCalendarClient(uid ?? undefined);
     const startTime = new Date(startDateTime);
     
-    // Search window around the event time
     const timeMin = new Date(startTime.getTime() - toleranceMinutes * 60 * 1000);
     const timeMax = new Date(startTime.getTime() + toleranceMinutes * 60 * 1000);
 
@@ -451,17 +353,15 @@ export async function findDuplicateEvent(
       timeMax: timeMax.toISOString(),
       singleEvents: true,
       maxResults: 20,
-      q: title, // Search for events with similar title
+      q: title,
     });
 
     const events = response.data.items || [];
     
-    // Find event with matching or similar title
     const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 2);
     
     for (const event of events) {
       const eventTitle = (event.summary || '').toLowerCase();
-      // Check if titles share significant words
       const matchingWords = titleWords.filter(word => eventTitle.includes(word));
       if (matchingWords.length >= Math.min(2, titleWords.length)) {
         return {
@@ -479,11 +379,6 @@ export async function findDuplicateEvent(
     
     return null;
   } catch (error: any) {
-    // Retry once with fresh token on 401 Unauthorized
-    if (error?.code === 401 && retryCount === 0) {
-      clearGoogleCalendarTokenCache();
-      return findDuplicateEvent(title, startDateTime, toleranceMinutes, 1);
-    }
     console.error('Failed to check for duplicate event:', error);
     return null;
   }
@@ -492,23 +387,23 @@ export async function findDuplicateEvent(
 /**
  * Get upcoming events for today (uses connected provider)
  */
-export async function getTodaysEvents(): Promise<CalendarEvent[]> {
-  const provider = await getConnectedCalendarProvider();
+export async function getTodaysEvents(userId?: string): Promise<CalendarEvent[]> {
+  const uid = userId || currentUserId;
+  const provider = await getConnectedCalendarProvider(uid ?? undefined);
   
   if (provider === 'outlook') {
-    return getOutlookTodaysEvents();
+    return getOutlookTodaysEvents(uid ?? undefined);
   }
-  
-  // Default to Google Calendar
-  return getGoogleTodaysEvents();
+
+  return getGoogleTodaysEvents(uid ?? undefined);
 }
 
 /**
  * Get today's Google calendar events
  */
-async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEvent[]> {
+async function getGoogleTodaysEvents(userId?: string): Promise<CalendarEvent[]> {
   try {
-    const calendar = await getCalendarClient(retryCount > 0);
+    const calendar = await getCalendarClient(userId);
     
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -536,11 +431,6 @@ async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEv
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
   } catch (error: any) {
-    // Retry once with fresh token on 401 Unauthorized
-    if (error?.code === 401 && retryCount === 0) {
-      clearGoogleCalendarTokenCache();
-      return getGoogleTodaysEvents(1);
-    }
     console.error('Failed to fetch today\'s Google events:', error);
     return [];
   }
@@ -548,22 +438,21 @@ async function getGoogleTodaysEvents(retryCount: number = 0): Promise<CalendarEv
 
 /**
  * Get upcoming calendar events for the next N days
- * Used for extracting travel/event insights for contextual discoveries
  */
-export async function getUpcomingEvents(days: number = 14): Promise<CalendarEvent[]> {
-  const provider = await getConnectedCalendarProvider();
+export async function getUpcomingEvents(days: number = 14, userId?: string): Promise<CalendarEvent[]> {
+  const uid = userId || currentUserId;
+  const provider = await getConnectedCalendarProvider(uid ?? undefined);
   
   if (provider === 'outlook') {
-    return getOutlookUpcomingEvents(days);
+    return getOutlookUpcomingEvents(days, uid ?? undefined);
   }
   
-  // Default to Google Calendar
-  return getGoogleUpcomingEvents(days);
+  return getGoogleUpcomingEvents(days, uid ?? undefined);
 }
 
-async function getGoogleUpcomingEvents(days: number = 14, retryCount: number = 0): Promise<CalendarEvent[]> {
+async function getGoogleUpcomingEvents(days: number = 14, userId?: string): Promise<CalendarEvent[]> {
   try {
-    const calendar = await getCalendarClient(retryCount > 0);
+    const calendar = await getCalendarClient(userId);
     
     const now = new Date();
     const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -597,23 +486,19 @@ async function getGoogleUpcomingEvents(days: number = 14, retryCount: number = 0
       meetingLink: event.hangoutLink || event.conferenceData?.entryPoints?.[0]?.uri || undefined,
     }));
   } catch (error: any) {
-    if (error?.code === 401 && retryCount === 0) {
-      clearGoogleCalendarTokenCache();
-      return getGoogleUpcomingEvents(days, 1);
-    }
     console.error('Failed to fetch upcoming Google events:', error);
     return [];
   }
 }
 
-async function getOutlookUpcomingEvents(days: number = 14): Promise<CalendarEvent[]> {
+async function getOutlookUpcomingEvents(days: number = 14, userId?: string): Promise<CalendarEvent[]> {
   try {
-    const connected = await isOutlookConnected();
+    const connected = await isOutlookConnected(userId);
     if (!connected) return [];
     
     const now = new Date();
     const windowMinutes = days * 24 * 60;
-    return getOutlookEventsAroundTime(now, windowMinutes);
+    return getOutlookEventsAroundTime(now, windowMinutes, userId);
   } catch (error) {
     console.error('Failed to fetch upcoming Outlook events:', error);
     return [];
