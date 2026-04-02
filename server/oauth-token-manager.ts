@@ -365,8 +365,7 @@ export function getMicrosoftAuthUrl(nonce: string): string {
     scope: [
       "offline_access",
       "Calendars.ReadWrite",
-      "Mail.ReadWrite",
-      "Mail.Send",
+      "Mail.Read",
       "User.Read",
     ].join(" "),
     response_mode: "query",
@@ -452,7 +451,7 @@ export async function exchangeMicrosoftCode(userId: string, code: string): Promi
     client_id: clientId,
     client_secret: clientSecret,
     redirect_uri: redirectUri,
-    scope: ["offline_access", "Calendars.ReadWrite", "Mail.ReadWrite", "Mail.Send", "User.Read"].join(" "),
+    scope: ["offline_access", "Calendars.ReadWrite", "Mail.Read", "User.Read"].join(" "),
   });
 
   const response = await fetch(MICROSOFT_TOKEN_URL, {

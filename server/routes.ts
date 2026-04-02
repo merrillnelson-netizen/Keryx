@@ -1866,7 +1866,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const { title, startDateTime } = validation.data;
 
-      const duplicate = await findDuplicateEvent(title, startDateTime);
+      const user = req.user as User;
+      const duplicate = await findDuplicateEvent(title, startDateTime, 30, user.id);
       
       res.json({
         status: 'success',
