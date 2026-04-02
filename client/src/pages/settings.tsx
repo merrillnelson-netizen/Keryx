@@ -885,27 +885,45 @@ export default function SettingsPage() {
     const connected = params.get("connected");
     const error = params.get("error");
 
-    if (connected === "google") {
-      toast({ title: "Google account connected successfully" });
-      refetchOauth();
-      refetchProviders();
+    const errorMessages: Record<string, string> = {
+      google_denied: "Google connection was cancelled",
+      google_failed: "Failed to connect Google account",
+      google_invalid: "Invalid Google callback",
+      microsoft_denied: "Microsoft connection was cancelled",
+      microsoft_failed: "Failed to connect Microsoft account",
+      microsoft_invalid: "Invalid Microsoft callback",
+    };
+
+    if (connected || error) {
+      // Store in sessionStorage so it survives if component re-renders before toast fires
+      if (connected) sessionStorage.setItem("oauth_connected", connected);
+      if (error) sessionStorage.setItem("oauth_error", error);
+      // Clean URL immediately
       window.history.replaceState({}, "", "/settings");
-    } else if (connected === "microsoft") {
-      toast({ title: "Microsoft account connected successfully" });
-      refetchOauth();
-      refetchProviders();
-      window.history.replaceState({}, "", "/settings");
-    } else if (error) {
-      const messages: Record<string, string> = {
-        google_denied: "Google connection was cancelled",
-        google_failed: "Failed to connect Google account",
-        google_invalid: "Invalid Google callback",
-        microsoft_denied: "Microsoft connection was cancelled",
-        microsoft_failed: "Failed to connect Microsoft account",
-        microsoft_invalid: "Invalid Microsoft callback",
-      };
-      toast({ title: messages[error] || `OAuth error: ${error}`, variant: "destructive" });
-      window.history.replaceState({}, "", "/settings");
+    }
+
+    // Check sessionStorage too (handles cases where state was stored before mount)
+    const storedConnected = sessionStorage.getItem("oauth_connected");
+    const storedError = sessionStorage.getItem("oauth_error");
+
+    if (storedConnected || storedError) {
+      sessionStorage.removeItem("oauth_connected");
+      sessionStorage.removeItem("oauth_error");
+
+      // Small delay ensures toast system is fully mounted
+      setTimeout(() => {
+        if (storedConnected === "google") {
+          toast({ title: "Google account connected!", description: "Calendar and Gmail are now active." });
+          refetchOauth();
+          refetchProviders();
+        } else if (storedConnected === "microsoft") {
+          toast({ title: "Microsoft account connected!", description: "Outlook Calendar and Mail are now active." });
+          refetchOauth();
+          refetchProviders();
+        } else if (storedError) {
+          toast({ title: errorMessages[storedError] || `OAuth error: ${storedError}`, variant: "destructive" });
+        }
+      }, 300);
     }
   }, []);
 
