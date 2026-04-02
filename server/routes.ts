@@ -1530,12 +1530,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'success',
         google: {
           connected: googleConnected,
-          configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+          configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
           accountEmail: googleConnected ? googleEmail : null,
         },
         microsoft: {
           connected: microsoftConnected,
-          configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET),
+          configured: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET && process.env.MICROSOFT_REDIRECT_URI),
           accountEmail: microsoftConnected ? microsoftEmail : null,
         },
       });
