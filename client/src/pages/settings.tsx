@@ -352,7 +352,7 @@ function SmsImportSection() {
   );
 }
 
-function BillingCard() {
+function BillingCard({ isFounder }: { isFounder?: boolean }) {
   const [, navigate] = useLocation();
   const { data: billing } = useQuery<{
     tier: string;
@@ -378,7 +378,10 @@ function BillingCard() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="space-y-0.5">
             <p className="text-sm font-medium">Current plan: <span className="text-primary">{tierLabel}</span></p>
-            {billing?.isFoundingMember && (
+            {billing?.isFoundingMember && !isFounder && (
+              <p className="text-xs text-yellow-400">Founding Member — Life OS Forever</p>
+            )}
+            {isFounder && (
               <button
                 onClick={() => navigate("/founder")}
                 className="flex items-center gap-1.5 group"
@@ -388,7 +391,7 @@ function BillingCard() {
                 <p className="text-xs text-yellow-400">Founding Member — Life OS Forever</p>
               </button>
             )}
-            {!billing?.isFoundingMember && billing?.currentPeriodEnd && (
+            {!billing?.isFoundingMember && !isFounder && billing?.currentPeriodEnd && (
               <p className="text-xs text-muted-foreground">
                 Renews {new Date(billing.currentPeriodEnd).toLocaleDateString()}
               </p>
@@ -2517,7 +2520,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <BillingCard />
+          <BillingCard isFounder={isFounder} />
 
           <Card className="backdrop-blur-xl bg-white/5 dark:bg-white/5 bg-white border-white/10">
             <CardHeader className="pb-3">

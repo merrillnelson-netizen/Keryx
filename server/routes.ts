@@ -6276,7 +6276,7 @@ Respond with JSON only.`
   app.get("/api/billing/status", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const isFoundingMember = !user.currentPeriodEnd && user.subscriptionTier !== 'free' && !!user.stripeSubscriptionId;
+      const isFoundingMember = !!user.earlyAdopterAt && user.subscriptionTier !== 'free';
       const memoriesLimit = user.subscriptionTier === 'free' ? 100 : null;
       const paidCount = await storage.countFoundingMembers();
       const spotsRemaining = Math.max(0, 50 - paidCount);
