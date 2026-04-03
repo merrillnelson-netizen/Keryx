@@ -102,6 +102,64 @@ interface AlertsResponse {
   periodDays: number;
 }
 
+function BillingLiveBanner({ tier }: { tier: string }) {
+  const [, navigate] = useLocation();
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem('keryx-billing-live-dismissed') === 'true'
+  );
+
+  if (dismissed) return null;
+
+  const handleDismiss = () => {
+    localStorage.setItem('keryx-billing-live-dismissed', 'true');
+    setDismissed(true);
+  };
+
+  const isFree = tier === 'free';
+  const tierLabel = tier === 'life_os' ? 'Life OS' : tier === 'core' ? 'Core' : 'Free';
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-blue-500/30 bg-gradient-to-r from-blue-950/60 via-indigo-950/40 to-blue-950/60 p-4">
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 pointer-events-none" />
+      <button
+        onClick={handleDismiss}
+        className="absolute top-3 right-3 text-blue-400/60 hover:text-blue-300 transition-colors"
+        aria-label="Dismiss"
+      >
+        <X className="w-4 h-4" />
+      </button>
+      <div className="flex flex-col gap-2.5 pr-6">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Wallet className="w-5 h-5 text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-blue-300">
+              Keryx is now a paid service
+            </p>
+            <p className="text-xs text-blue-400/80 mt-0.5 leading-relaxed">
+              {isFree
+                ? <>You're on the <strong className="text-blue-300">Free plan</strong> — limited to 100 memories. Upgrade to unlock unlimited memories and all features.</>
+                : <>Your <strong className="text-blue-300">{tierLabel}</strong> plan is active and being billed. Thank you for supporting Keryx!</>
+              }
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pl-12">
+          <Button
+            size="sm"
+            onClick={() => navigate("/billing")}
+            className="bg-blue-500 hover:bg-blue-400 text-white font-semibold text-xs h-8 px-3 gap-1"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+            {isFree ? "Upgrade plan" : "Review your plan"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FoundingMemberBanner() {
   const [, navigate] = useLocation();
   const [dismissed, setDismissed] = useState(
@@ -121,7 +179,13 @@ function FoundingMemberBanner() {
     staleTime: 60_000,
   });
 
-  if (dismissed || billing?.enforcementActive) return null;
+  if (dismissed && !billing?.enforcementActive) return null;
+
+  if (billing?.enforcementActive) {
+    return <BillingLiveBanner tier={billing.tier} />;
+  }
+
+  if (dismissed) return null;
 
   const alreadyOnList = !!billing?.earlyAdopterAt || joinedList;
 
