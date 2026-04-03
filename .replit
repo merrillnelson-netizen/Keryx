@@ -53,3 +53,7 @@ STRIPE_PRICE_PRO = "price_1T7eqoDDKVwZDmPuOIpTTZdk"
 STRIPE_PRICE_LIFE_OS = "price_1T7eqoDDKVwZDmPuG8hxwzYx"
 GOOGLE_REDIRECT_URI = "https://9b355ea9-c6cb-407d-b062-57d8d83a3a41-00-3rnhjwva0q5yg.janeway.replit.dev/api/auth/google/callback"
 MICROSOFT_REDIRECT_URI = "https://9b355ea9-c6cb-407d-b062-57d8d83a3a41-00-3rnhjwva0q5yg.janeway.replit.dev/api/auth/microsoft/callback"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
