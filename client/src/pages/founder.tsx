@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Crown, Users, Star, Zap, ArrowLeft, Loader2,
-  CheckCircle, Clock, RefreshCw,
+  Crown, Users, ArrowLeft, Loader2,
+  CheckCircle, RefreshCw, AlertTriangle,
 } from "lucide-react";
 
 interface FounderStats {
@@ -77,16 +77,35 @@ export default function FounderDashboard() {
   }
 
   if (error) {
+    const is403 = error instanceof Error && error.message.startsWith("403");
     return (
       <AppLayout>
         <div className="max-w-2xl mx-auto px-4 py-12 text-center space-y-4">
-          <Crown className="w-12 h-12 text-yellow-400 mx-auto" />
-          <h1 className="text-2xl font-bold">Access Denied</h1>
-          <p className="text-muted-foreground">This page is for the Keryx founder only.</p>
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Go to Dashboard
-          </Button>
+          {is403 ? (
+            <Crown className="w-12 h-12 text-yellow-400 mx-auto" />
+          ) : (
+            <AlertTriangle className="w-12 h-12 text-red-400 mx-auto" />
+          )}
+          <h1 className="text-2xl font-bold">
+            {is403 ? "Access Denied" : "Something went wrong"}
+          </h1>
+          <p className="text-muted-foreground">
+            {is403
+              ? "This page is for the Keryx founder only."
+              : "Could not load founder stats. Try refreshing."}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            {!is403 && (
+              <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+                Retry
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Go to Dashboard
+            </Button>
+          </div>
         </div>
       </AppLayout>
     );

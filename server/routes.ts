@@ -6356,7 +6356,7 @@ Respond with JSON only.`
 
       const { db: dbConn } = await import('./db');
       const { users: usersTable } = await import('@shared/schema');
-      const { sql: sqlFn, count, isNotNull } = await import('drizzle-orm');
+      const { sql: sqlFn } = await import('drizzle-orm');
 
       const [totals] = await dbConn
         .select({
