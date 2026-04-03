@@ -2549,13 +2549,13 @@ export default function SettingsPage() {
           </div>
 
           {isFounder && (
-            <div className="flex justify-center pt-2 pb-4">
+            <div className="flex justify-center pt-2 pb-6">
               <button
                 onClick={() => navigate("/founder")}
-                className="opacity-10 hover:opacity-60 transition-opacity duration-500 p-2 rounded-full"
+                className="opacity-30 active:opacity-100 hover:opacity-80 transition-opacity duration-300 p-4 rounded-full"
                 aria-label="Founder dashboard"
               >
-                <Crown className="w-4 h-4 text-yellow-400" />
+                <Crown className="w-5 h-5 text-yellow-400" />
               </button>
             </div>
           )}
