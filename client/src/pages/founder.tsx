@@ -30,6 +30,7 @@ interface FounderStats {
     stripeSubscriptionId: string | null;
     earlyAdopterAt: string | null;
     currentPeriodEnd: string | null;
+    createdAt: string;
   }[];
 }
 
@@ -156,8 +157,8 @@ export default function FounderDashboard() {
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground border-b border-white/10">
                     <th className="pb-2 pr-4 font-medium">Username</th>
+                    <th className="pb-2 pr-4 font-medium">Joined</th>
                     <th className="pb-2 pr-4 font-medium">Tier</th>
-                    <th className="pb-2 pr-4 font-medium">Status</th>
                     <th className="pb-2 pr-4 font-medium">Waitlist</th>
                     <th className="pb-2 font-medium">Stripe</th>
                   </tr>
@@ -165,16 +166,14 @@ export default function FounderDashboard() {
                 <tbody className="divide-y divide-white/5">
                   {data!.recentUsers.map((u) => (
                     <tr key={u.username} className="hover:bg-white/5 transition-colors">
-                      <td className="py-2 pr-4 font-mono text-xs max-w-[200px] truncate" title={u.username}>
+                      <td className="py-2 pr-4 font-mono text-xs max-w-[180px] truncate" title={u.username}>
                         {u.username}
+                      </td>
+                      <td className="py-2 pr-4 text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(u.createdAt).toLocaleDateString()}
                       </td>
                       <td className="py-2 pr-4">
                         {tierBadge(u.subscriptionTier, !!u.stripeSubscriptionId)}
-                      </td>
-                      <td className="py-2 pr-4">
-                        <span className={`text-xs ${u.subscriptionStatus === "active" ? "text-emerald-400" : "text-muted-foreground"}`}>
-                          {u.subscriptionStatus}
-                        </span>
                       </td>
                       <td className="py-2 pr-4">
                         {u.earlyAdopterAt ? (

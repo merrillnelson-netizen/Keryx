@@ -6379,9 +6379,10 @@ Respond with JSON only.`
           stripeSubscriptionId: usersTable.stripeSubscriptionId,
           earlyAdopterAt: usersTable.earlyAdopterAt,
           currentPeriodEnd: usersTable.currentPeriodEnd,
+          createdAt: usersTable.createdAt,
         })
         .from(usersTable)
-        .orderBy(sqlFn`id desc`)
+        .orderBy(sqlFn`created_at desc`)
         .limit(50);
 
       const FOUNDING_SPOTS = 50;
