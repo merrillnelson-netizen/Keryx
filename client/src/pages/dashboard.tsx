@@ -174,6 +174,7 @@ function FoundingMemberBanner() {
     tier: string;
     earlyAdopterAt: string | null;
     stripeConfigured: boolean;
+    spotsRemaining: number;
   }>({
     queryKey: ["/api/billing/status"],
     staleTime: 60_000,
@@ -188,6 +189,7 @@ function FoundingMemberBanner() {
   if (dismissed) return null;
 
   const alreadyOnList = !!billing?.earlyAdopterAt || joinedList;
+  const spotsRemaining = billing?.spotsRemaining ?? 50;
 
   const handleDismiss = () => {
     localStorage.setItem('keryx-founding-dismissed', 'true');
@@ -254,24 +256,30 @@ function FoundingMemberBanner() {
               Keryx is transitioning to a paid service soon. Early users can lock in
               <strong className="text-yellow-300"> Life OS for $8/mo forever</strong> — that's 33% off — using
               code <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
-              Only 50 spots available.
+            </p>
+            <p className="text-xs font-semibold text-amber-400 mt-1">
+              {spotsRemaining} of 50 founding spots left
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2 pl-12">
-          <Button
-            size="sm"
-            onClick={handleLockIn}
-            disabled={checkingOut}
-            className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold text-xs h-8 px-3 gap-1"
-          >
-            {checkingOut ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-            Lock in $8/mo now
-          </Button>
+          {spotsRemaining === 0 ? (
+            <p className="text-xs font-semibold text-yellow-400/80">Founding spots filled — thank you!</p>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleLockIn}
+              disabled={checkingOut}
+              className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold text-xs h-8 px-3 gap-1"
+            >
+              {checkingOut ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+              Lock in $8/mo now
+            </Button>
+          )}
           {alreadyOnList ? (
             <div className="flex items-center gap-1 text-xs text-yellow-400/80">
               <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-              You're on the list
+              You're on the list — {spotsRemaining} spots still available
             </div>
           ) : (
             <Button

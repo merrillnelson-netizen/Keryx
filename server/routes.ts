@@ -6278,6 +6278,8 @@ Respond with JSON only.`
       const user = req.user as User;
       const isFoundingMember = !user.currentPeriodEnd && user.subscriptionTier !== 'free' && !!user.stripeSubscriptionId;
       const memoriesLimit = user.subscriptionTier === 'free' ? 100 : null;
+      const paidCount = await storage.countFoundingMembers();
+      const spotsRemaining = Math.max(0, 50 - paidCount);
       res.json({
         tier: user.subscriptionTier,
         status: user.subscriptionStatus,
@@ -6290,6 +6292,7 @@ Respond with JSON only.`
         stripeConfigured: isStripeConfigured(),
         enforcementActive: process.env.BILLING_ENFORCEMENT === 'true',
         earlyAdopterAt: user.earlyAdopterAt || null,
+        spotsRemaining,
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to get billing status", error);

@@ -23,7 +23,7 @@ import {
   type MessageImport, type InsertMessageImport
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, isNull, sql, inArray } from "drizzle-orm";
+import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -33,6 +33,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<User>): Promise<User>;
   getMonthlyMemoryCount(userId: string, since: Date): Promise<number>;
   getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | undefined>;
+  countFoundingMembers(): Promise<number>;
 
   // Memory/Log Entries (user-scoped)
   getLogEntries(userId: string, limit?: number, offset?: number): Promise<LogEntry[]>;
@@ -308,6 +309,19 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error fetching user by Stripe customer ID:', error);
       throw new Error(`Failed to retrieve user by Stripe customer ID: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async countFoundingMembers(): Promise<number> {
+    try {
+      const [result] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(isNotNull(users.stripeSubscriptionId));
+      return result?.count ?? 0;
+    } catch (error) {
+      console.error('Error counting founding members:', error);
+      return 0;
     }
   }
 

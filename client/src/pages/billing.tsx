@@ -24,6 +24,7 @@ interface BillingStatus {
   stripeConfigured: boolean;
   enforcementActive: boolean;
   earlyAdopterAt: string | null;
+  spotsRemaining: number;
 }
 
 const TIER_FEATURES = {
@@ -158,6 +159,7 @@ export default function Billing() {
   const memoriesLimit = billing?.memoriesLimit;
   const alreadyOnList = !!billing?.earlyAdopterAt || joinedList;
   const hasPaidSubscription = !!billing?.stripeSubscriptionId;
+  const spotsRemaining = billing?.spotsRemaining ?? 50;
 
   const handleJoinList = async () => {
     setJoiningList(true);
@@ -298,25 +300,31 @@ export default function Billing() {
                 Before billing goes live, you can lock in <strong className="text-yellow-300">Life OS for $8/month forever</strong> —
                 that's 33% off the regular price. Use code{" "}
                 <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
-                Only 50 spots total.
+              </p>
+              <p className="text-sm font-semibold text-amber-400">
+                {spotsRemaining} of 50 founding spots left
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={() => checkoutMutation.mutate("life_os")}
-                  disabled={checkoutMutation.isPending}
-                  className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold gap-1"
-                >
-                  {checkoutMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Crown className="w-4 h-4" />
-                  )}
-                  Lock in $8/mo now
-                </Button>
+                {spotsRemaining === 0 ? (
+                  <p className="text-sm font-semibold text-yellow-400/80">Founding spots filled — thank you!</p>
+                ) : (
+                  <Button
+                    onClick={() => checkoutMutation.mutate("life_os")}
+                    disabled={checkoutMutation.isPending}
+                    className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold gap-1"
+                  >
+                    {checkoutMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Crown className="w-4 h-4" />
+                    )}
+                    Lock in $8/mo now
+                  </Button>
+                )}
                 {alreadyOnList ? (
                   <div className="flex items-center gap-1.5 text-sm text-yellow-400/80">
                     <CheckCircle className="w-4 h-4 text-green-400" />
-                    You're on the interest list — we'll reach out before billing starts
+                    You're on the interest list — {spotsRemaining} spots still available
                   </div>
                 ) : (
                   <Button
@@ -330,9 +338,11 @@ export default function Billing() {
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-yellow-500/60">
-                Not ready to pay yet? Join the interest list and we'll remind you before billing goes live.
-              </p>
+              {!alreadyOnList && (
+                <p className="text-xs text-yellow-500/60">
+                  Not ready to pay yet? Join the interest list and we'll remind you before billing goes live.
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
