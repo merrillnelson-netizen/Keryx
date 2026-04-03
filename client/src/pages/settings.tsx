@@ -1038,20 +1038,10 @@ export default function SettingsPage() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
               <SettingsIcon className="w-6 h-6 text-white" />
             </div>
-            <div className="flex-1">
+            <div>
               <h2 className="text-2xl font-bold text-foreground">Settings</h2>
               <p className="text-sm text-muted-foreground">Configure your voice assistant</p>
             </div>
-            {isFounder && (
-              <button
-                onClick={() => navigate("/founder")}
-                className="opacity-20 hover:opacity-80 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-yellow-500/10"
-                title="Founder dashboard"
-                aria-label="Founder dashboard"
-              >
-                <Crown className="w-5 h-5 text-yellow-400" />
-              </button>
-            )}
           </div>
         </div>
 
@@ -2557,6 +2547,18 @@ export default function SettingsPage() {
               {updateSettingsMutation.isPending ? "Saving..." : "Save Settings"}
             </Button>
           </div>
+
+          {isFounder && (
+            <div className="flex justify-center pt-2 pb-4">
+              <button
+                onClick={() => navigate("/founder")}
+                className="opacity-10 hover:opacity-60 transition-opacity duration-500 p-2 rounded-full"
+                aria-label="Founder dashboard"
+              >
+                <Crown className="w-4 h-4 text-yellow-400" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>
