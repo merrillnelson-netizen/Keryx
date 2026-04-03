@@ -379,7 +379,14 @@ function BillingCard() {
           <div className="space-y-0.5">
             <p className="text-sm font-medium">Current plan: <span className="text-primary">{tierLabel}</span></p>
             {billing?.isFoundingMember && (
-              <p className="text-xs text-yellow-400">Founding Member — Life OS Forever</p>
+              <button
+                onClick={() => navigate("/founder")}
+                className="flex items-center gap-1.5 group"
+                aria-label="Founder dashboard"
+              >
+                <Crown className="w-3.5 h-3.5 text-yellow-400 opacity-60 group-active:opacity-100 group-hover:opacity-100 transition-opacity" />
+                <p className="text-xs text-yellow-400">Founding Member — Life OS Forever</p>
+              </button>
             )}
             {!billing?.isFoundingMember && billing?.currentPeriodEnd && (
               <p className="text-xs text-muted-foreground">
@@ -2548,17 +2555,6 @@ export default function SettingsPage() {
             </Button>
           </div>
 
-          {isFounder && (
-            <div className="flex justify-center pt-2 pb-6">
-              <button
-                onClick={() => navigate("/founder")}
-                className="opacity-30 active:opacity-100 hover:opacity-80 transition-opacity duration-300 p-4 rounded-full"
-                aria-label="Founder dashboard"
-              >
-                <Crown className="w-5 h-5 text-yellow-400" />
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </AppLayout>
