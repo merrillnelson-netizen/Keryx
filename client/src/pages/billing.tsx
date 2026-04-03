@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +6,10 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AppLayout from "@/components/app-layout";
+import { useState } from "react";
 import {
   Zap, Crown, Star, Check, Lock, ExternalLink, Loader2,
-  CreditCard, Info, Gift,
+  CreditCard, Info, Gift, CheckCircle,
 } from "lucide-react";
 
 interface BillingStatus {
@@ -19,8 +20,10 @@ interface BillingStatus {
   currentPeriodEnd: string | null;
   isFoundingMember: boolean;
   stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
   stripeConfigured: boolean;
   enforcementActive: boolean;
+  earlyAdopterAt: string | null;
 }
 
 const TIER_FEATURES = {
@@ -86,6 +89,9 @@ function tierBadgeClass(tier: string) {
 
 export default function Billing() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [joinedList, setJoinedList] = useState(false);
+  const [joiningList, setJoiningList] = useState(false);
 
   const { data: billing, isLoading } = useQuery<BillingStatus>({
     queryKey: ["/api/billing/status"],
@@ -150,6 +156,23 @@ export default function Billing() {
   const enforcementActive = billing?.enforcementActive ?? false;
   const memoriesUsed = billing?.memoriesThisMonth ?? 0;
   const memoriesLimit = billing?.memoriesLimit;
+  const alreadyOnList = !!billing?.earlyAdopterAt || joinedList;
+  const hasPaidSubscription = !!billing?.stripeSubscriptionId;
+
+  const handleJoinList = async () => {
+    setJoiningList(true);
+    try {
+      const res = await fetch('/api/billing/early-adopter', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        setJoinedList(true);
+        queryClient.invalidateQueries({ queryKey: ['/api/billing/status'] });
+        toast({ title: "You're on the list!", description: "We'll notify you before billing goes live." });
+      }
+    } catch {
+      toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
+    }
+    setJoiningList(false);
+  };
 
   return (
     <AppLayout>
@@ -261,6 +284,58 @@ export default function Billing() {
             isPending={checkoutMutation.isPending}
           />
         </div>
+
+        {!enforcementActive && !hasPaidSubscription && (
+          <Card className="border border-yellow-500/30 bg-gradient-to-r from-yellow-950/60 via-amber-950/40 to-yellow-950/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-yellow-300">
+                <Crown className="w-5 h-5 text-yellow-400" />
+                Founding Member Rate — $8/mo Life OS forever
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-yellow-400/80 leading-relaxed">
+                Before billing goes live, you can lock in <strong className="text-yellow-300">Life OS for $8/month forever</strong> —
+                that's 33% off the regular price. Use code{" "}
+                <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
+                Only 50 spots total.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={() => checkoutMutation.mutate("life_os")}
+                  disabled={checkoutMutation.isPending}
+                  className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold gap-1"
+                >
+                  {checkoutMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Crown className="w-4 h-4" />
+                  )}
+                  Lock in $8/mo now
+                </Button>
+                {alreadyOnList ? (
+                  <div className="flex items-center gap-1.5 text-sm text-yellow-400/80">
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                    You're on the interest list — we'll reach out before billing starts
+                  </div>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={handleJoinList}
+                    disabled={joiningList}
+                    className="border border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 gap-1"
+                  >
+                    {joiningList ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Join the interest list
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-yellow-500/60">
+                Not ready to pay yet? Join the interest list and we'll remind you before billing goes live.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );

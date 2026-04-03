@@ -72,6 +72,7 @@ export const users = pgTable("users", {
   currentPeriodEnd: timestamp("current_period_end"),
   memoriesThisMonth: integer("memories_this_month").default(0).notNull(),
   memoriesMonthStart: timestamp("memories_month_start"),
+  earlyAdopterAt: timestamp("early_adopter_at"),
 });
 
 /**

@@ -6276,7 +6276,7 @@ Respond with JSON only.`
   app.get("/api/billing/status", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const isFoundingMember = !user.currentPeriodEnd && user.subscriptionTier !== 'free';
+      const isFoundingMember = !user.currentPeriodEnd && user.subscriptionTier !== 'free' && !!user.stripeSubscriptionId;
       const memoriesLimit = user.subscriptionTier === 'free' ? 100 : null;
       res.json({
         tier: user.subscriptionTier,
@@ -6288,6 +6288,7 @@ Respond with JSON only.`
         stripeCustomerId: user.stripeCustomerId || null,
         stripeConfigured: isStripeConfigured(),
         enforcementActive: process.env.BILLING_ENFORCEMENT === 'true',
+        earlyAdopterAt: user.earlyAdopterAt || null,
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to get billing status", error);
@@ -6320,6 +6321,89 @@ Respond with JSON only.`
       res.json({ url });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to create checkout session", error);
+    }
+  });
+
+  /**
+   * POST /api/billing/early-adopter - Join the early adopter interest list (no payment)
+   * Marks earlyAdopterAt timestamp if not already set.
+   */
+  app.post("/api/billing/early-adopter", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      if (user.earlyAdopterAt) {
+        return res.json({ status: 'already_joined', earlyAdopterAt: user.earlyAdopterAt });
+      }
+      const updated = await storage.updateUser(user.id, { earlyAdopterAt: new Date() });
+      res.json({ status: 'joined', earlyAdopterAt: updated.earlyAdopterAt });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to join early adopter list", error);
+    }
+  });
+
+  /**
+   * GET /api/admin/founder-stats - Founder dashboard stats (owner only)
+   * Returns aggregate counts + recent signups table.
+   */
+  app.get("/api/admin/founder-stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const ADMIN_USERNAME = 'Merrillnelson@gmail.com';
+      if (user.username !== ADMIN_USERNAME) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { db: dbConn } = await import('./db');
+      const { users: usersTable } = await import('@shared/schema');
+      const { sql: sqlFn, count, isNotNull } = await import('drizzle-orm');
+
+      const [totals] = await dbConn
+        .select({
+          total: sqlFn<number>`count(*)::int`,
+          freeCount: sqlFn<number>`count(*) filter (where subscription_tier = 'free')::int`,
+          proCount: sqlFn<number>`count(*) filter (where subscription_tier = 'pro')::int`,
+          lifeOsCount: sqlFn<number>`count(*) filter (where subscription_tier = 'life_os')::int`,
+          paidFounders: sqlFn<number>`count(*) filter (where stripe_subscription_id is not null)::int`,
+          waitlistCount: sqlFn<number>`count(*) filter (where early_adopter_at is not null)::int`,
+          testAccounts: sqlFn<number>`count(*) filter (where username like 'test%' or username like 'e2e%' or username like 'user-%' or username like 'user_%' or username like '%_test%')::int`,
+        })
+        .from(usersTable);
+
+      const recentUsers = await dbConn
+        .select({
+          username: usersTable.username,
+          subscriptionTier: usersTable.subscriptionTier,
+          subscriptionStatus: usersTable.subscriptionStatus,
+          stripeCustomerId: usersTable.stripeCustomerId,
+          stripeSubscriptionId: usersTable.stripeSubscriptionId,
+          earlyAdopterAt: usersTable.earlyAdopterAt,
+          currentPeriodEnd: usersTable.currentPeriodEnd,
+        })
+        .from(usersTable)
+        .orderBy(sqlFn`id desc`)
+        .limit(50);
+
+      const FOUNDING_SPOTS = 50;
+      const paidFounders = totals?.paidFounders ?? 0;
+      const spotsRemaining = Math.max(0, FOUNDING_SPOTS - paidFounders);
+
+      res.json({
+        status: 'success',
+        totals: {
+          total: totals?.total ?? 0,
+          freeCount: totals?.freeCount ?? 0,
+          proCount: totals?.proCount ?? 0,
+          lifeOsCount: totals?.lifeOsCount ?? 0,
+          paidFounders,
+          waitlistCount: totals?.waitlistCount ?? 0,
+          testAccounts: totals?.testAccounts ?? 0,
+        },
+        spotsRemaining,
+        foundingSpots: FOUNDING_SPOTS,
+        recentUsers,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to get founder stats", error);
     }
   });
 

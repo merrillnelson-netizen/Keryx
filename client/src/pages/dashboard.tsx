@@ -107,17 +107,64 @@ function FoundingMemberBanner() {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem('keryx-founding-dismissed') === 'true'
   );
+  const [joinedList, setJoinedList] = useState(false);
+  const [joiningList, setJoiningList] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
-  const { data: billing } = useQuery<{ enforcementActive: boolean; tier: string }>({
+  const { data: billing, refetch: refetchBilling } = useQuery<{
+    enforcementActive: boolean;
+    tier: string;
+    earlyAdopterAt: string | null;
+    stripeConfigured: boolean;
+  }>({
     queryKey: ["/api/billing/status"],
     staleTime: 60_000,
   });
 
   if (dismissed || billing?.enforcementActive) return null;
 
+  const alreadyOnList = !!billing?.earlyAdopterAt || joinedList;
+
   const handleDismiss = () => {
     localStorage.setItem('keryx-founding-dismissed', 'true');
     setDismissed(true);
+  };
+
+  const handleJoinList = async () => {
+    setJoiningList(true);
+    try {
+      const res = await fetch('/api/billing/early-adopter', { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        setJoinedList(true);
+        refetchBilling();
+      }
+    } catch {}
+    setJoiningList(false);
+  };
+
+  const handleLockIn = async () => {
+    if (!billing?.stripeConfigured) { navigate("/billing"); return; }
+    setCheckingOut(true);
+    try {
+      const appBase = window.location.origin;
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: 'life_os',
+          successUrl: `${appBase}/billing?success=true`,
+          cancelUrl: `${appBase}/billing?canceled=true`,
+        }),
+      });
+      if (res.ok) {
+        const { url } = await res.json();
+        if (url) window.location.href = url;
+      } else {
+        navigate("/billing");
+      }
+    } catch { navigate("/billing"); }
+    setCheckingOut(false);
   };
 
   return (
@@ -130,30 +177,51 @@ function FoundingMemberBanner() {
       >
         <X className="w-4 h-4" />
       </button>
-      <div className="flex items-start gap-3 pr-6">
-        <div className="w-9 h-9 rounded-xl bg-yellow-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Crown className="w-5 h-5 text-yellow-400" />
+      <div className="flex flex-col gap-2.5 pr-6">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-yellow-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Crown className="w-5 h-5 text-yellow-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-yellow-300">
+              Founding Member offer — lock in $8/month before we launch
+            </p>
+            <p className="text-xs text-yellow-400/80 mt-0.5 leading-relaxed">
+              Keryx is transitioning to a paid service soon. Early users can lock in
+              <strong className="text-yellow-300"> Life OS for $8/mo forever</strong> — that's 33% off — using
+              code <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
+              Only 50 spots available.
+            </p>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-yellow-300">
-            Founding Member offer — lock in $8/month before we launch
-          </p>
-          <p className="text-xs text-yellow-400/80 mt-0.5 leading-relaxed">
-            Keryx is transitioning to a paid service soon. Early users can lock in
-            <strong className="text-yellow-300"> Life OS for $8/mo forever</strong> — that's 33% off — using
-            code <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
-            Only 50 spots available.
-          </p>
+        <div className="flex items-center gap-2 pl-12">
+          <Button
+            size="sm"
+            onClick={handleLockIn}
+            disabled={checkingOut}
+            className="bg-yellow-500 hover:bg-yellow-400 text-yellow-950 font-semibold text-xs h-8 px-3 gap-1"
+          >
+            {checkingOut ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+            Lock in $8/mo now
+          </Button>
+          {alreadyOnList ? (
+            <div className="flex items-center gap-1 text-xs text-yellow-400/80">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+              You're on the list
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleJoinList}
+              disabled={joiningList}
+              variant="ghost"
+              className="border border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 text-xs h-8 px-3 gap-1"
+            >
+              {joiningList ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              Join the interest list
+            </Button>
+          )}
         </div>
-        <Button
-          size="sm"
-          onClick={() => navigate("/billing")}
-          className="flex-shrink-0 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 text-yellow-300 text-xs h-8 px-3 gap-1"
-          variant="ghost"
-        >
-          See plans
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Button>
       </div>
     </div>
   );
