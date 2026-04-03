@@ -1,5 +1,6 @@
 import AppLayout from "@/components/app-layout";
 import { useLocation } from "wouter";
+import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone, FileText, Gauge } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, MessageCircle, ExternalLink, Copy, Loader2, Send, Landmark, Building2, CreditCard, Eye, EyeOff, Trash2, RefreshCcw, Bell, BellOff, Smartphone, FileText, Gauge, Crown } from "lucide-react";
 import { SassOMeter } from "@/components/sass-o-meter";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -405,6 +406,9 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { sessionCategory, setSessionCategory } = useSessionCategory();
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const isFounder = user?.username === 'Merrillnelson@gmail.com';
 
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -1034,10 +1038,20 @@ export default function SettingsPage() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
               <SettingsIcon className="w-6 h-6 text-white" />
             </div>
-            <div>
+            <div className="flex-1">
               <h2 className="text-2xl font-bold text-foreground">Settings</h2>
               <p className="text-sm text-muted-foreground">Configure your voice assistant</p>
             </div>
+            {isFounder && (
+              <button
+                onClick={() => navigate("/founder")}
+                className="opacity-20 hover:opacity-80 transition-opacity duration-300 p-1.5 rounded-lg hover:bg-yellow-500/10"
+                title="Founder dashboard"
+                aria-label="Founder dashboard"
+              >
+                <Crown className="w-5 h-5 text-yellow-400" />
+              </button>
+            )}
           </div>
         </div>
 
