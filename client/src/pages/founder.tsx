@@ -75,7 +75,7 @@ export default function FounderDashboard() {
     );
   }
 
-  if (error || (data as any)?.error) {
+  if (error) {
     return (
       <AppLayout>
         <div className="max-w-2xl mx-auto px-4 py-12 text-center space-y-4">

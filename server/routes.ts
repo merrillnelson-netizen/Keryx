@@ -6286,6 +6286,7 @@ Respond with JSON only.`
         currentPeriodEnd: user.currentPeriodEnd || null,
         isFoundingMember,
         stripeCustomerId: user.stripeCustomerId || null,
+        stripeSubscriptionId: user.stripeSubscriptionId || null,
         stripeConfigured: isStripeConfigured(),
         enforcementActive: process.env.BILLING_ENFORCEMENT === 'true',
         earlyAdopterAt: user.earlyAdopterAt || null,
