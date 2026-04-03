@@ -418,7 +418,7 @@ export default function SettingsPage() {
   const { sessionCategory, setSessionCategory } = useSessionCategory();
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const isFounder = user?.username === 'Merrillnelson@gmail.com';
+  const isFounder = user?.username?.toLowerCase() === 'merrillnelson@gmail.com';
 
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],

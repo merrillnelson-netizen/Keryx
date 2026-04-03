@@ -6352,8 +6352,8 @@ Respond with JSON only.`
   app.get("/api/admin/founder-stats", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const ADMIN_USERNAME = 'Merrillnelson@gmail.com';
-      if (user.username !== ADMIN_USERNAME) {
+      const ADMIN_USERNAME = 'merrillnelson@gmail.com';
+      if (user.username?.toLowerCase() !== ADMIN_USERNAME) {
         return res.status(403).json({ error: 'Access denied' });
       }
 
