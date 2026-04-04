@@ -1025,7 +1025,6 @@ export const messages = pgTable("messages", {
   conversationIdx: index("messages_conversation_id_idx").on(table.conversationId),
   timestampIdx: index("messages_timestamp_idx").on(table.timestamp),
   externalIdIdx: index("messages_external_id_idx").on(table.externalId),
-  importBatchIdx: index("messages_import_batch_idx").on(table.importBatchId),
   aiProcessedIdx: index("messages_ai_processed_idx").on(table.aiProcessed),
   userTimestampIdx: index("messages_user_timestamp_idx").on(table.userId, table.timestamp),
 }));
@@ -1104,6 +1103,7 @@ export const oauthNonces = pgTable("oauth_nonces", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   nonceIdx: uniqueIndex("oauth_nonces_nonce_idx").on(table.nonce),
+  userIdIdx: index("oauth_nonces_user_id_idx").on(table.userId),
 }));
 
 export const oauthTokensRelations = relations(oauthTokens, ({ one }) => ({
