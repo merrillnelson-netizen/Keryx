@@ -2,6 +2,7 @@ import {
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
   locationHistory, frequentPlaces, pushSubscriptions, goals, reminders,
   messageConversations, messages, messageImports,
+  relayDestinations, relayEvents,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -20,7 +21,9 @@ import {
   type Reminder, type InsertReminder,
   type MessageConversation, type InsertMessageConversation,
   type Message, type InsertMessage,
-  type MessageImport, type InsertMessageImport
+  type MessageImport, type InsertMessageImport,
+  type RelayDestination, type InsertRelayDestination,
+  type RelayEvent, type InsertRelayEvent
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
@@ -199,6 +202,15 @@ export interface IStorage {
   getMessageImports(userId: string): Promise<MessageImport[]>;
   createMessageImport(importRecord: InsertMessageImport): Promise<MessageImport>;
   updateMessageImport(id: string, userId: string, updates: Partial<MessageImport>): Promise<MessageImport | undefined>;
+
+  // Relay API
+  getUserByRelayApiKey(apiKey: string): Promise<User | undefined>;
+  getRelayDestinations(userId: string): Promise<RelayDestination[]>;
+  createRelayDestination(data: InsertRelayDestination): Promise<RelayDestination>;
+  updateRelayDestination(id: string, userId: string, updates: Partial<InsertRelayDestination>): Promise<RelayDestination | undefined>;
+  deleteRelayDestination(id: string, userId: string): Promise<boolean>;
+  createRelayEvent(data: InsertRelayEvent): Promise<RelayEvent>;
+  getRelayEvents(userId: string, limit?: number): Promise<RelayEvent[]>;
 }
 
 /**
@@ -2648,6 +2660,55 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(messageImports.id, id), eq(messageImports.userId, userId)))
       .returning();
     return result;
+  }
+
+  // ── Relay API ────────────────────────────────────────────────────────────────
+
+  async getUserByRelayApiKey(apiKey: string): Promise<User | undefined> {
+    const [row] = await db
+      .select({ user: users })
+      .from(settings)
+      .innerJoin(users, eq(settings.userId, users.id))
+      .where(eq(settings.relayApiKey, apiKey))
+      .limit(1);
+    return row?.user;
+  }
+
+  async getRelayDestinations(userId: string): Promise<RelayDestination[]> {
+    return db.select().from(relayDestinations)
+      .where(eq(relayDestinations.userId, userId))
+      .orderBy(relayDestinations.createdAt);
+  }
+
+  async createRelayDestination(data: InsertRelayDestination): Promise<RelayDestination> {
+    const [result] = await db.insert(relayDestinations).values(data).returning();
+    return result;
+  }
+
+  async updateRelayDestination(id: string, userId: string, updates: Partial<InsertRelayDestination>): Promise<RelayDestination | undefined> {
+    const [result] = await db.update(relayDestinations)
+      .set(updates)
+      .where(and(eq(relayDestinations.id, id), eq(relayDestinations.userId, userId)))
+      .returning();
+    return result;
+  }
+
+  async deleteRelayDestination(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(relayDestinations)
+      .where(and(eq(relayDestinations.id, id), eq(relayDestinations.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async createRelayEvent(data: InsertRelayEvent): Promise<RelayEvent> {
+    const [result] = await db.insert(relayEvents).values(data).returning();
+    return result;
+  }
+
+  async getRelayEvents(userId: string, limit = 50): Promise<RelayEvent[]> {
+    return db.select().from(relayEvents)
+      .where(eq(relayEvents.userId, userId))
+      .orderBy(desc(relayEvents.createdAt))
+      .limit(limit);
   }
 }
 

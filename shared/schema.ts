@@ -249,6 +249,8 @@ export const settings = pgTable("settings", {
   // AI Personality settings (Sass-o-Meter)
   sassLevel: integer("sass_level").default(50), // 0-100: controls Keryx persona intensity
   professionalMode: boolean("professional_mode").default(false), // Overrides sassLevel to muted/professional mode
+  // Relay API
+  relayApiKey: text("relay_api_key"), // Static API key for inbound relay endpoint (no session required)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -1143,3 +1145,48 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type MessageImport = typeof messageImports.$inferSelect;
 export type InsertMessageImport = z.infer<typeof insertMessageImportSchema>;
+
+/**
+ * Relay API — universal inbound gateway
+ * Accepts sms / command / event payloads from any authenticated external source
+ * (Android background service, Meta glasses, Chrome extension, scripts, etc.)
+ */
+export const relayDestinations = pgTable("relay_destinations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  label: text("label").notNull(),
+  url: text("url").notNull(),
+  apiKey: text("api_key"),
+  payloadTypeFilter: text("payload_type_filter").array(), // null = all types, or ['sms','command','event']
+  enabled: boolean("enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("relay_dest_user_id_idx").on(table.userId),
+}));
+
+export const relayEvents = pgTable("relay_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text("type").notNull(), // 'sms' | 'command' | 'event'
+  source: text("source"), // e.g. 'chrome_extension', 'android_service', 'glasses'
+  payload: jsonb("payload").notNull(),
+  routedTo: text("routed_to").array(), // destination labels that received this event
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("relay_events_user_id_idx").on(table.userId),
+  createdAtIdx: index("relay_events_created_at_idx").on(table.createdAt),
+}));
+
+export const insertRelayDestinationSchema = createInsertSchema(relayDestinations).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertRelayEventSchema = createInsertSchema(relayEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type RelayDestination = typeof relayDestinations.$inferSelect;
+export type InsertRelayDestination = z.infer<typeof insertRelayDestinationSchema>;
+export type RelayEvent = typeof relayEvents.$inferSelect;
+export type InsertRelayEvent = z.infer<typeof insertRelayEventSchema>;

@@ -1,5 +1,6 @@
 import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder } from "@shared/schema";
 import { z } from "zod";
@@ -6431,6 +6432,251 @@ Respond with JSON only.`
       sendErrorResponse(res, 500, "Failed to create portal session", error);
     }
   });
+
+  // ── Relay API ────────────────────────────────────────────────────────────────
+  // Universal inbound gateway — accepts SMS, commands, and events from any
+  // authenticated external source (Android service, Meta glasses, Chrome extension).
+
+  /** Middleware: resolve user from X-API-Key header (no session required). */
+  async function requireApiKey(req: any, res: Response, next: any) {
+    const key = req.headers['x-api-key'] as string | undefined;
+    if (!key) return res.status(401).json({ error: 'Missing X-API-Key header' });
+    const user = await storage.getUserByRelayApiKey(key);
+    if (!user) return res.status(401).json({ error: 'Invalid API key' });
+    req.relayUser = user;
+    next();
+  }
+
+  /** GET /api/relay/key — return (or auto-generate) the relay API key. Session auth. */
+  app.get("/api/relay/key", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      let s = await storage.getSettings(user.id);
+      if (!s?.relayApiKey) {
+        const key = `rky_${randomUUID().replace(/-/g, '')}`;
+        s = await storage.updateSettings(user.id, { relayApiKey: key });
+      }
+      const host = `${req.protocol}://${req.get('host')}`;
+      res.json({
+        apiKey: s!.relayApiKey,
+        endpoint: `${host}/api/relay/inbound`,
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch relay key", error);
+    }
+  });
+
+  /** POST /api/relay/key/regenerate — issue a fresh API key. Session auth. */
+  app.post("/api/relay/key/regenerate", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const key = `rky_${randomUUID().replace(/-/g, '')}`;
+      await storage.updateSettings(user.id, { relayApiKey: key });
+      res.json({ apiKey: key });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to regenerate relay key", error);
+    }
+  });
+
+  /**
+   * POST /api/relay/inbound — the universal entry point.
+   * Auth: X-API-Key header (no session cookie required).
+   * Body: { type: 'sms'|'command'|'event', source?: string, ...typeFields }
+   *   sms:     { address, body, direction?: 'sent'|'received', timestamp? }
+   *   command: { intent, parameters? }
+   *   event:   { payload }  (arbitrary JSON)
+   */
+  app.post("/api/relay/inbound", requireApiKey, async (req: any, res) => {
+    try {
+      const user = req.relayUser as User;
+      const { type, source, ...rest } = req.body as {
+        type: string;
+        source?: string;
+        [k: string]: any;
+      };
+
+      if (!['sms', 'command', 'event'].includes(type)) {
+        return res.status(400).json({ error: 'type must be sms, command, or event' });
+      }
+
+      const routedTo: string[] = [];
+
+      // ── SMS: store as a message and AI-process immediately ──────────────
+      if (type === 'sms') {
+        const { address, body, direction = 'received', timestamp } = rest;
+        if (!address || !body) {
+          return res.status(400).json({ error: 'sms requires address and body' });
+        }
+
+        const normalizedAddress = normalizePhoneForRelay(address);
+        const ts = timestamp ? new Date(timestamp) : new Date();
+        const externalId = `relay_${normalizedAddress}_${ts.getTime()}`;
+
+        const exists = await storage.messageExistsByExternalId(user.id, externalId, 'live_relay');
+        if (!exists) {
+          const conversation = await storage.upsertMessageConversation({
+            userId: user.id,
+            contactAddress: normalizedAddress,
+            contactName: null,
+            platform: 'sms',
+            threadId: null,
+            lastMessageAt: ts,
+            messageCount: 1,
+            unprocessedCount: 1,
+          });
+
+          await storage.createMessagesBatch([{
+            userId: user.id,
+            conversationId: conversation.id,
+            externalId,
+            source: 'live_relay',
+            direction,
+            senderAddress: direction === 'received' ? normalizedAddress : null,
+            senderName: null,
+            body: body.trim(),
+            messageType: 'sms',
+            timestamp: ts,
+            aiProcessed: false,
+            importBatchId: null,
+            rawMetadata: { relaySource: source || 'relay' },
+          }]);
+
+          // Fire-and-forget AI processing
+          setImmediate(async () => {
+            try {
+              const unprocessed = await storage.getUnprocessedMessages(user.id);
+              if (unprocessed.length > 0) await processMessageBatch(user.id, unprocessed);
+            } catch (e) {
+              console.error('[relay] AI processing error:', e);
+            }
+          });
+        }
+
+        routedTo.push('keryx');
+      }
+
+      // ── Fan-out to configured destinations (command, event, and sms) ─────
+      const destinations = await storage.getRelayDestinations(user.id);
+      const enabledDests = destinations.filter(d => {
+        if (!d.enabled) return false;
+        if (!d.payloadTypeFilter || d.payloadTypeFilter.length === 0) return true;
+        return d.payloadTypeFilter.includes(type);
+      });
+
+      await Promise.allSettled(
+        enabledDests.map(async (dest) => {
+          try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (dest.apiKey) headers['X-API-Key'] = dest.apiKey;
+            const response = await fetch(dest.url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ type, source, ...rest }),
+              signal: AbortSignal.timeout(5000),
+            });
+            if (response.ok) routedTo.push(dest.label);
+          } catch (e) {
+            console.warn(`[relay] Failed to forward to ${dest.label}:`, e);
+          }
+        })
+      );
+
+      // Log the event
+      await storage.createRelayEvent({
+        userId: user.id,
+        type,
+        source: source || null,
+        payload: { ...rest },
+        routedTo,
+      });
+
+      res.json({ received: true, type, routed_to: routedTo });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Relay inbound failed", error);
+    }
+  });
+
+  /** GET /api/relay/destinations */
+  app.get("/api/relay/destinations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const dests = await storage.getRelayDestinations(user.id);
+      res.json(dests);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch destinations", error);
+    }
+  });
+
+  /** POST /api/relay/destinations */
+  app.post("/api/relay/destinations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const schema = z.object({
+        label: z.string().min(1).max(100),
+        url: z.string().url(),
+        apiKey: z.string().optional(),
+        payloadTypeFilter: z.array(z.enum(['sms', 'command', 'event'])).optional(),
+        enabled: z.boolean().default(true),
+      });
+      const data = schema.parse(req.body);
+      const dest = await storage.createRelayDestination({ userId: user.id, ...data });
+      res.json(dest);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create destination", error);
+    }
+  });
+
+  /** PUT /api/relay/destinations/:id */
+  app.put("/api/relay/destinations/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const schema = z.object({
+        label: z.string().min(1).max(100).optional(),
+        url: z.string().url().optional(),
+        apiKey: z.string().optional().nullable(),
+        payloadTypeFilter: z.array(z.enum(['sms', 'command', 'event'])).optional().nullable(),
+        enabled: z.boolean().optional(),
+      });
+      const data = schema.parse(req.body);
+      const updated = await storage.updateRelayDestination(req.params.id, user.id, data as any);
+      if (!updated) return res.status(404).json({ error: 'Destination not found' });
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update destination", error);
+    }
+  });
+
+  /** DELETE /api/relay/destinations/:id */
+  app.delete("/api/relay/destinations/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const ok = await storage.deleteRelayDestination(req.params.id, user.id);
+      if (!ok) return res.status(404).json({ error: 'Destination not found' });
+      res.json({ deleted: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete destination", error);
+    }
+  });
+
+  /** GET /api/relay/events — recent relay events for the dashboard */
+  app.get("/api/relay/events", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const events = await storage.getRelayEvents(user.id, limit);
+      res.json(events);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch relay events", error);
+    }
+  });
+
+  function normalizePhoneForRelay(phone: string): string {
+    const digits = phone.replace(/[^\d+]/g, '');
+    if (digits.startsWith('+')) return digits;
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+    return digits;
+  }
 
   const httpServer = createServer(app);
   return httpServer;
