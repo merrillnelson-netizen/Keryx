@@ -27,6 +27,17 @@ import { PlaidCard } from "@/components/settings/plaid-card";
 import { SmsImportSection } from "@/components/settings/sms-import-section";
 import { BillingCard } from "@/components/settings/billing-card";
 
+interface BackfillStatus {
+  status: 'idle' | 'running' | 'completed' | 'failed' | 'started' | 'already_running';
+  progress?: number;
+  total?: number;
+  processed?: number;
+  calendarLinked?: number;
+  embeddingsGenerated?: number;
+  message?: string;
+  toProcess?: number;
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Partial<Settings>>({});
   const [hasShownCompletion, setHasShownCompletion] = useState(false);
