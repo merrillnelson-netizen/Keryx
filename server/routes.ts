@@ -6484,7 +6484,7 @@ Respond with JSON only.`
    * @param isTest  true → prefix externalId with "relay_test_" and report duplicates
    */
   async function executeRelayPayload(
-    userId: number,
+    userId: string,
     type: string,
     source: string | undefined,
     rest: Record<string, any>,
