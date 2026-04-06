@@ -52,6 +52,8 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Personal Insights**: AI-generated insights from various data sources.
 - **People Management**: Closeness scores, AI People Search (natural language queries), AI Duplicate Detection, and a streamlined People Merge UX.
 - **Integrations**: Multi-provider Calendar & Email integration, Telegram for memory recording and notifications, Meta Glasses integration (MCP Protocol 2025-01).
+- **Universal Relay API**: Inbound gateway at `POST /api/relay/inbound` (X-API-Key auth). Accepts `sms`, `command`, and `event` payload types from any external source (Android bridge, Chrome extension, Meta glasses). Fan-out routing to configurable destinations. Full event log. Session-authenticated test endpoint at `POST /api/relay/test`. Relay API key managed in Settings UI.
+- **Chrome Extension** (`extension/`): MV3 extension for Google Messages for Web. MutationObserver-based message interception, SHA-based deduplication (24h cache in `chrome.storage.local`), background service worker for relay POSTs, popup with connection status light + API key setup.
 - **Location Features**: Google Timeline import, automatic capture, frequent place detection.
 - **Messaging**: SMS/MMS/RCS import with AI-powered conversation analysis, chat bubble UI.
 

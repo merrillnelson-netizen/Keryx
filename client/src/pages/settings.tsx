@@ -492,6 +492,30 @@ export default function SettingsPage() {
     onError: () => toast({ title: "Failed to update destination", variant: "destructive" }),
   });
 
+  // ── Test Relay ──────────────────────────────────────────────────────────────
+  const [testRelayType, setTestRelayType] = useState<'sms' | 'command' | 'event'>('sms');
+  const [testRelayFields, setTestRelayFields] = useState({ address: '+15551234567', body: 'Test SMS from Relay Dashboard', intent: 'log_memory', parameters: '{"text":"Test command payload"}', payload: '{"action":"ping","source":"dashboard"}' });
+  const [testRelayResult, setTestRelayResult] = useState<{ ok: boolean; data: any } | null>(null);
+
+  const testRelayMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, any> = { type: testRelayType, source: 'relay_dashboard' };
+      if (testRelayType === 'sms') {
+        body.address = testRelayFields.address;
+        body.body = testRelayFields.body;
+      } else if (testRelayType === 'command') {
+        body.intent = testRelayFields.intent;
+        try { body.parameters = JSON.parse(testRelayFields.parameters); } catch { body.parameters = testRelayFields.parameters; }
+      } else {
+        try { body.payload = JSON.parse(testRelayFields.payload); } catch { body.payload = testRelayFields.payload; }
+      }
+      const res = await apiRequest("POST", "/api/relay/test", body);
+      return res.json();
+    },
+    onSuccess: (data) => setTestRelayResult({ ok: true, data }),
+    onError: (err: any) => setTestRelayResult({ ok: false, data: { error: err?.message ?? 'Unknown error' } }),
+  });
+
   const { data: currentSettings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
     staleTime: 1000 * 60 * 5, // 5 minutes
@@ -2724,6 +2748,51 @@ export default function SettingsPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* ── Test Relay Command Center ─────────────────────────────────── */}
+              <div className="space-y-3 pt-2 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Label className="text-sm font-medium">Test Relay</Label>
+                  <span className="text-xs text-muted-foreground">— fire a payload without needing an extension or glasses</span>
+                </div>
+
+                <div className="flex gap-2">
+                  {(['sms', 'command', 'event'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => { setTestRelayType(t); setTestRelayResult(null); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${testRelayType === t ? 'bg-violet-500 border-violet-500 text-white' : 'border-white/20 text-muted-foreground hover:border-violet-400'}`}
+                    >{t}</button>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  {testRelayType === 'sms' && (<>
+                    <Input placeholder="Phone number" value={testRelayFields.address} onChange={e => setTestRelayFields(f => ({ ...f, address: e.target.value }))} className="font-mono text-xs" />
+                    <Input placeholder="Message body" value={testRelayFields.body} onChange={e => setTestRelayFields(f => ({ ...f, body: e.target.value }))} />
+                  </>)}
+                  {testRelayType === 'command' && (<>
+                    <Input placeholder="Intent (e.g. log_memory)" value={testRelayFields.intent} onChange={e => setTestRelayFields(f => ({ ...f, intent: e.target.value }))} />
+                    <Input placeholder='Parameters JSON (e.g. {"text":"..."})' value={testRelayFields.parameters} onChange={e => setTestRelayFields(f => ({ ...f, parameters: e.target.value }))} className="font-mono text-xs" />
+                  </>)}
+                  {testRelayType === 'event' && (
+                    <Input placeholder='Payload JSON (e.g. {"action":"ping"})' value={testRelayFields.payload} onChange={e => setTestRelayFields(f => ({ ...f, payload: e.target.value }))} className="font-mono text-xs" />
+                  )}
+                </div>
+
+                <Button size="sm" onClick={() => testRelayMutation.mutate()} disabled={testRelayMutation.isPending} className="w-full">
+                  {testRelayMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                  Send Test Payload
+                </Button>
+
+                {testRelayResult && (
+                  <div className={`p-3 rounded-lg text-xs font-mono overflow-auto max-h-32 ${testRelayResult.ok ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+                    {JSON.stringify(testRelayResult.data, null, 2)}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

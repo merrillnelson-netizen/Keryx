@@ -6658,6 +6658,78 @@ Respond with JSON only.`
     }
   });
 
+  /**
+   * POST /api/relay/test — session-authenticated test fire.
+   * Same logic as /api/relay/inbound but uses the logged-in session instead of API key.
+   * Lets the Relay Dashboard send test payloads without copy-pasting the key.
+   */
+  app.post("/api/relay/test", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { type, source = 'relay_dashboard', ...rest } = req.body as {
+        type: string; source?: string; [k: string]: any;
+      };
+      if (!['sms', 'command', 'event'].includes(type)) {
+        return res.status(400).json({ error: 'type must be sms, command, or event' });
+      }
+      const routedTo: string[] = [];
+
+      if (type === 'sms') {
+        const { address, body, direction = 'received', timestamp } = rest;
+        if (!address || !body) return res.status(400).json({ error: 'sms requires address and body' });
+        const normalizedAddress = normalizePhoneForRelay(address);
+        const ts = timestamp ? new Date(timestamp) : new Date();
+        const externalId = `relay_test_${normalizedAddress}_${ts.getTime()}`;
+        const exists = await storage.messageExistsByExternalId(user.id, externalId, 'live_relay');
+        if (!exists) {
+          const conversation = await storage.upsertMessageConversation({
+            userId: user.id, contactAddress: normalizedAddress, contactName: null, platform: 'sms',
+            threadId: null, lastMessageAt: ts, messageCount: 1, unprocessedCount: 1,
+          });
+          await storage.createMessagesBatch([{
+            userId: user.id, conversationId: conversation.id, externalId, source: 'live_relay',
+            direction, senderAddress: direction === 'received' ? normalizedAddress : null, senderName: null,
+            body: body.trim(), messageType: 'sms', timestamp: ts, aiProcessed: false, importBatchId: null,
+            rawMetadata: { relaySource: source },
+          }]);
+          setImmediate(async () => {
+            try {
+              const unprocessed = await storage.getUnprocessedMessages(user.id);
+              if (unprocessed.length > 0) await processMessageBatch(user.id, unprocessed);
+            } catch (e) { console.error('[relay-test] AI processing error:', e); }
+          });
+          routedTo.push('keryx');
+        } else {
+          routedTo.push('keryx (duplicate — skipped)');
+        }
+      }
+
+      const destinations = await storage.getRelayDestinations(user.id);
+      const enabledDests = destinations.filter(d =>
+        d.enabled && (!d.payloadTypeFilter || d.payloadTypeFilter.length === 0 || d.payloadTypeFilter.includes(type))
+      );
+      await Promise.allSettled(
+        enabledDests.map(async (dest) => {
+          try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (dest.apiKey) headers['X-API-Key'] = dest.apiKey;
+            const response = await fetch(dest.url, {
+              method: 'POST', headers,
+              body: JSON.stringify({ type, source, ...rest }),
+              signal: AbortSignal.timeout(5000),
+            });
+            if (response.ok) routedTo.push(dest.label);
+          } catch (e) { console.warn(`[relay-test] Failed to forward to ${dest.label}:`, e); }
+        })
+      );
+
+      await storage.createRelayEvent({ userId: user.id, type, source, payload: { ...rest }, routedTo });
+      res.json({ received: true, type, routed_to: routedTo, note: 'test — fired via dashboard session auth' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Relay test failed", error);
+    }
+  });
+
   /** GET /api/relay/events — recent relay events for the dashboard */
   app.get("/api/relay/events", requireAuth, async (req, res) => {
     try {

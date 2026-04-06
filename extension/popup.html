@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keryx SMS Relay</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 320px;
+      min-height: 200px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      background: #0f0f14;
+      color: #e5e5ef;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .header-text h1 { font-size: 14px; font-weight: 600; color: #f0f0ff; }
+    .header-text p  { font-size: 11px; color: #888; margin-top: 1px; }
+
+    /* ── Status light ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .status-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.green  { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .status-dot.red    { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+    .status-dot.yellow { background: #f59e0b; box-shadow: 0 0 6px #f59e0b88; }
+    .status-text { font-size: 12px; color: #aaa; flex: 1; }
+    .status-time { font-size: 11px; color: #555; }
+
+    /* ── Body sections ── */
+    .section { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .section:last-child { border-bottom: none; }
+
+    label { display: block; font-size: 11px; color: #888; margin-bottom: 5px; font-weight: 500; letter-spacing: 0.3px; }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 7px;
+      padding: 7px 10px;
+      color: #e5e5ef;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: #7c3aed; }
+
+    .input-row {
+      display: flex;
+      gap: 6px;
+    }
+    .input-row input { flex: 1; }
+
+    button {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      border: none;
+      border-radius: 7px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 7px 12px;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.ghost {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    button.ghost:hover { background: rgba(255,255,255,0.12); }
+    button.danger { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn-row button { flex: 1; }
+
+    .hint {
+      font-size: 10.5px;
+      color: #555;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .alert {
+      padding: 7px 10px;
+      border-radius: 7px;
+      font-size: 11.5px;
+      margin-top: 8px;
+      display: none;
+    }
+    .alert.success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #86efac; }
+    .alert.error   { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #7c3aed;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .endpoint-note {
+      font-size: 10px;
+      color: #444;
+      margin-top: 4px;
+      font-family: monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #toggle-key-btn {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 7px 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">⚡</div>
+    <div class="header-text">
+      <h1>Keryx SMS Relay</h1>
+      <p>Google Messages → Keryx Life OS</p>
+    </div>
+  </div>
+
+  <!-- Connection Status -->
+  <div class="status-bar">
+    <div class="status-dot yellow" id="status-dot"></div>
+    <span class="status-text" id="status-text">Checking connection…</span>
+    <span class="status-time" id="status-time"></span>
+  </div>
+
+  <!-- API Key Setup -->
+  <div class="section">
+    <div class="section-title">Connection Setup</div>
+
+    <label for="api-key-input">Relay API Key</label>
+    <div class="input-row">
+      <input type="password" id="api-key-input" placeholder="rky_..." autocomplete="off" spellcheck="false" />
+      <button id="toggle-key-btn" title="Show/hide key">👁</button>
+    </div>
+
+    <label for="endpoint-input" style="margin-top:10px">Inbound Endpoint</label>
+    <input type="text" id="endpoint-input" placeholder="https://your-repl.replit.dev/api/relay/inbound" autocomplete="off" spellcheck="false" />
+    <p class="hint">Copy both values from Keryx → Settings → Universal Relay API</p>
+
+    <div class="btn-row">
+      <button id="save-btn">Save</button>
+      <button class="ghost" id="test-btn">Test Ping</button>
+      <button class="danger ghost" id="clear-btn">Clear</button>
+    </div>
+    <div class="alert" id="alert"></div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="section">
+    <div class="section-title">How It Works</div>
+    <p class="hint" style="color:#666">
+      1. Open <strong style="color:#aaa">messages.google.com</strong> in this browser.<br>
+      2. Open a conversation — new messages are automatically intercepted.<br>
+      3. Each message is deduped and sent to your Keryx relay, which stores it and runs AI analysis.<br>
+      4. Fan-out destinations (OGBilliards Pro, etc.) receive a copy too.
+    </p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
