@@ -216,7 +216,7 @@ const capabilities: CapabilityCategory[] = [
     examples: [
       { phrase: "Show my recent messages from Mom", description: "Browse texts from a specific contact in the chat bubble view" },
       { phrase: "What did Jake and I talk about last week?", description: "Search imported or relayed conversation history by person and date" },
-      { phrase: "Import my SMS backup from Android", description: "Upload an SMS archive (NDJSON/ZIP) from the SMS Backup & Restore app" },
+      { phrase: "Import my SMS backup from Android", description: "Upload an SMS archive (NDJSON/ZIP) from the SMS Import / Export app (F-Droid)" },
       { phrase: "Set up the Chrome Extension to relay live messages", description: "Install the extension so new Google Messages for Web texts sync automatically" },
       { phrase: "Delete relayed messages from a conversation", description: "Use the trash icon in any conversation to remove relay-sourced messages" },
     ]
@@ -421,7 +421,7 @@ export function KeryxCapabilitiesModal() {
                         <div>
                           <p className="text-sm font-medium text-foreground">Two ways to get messages in</p>
                           <p className="text-sm text-muted-foreground">
-                            <strong>Archive import:</strong> Upload a backup file from the "SMS Backup & Restore" Android app (Settings → Integrations).<br />
+                            <strong>Archive import:</strong> Export from the "SMS Import / Export" Android app (F-Droid) and upload the NDJSON/ZIP file in Settings → Integrations.<br />
                             <strong>Live relay:</strong> Install the Chrome Extension so new texts from Google Messages for Web sync automatically as you send and receive them — no manual exports needed.
                           </p>
                         </div>
