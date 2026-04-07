@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ── Core relay function ───────────────────────────────────────────────────────
-async function handleRelaySms({ address, body, direction, timestamp }) {
+async function handleRelaySms({ address, body, direction, timestamp, name }) {
   const { [CONFIG_KEY]: config } = await chrome.storage.local.get(CONFIG_KEY);
 
   if (!config?.apiKey || !config?.endpoint) {
@@ -71,11 +71,15 @@ async function handleRelaySms({ address, body, direction, timestamp }) {
     body,
     direction: direction ?? 'received',
     timestamp,
+    // name is the human-readable contact label (e.g. "Michael Nelson").
+    // Included when content.js can read it from the DOM header; omitted otherwise.
+    // The relay server stores it as contactName on the conversation.
+    ...(name ? { name } : {}),
   };
 
   console.log(
     `[Keryx] POST relay SMS → ${config.endpoint}`,
-    `| address: "${address}" | dir: ${direction ?? 'received'} | body: "${(body ?? '').slice(0, 60)}"`
+    `| address: "${address}"${name ? ` (${name})` : ''} | dir: ${direction ?? 'received'} | body: "${(body ?? '').slice(0, 60)}"`
   );
 
   let response;

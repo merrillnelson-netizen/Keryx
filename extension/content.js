@@ -1,5 +1,5 @@
 /**
- * Keryx SMS Relay — content.js v1.0.5
+ * Keryx SMS Relay — content.js v1.0.6
  * Runs on https://messages.google.com/*
  *
  * Strategy:
@@ -26,6 +26,10 @@
 const DEDUP_TTL_MS = 24 * 60 * 60 * 1000;
 const DEDUP_KEY = 'keryx_seen_messages';
 const DEDUP_MAX = 200;
+
+// How far back the initial scan looks when navigating to a conversation.
+// Captures messages that arrived while Lemur Browser was paused/in background.
+const INITIAL_SCAN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 async function isDuplicate(sender, body, ts) {
   const bucket = Math.floor(ts / 60000);
@@ -313,19 +317,23 @@ function processNodes(nodes) {
   }
 
   // ── Guard 2: resolve contact address before processing any nodes ─────────
-  // Prefer the human-readable name from the DOM header.  If none of the
-  // header selectors match (Google Messages DOM can vary by version/device),
-  // fall back to the thread ID from the URL — it's always unique per
-  // conversation and guarantees messages land in the right Keryx conversation.
-  // Only hard-skip if we're somehow in a conversation URL with no ID at all.
+  // DESIGN: thread ID is the STABLE contact address (unique per conversation),
+  // so Keryx always groups messages correctly even if the DOM name changes.
+  // The human-readable DOM name is sent separately as "name" so it becomes the
+  // conversation's contactName in Keryx (displayed as "Michael Nelson" rather
+  // than "CgIEBISNZ7...").  DOM name falls back to thread ID only when we are
+  // genuinely in a conversation URL that somehow has no thread ID segment.
   const domName = getContactName();
-  const contact = domName || getThreadIdFromUrl();
-  if (!contact) {
-    console.log('[Keryx] Skipping — could not identify contact or thread ID');
+  const threadId = getThreadIdFromUrl();
+  const address = threadId || domName; // thread ID preferred; DOM name as last resort
+  if (!address) {
+    console.log('[Keryx] Skipping — could not identify thread ID or contact name');
     return;
   }
   if (!domName) {
-    console.log(`[Keryx] DOM header not found — using thread ID as address: "${contact}"`);
+    console.log(`[Keryx] DOM header not found — using thread ID as address: "${address}"`);
+  } else if (!threadId) {
+    console.log(`[Keryx] No thread ID in URL — using DOM name as address: "${address}"`);
   }
 
   for (const node of nodes) {
@@ -388,16 +396,17 @@ function processNodes(nodes) {
       // Enqueue serialised dedup+relay to prevent concurrent storage races.
       dedupQueue.push(async () => {
         try {
-          const dup = await isDuplicate(contact, text, ts);
+          const dup = await isDuplicate(address, text, ts);
           if (dup) {
-            console.log(`[Keryx] Dedup skip (${direction}) from "${contact}": "${text.slice(0, 40)}"`);
+            console.log(`[Keryx] Dedup skip (${direction}) from "${address}": "${text.slice(0, 40)}"`);
             return;
           }
-          console.log(`[Keryx] Relaying ${direction} msg from "${contact}": "${text.slice(0, 60)}"`);
+          console.log(`[Keryx] Relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
           chrome.runtime.sendMessage(
             {
               type: 'relay_sms',
-              address: contact,
+              address,
+              ...(domName ? { name: domName } : {}),
               body: text,
               direction,
               timestamp: new Date(ts).toISOString(),
@@ -453,6 +462,74 @@ function findConversationContainer() {
 }
 
 /**
+ * One-time scan of currently-visible messages in the open conversation.
+ * Runs after the observer attaches (with a short delay for DOM to settle).
+ *
+ * Purpose: capture messages that arrived while Lemur Browser was paused or
+ * in the background — the MutationObserver only fires on NEW mutations, so
+ * these would otherwise be missed until the next incoming message.
+ *
+ * Only relays messages whose timestamp is within INITIAL_SCAN_WINDOW_MS (5 min).
+ * Older history is skipped to prevent accidental history dumps.
+ * All candidates go through the normal dedup queue so no duplicates are created.
+ */
+function doInitialScan() {
+  if (!isViewingConversation()) return;
+
+  const domName = getContactName();
+  const threadId = getThreadIdFromUrl();
+  const address = threadId || domName;
+  if (!address) return;
+
+  const now = Date.now();
+  const cutoff = now - INITIAL_SCAN_WINDOW_MS;
+  const container = findConversationContainer();
+
+  const candidates = container.querySelectorAll(
+    'mws-message-part, mws-message, mws-text-message-part, ' +
+    '[data-message-id], [data-e2e-message-id], [data-message-item]'
+  );
+
+  let found = 0;
+  for (const candidate of candidates) {
+    const text = extractMessageText(candidate);
+    if (!text) continue;
+
+    const msgTs = extractMessageTimestamp(candidate);
+    // No timestamp extractable → assume it's current; include it.
+    if (msgTs !== null && msgTs < cutoff) continue;
+
+    found++;
+    const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
+    const ts = msgTs ?? now;
+
+    dedupQueue.push(async () => {
+      try {
+        const dup = await isDuplicate(address, text, ts);
+        if (dup) return;
+        console.log(`[Keryx] Initial scan relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
+        chrome.runtime.sendMessage({
+          type: 'relay_sms',
+          address,
+          ...(domName ? { name: domName } : {}),
+          body: text,
+          direction,
+          timestamp: new Date(ts).toISOString(),
+        });
+      } catch (err) {
+        console.error('[Keryx] Initial scan relay error:', err);
+      }
+    });
+  }
+
+  if (found > 0) {
+    console.log(`[Keryx] Initial scan queued ${found} recent message(s) for relay`);
+  } else {
+    console.log('[Keryx] Initial scan: no recent messages found');
+  }
+}
+
+/**
  * Attach (or re-attach) a MutationObserver to `targetEl`.
  * If we're already watching a *different* element, disconnect first.
  */
@@ -477,6 +554,11 @@ function attachObserver(targetEl) {
   activeTarget = targetEl;
   sessionStartedAt = Date.now();
   console.log('[Keryx] Observer attached to', targetEl.tagName?.toLowerCase() || 'body', '— watching for NEW messages only');
+
+  // Run a one-time scan of currently-visible messages after a short delay so
+  // the DOM has time to finish rendering the conversation thread.
+  // This picks up messages that arrived while Lemur Browser was in the background.
+  setTimeout(doInitialScan, 800);
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────

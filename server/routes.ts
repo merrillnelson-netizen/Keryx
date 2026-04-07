@@ -6526,7 +6526,7 @@ Respond with JSON only.`
 
     // ── SMS: store as a message and AI-process ───────────────────────────
     if (type === 'sms') {
-      const { address, body, direction = 'received', timestamp } = rest;
+      const { address, body, direction = 'received', timestamp, name } = rest;
       if (!address || !body) {
         const err: any = new Error('sms requires address and body');
         err.statusCode = 400;
@@ -6543,12 +6543,18 @@ Respond with JSON only.`
       const prefix = isTest ? 'relay_test' : 'relay';
       const externalId = `${prefix}_${normalizedAddress}_${direction}_${hourBucket}_${bodySlug}`;
 
+      // name is the human-readable contact label sent by the extension when the
+      // Google Messages DOM header is readable (e.g. "Michael Nelson").
+      // It is stored as contactName so conversations display a real name rather
+      // than a raw thread ID.  The upsert preserves existing names when null.
+      const contactName = (name && typeof name === 'string' && name.trim()) ? name.trim() : null;
+
       const exists = await storage.messageExistsByExternalId(userId, externalId, 'live_relay');
       if (!exists) {
         const conversation = await storage.upsertMessageConversation({
           userId,
           contactAddress: normalizedAddress,
-          contactName: null,
+          contactName,
           platform: 'sms',
           threadId: null,
           lastMessageAt: ts,

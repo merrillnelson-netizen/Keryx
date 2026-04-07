@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keryx SMS Relay",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Intercepts Google Messages for Web conversations and relays them to your Keryx life OS in real time.",
   "permissions": [
     "storage",
