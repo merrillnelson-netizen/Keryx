@@ -238,6 +238,13 @@ let activeTarget = null;
  */
 let sessionStartedAt = 0;
 
+/** Grace window for the session timestamp guard (ms). Messages sent up to
+ *  this many milliseconds before the observer attached are still relayed.
+ *  Without a grace window, messages whose DOM <time> is slightly older than
+ *  sessionStartedAt (i.e. sent just before the page/tab focused) are dropped.
+ */
+const SESSION_GRACE_MS = 30_000;
+
 /**
  * Serialisation queue so that concurrent isDuplicate calls don't race.
  * Each entry is a zero-arg function that returns a Promise.
@@ -296,21 +303,19 @@ function processNodes(nodes) {
     for (const candidate of candidates) {
       const text = extractMessageText(candidate);
       if (!text) {
-        // Log when extraction fails so the DOM structure is visible in DevTools
+        // Log when extraction fails so the DOM structure is visible in DevTools.
+        // Always log (even for empty nodes) so silent failures are never invisible.
         const hint = (candidate.innerText ?? candidate.textContent ?? '').trim().slice(0, 40);
-        if (hint.length > 0) {
-          console.warn('[Keryx] Could not extract text — node:', candidate.tagName?.toLowerCase(), '| hint:', hint);
-        }
+        console.warn('[Keryx] Could not extract text — node:', candidate.tagName?.toLowerCase(), '| hint:', hint || '(empty)');
         continue;
       }
 
       // Session-start guard: if we can parse a timestamp from the DOM and it
       // predates observer attach by more than the grace window, this is a
       // historical/re-injected message — skip it.
-      // The 30-second grace window ensures messages sent just before the observer
-      // attached are still captured (their DOM <time> reflects send time, not
-      // DOM-insertion time, so they'd otherwise be incorrectly dropped).
-      const SESSION_GRACE_MS = 30_000;
+      // The grace window (SESSION_GRACE_MS) ensures messages sent just before the
+      // observer attached are still captured (their DOM <time> reflects send time,
+      // not DOM-insertion time, so they'd otherwise be incorrectly dropped).
       const msgTs = extractMessageTimestamp(candidate);
       if (msgTs !== null && msgTs < sessionStartedAt - SESSION_GRACE_MS) {
         console.log(`[Keryx] Skipping pre-session message (ts=${new Date(msgTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
