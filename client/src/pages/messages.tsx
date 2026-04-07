@@ -593,7 +593,7 @@ function ThreadView() {
       if (!response.ok) throw new Error("Failed to clear relay messages");
       return response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: { deleted: number; message: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", conversationId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
