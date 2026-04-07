@@ -4,31 +4,36 @@
  *
  * Strategy:
  *  - Watch the conversation body with MutationObserver
- *  - When new message nodes appear, extract sender + body + timestamp
- *  - Hash the triple to deduplicate before sending to background.js
- *  - Background.js sends to the Keryx relay endpoint
+ *  - When new message nodes appear, extract sender + body
+ *  - Hash the pair to deduplicate before sending to background.js
+ *  - Background.js POSTs to the Keryx relay endpoint
+ *
+ * Robustness notes:
+ *  - Uses a broad layered selector strategy since Google Messages changes
+ *    its DOM class names frequently between releases.
+ *  - Tracks the currently-observed element so SPA navigation between
+ *    conversations cleanly re-attaches the observer to the new container.
+ *  - All key steps log [Keryx] prefixed messages to the DevTools console.
  */
 
 'use strict';
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
-// Key: "<sender>|<body>|<minuteBucket>"
-// We store the last 200 keys in chrome.storage.local, each with an expiry.
-const DEDUP_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+// Key: "<contact>|<body>|<minuteBucket>"
+// Stores the last 200 keys in chrome.storage.local with a 24h expiry.
+const DEDUP_TTL_MS = 24 * 60 * 60 * 1000;
 const DEDUP_KEY = 'keryx_seen_messages';
 const DEDUP_MAX = 200;
 
 async function isDuplicate(sender, body, ts) {
-  const bucket = Math.floor(ts / 60000); // round to minute
+  const bucket = Math.floor(ts / 60000);
   const key = `${sender.trim()}|${body.trim()}|${bucket}`;
   const { [DEDUP_KEY]: seen = {} } = await chrome.storage.local.get(DEDUP_KEY);
   const now = Date.now();
-  // prune expired
   for (const k of Object.keys(seen)) {
     if (now - seen[k] > DEDUP_TTL_MS) delete seen[k];
   }
   if (seen[key]) return true;
-  // record and trim to max size
   seen[key] = now;
   const keys = Object.keys(seen);
   if (keys.length > DEDUP_MAX) {
@@ -40,144 +45,279 @@ async function isDuplicate(sender, body, ts) {
 }
 
 // ── DOM Helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Get the name/number of the currently-open conversation from the header.
+ * Tries multiple selectors that have appeared across Google Messages versions.
+ */
 function getContactName() {
-  // Google Messages shows the contact name / phone in the conversation header.
-  // Try multiple selectors that have appeared over time.
   const selectors = [
-    '[data-testid="conversation-header-name"]',
+    // Angular component selectors (current)
+    'mws-conversation-header [data-e2e-contact-name]',
+    'mws-conversation-header .contact-name',
+    'mws-conversation-title .main-title',
     'mws-conversation-header .title',
+    // data-testid attributes
+    '[data-testid="conversation-header-name"]',
+    '[data-testid="contact-name"]',
+    // Older class-based selectors
     '.conversation-title',
+    '.conversation-name',
     'h2[data-e2e-conversation-name]',
     '.contact-name',
     'mws-contact-name',
   ];
   for (const sel of selectors) {
     const el = document.querySelector(sel);
-    if (el?.textContent?.trim()) return el.textContent.trim();
+    const text = el?.textContent?.trim();
+    if (text) return text;
   }
-  // Fall back to the page title which typically includes the contact name
-  const title = document.title.replace('Messages', '').replace('–', '').trim();
+  // Fall back: page title usually reads "Name – Messages" or "Messages | Name"
+  const title = document.title
+    .replace(/messages/gi, '')
+    .replace(/[–—|]/g, '')
+    .trim();
   return title || 'unknown';
 }
 
+/**
+ * Extract the visible text of a message bubble.
+ *
+ * Google Messages' Angular app uses custom elements (mws-message-part) that
+ * wrap the actual text in varying child elements depending on the version and
+ * message type (SMS, RCS, MMS).  We try known specific selectors first, then
+ * fall back to innerText of the whole bubble (which excludes hidden nodes and
+ * respects the rendered layout, unlike textContent).
+ */
 function extractMessageText(node) {
-  // Text of a message bubble — try progressively broader selectors
-  const selectors = [
-    'mws-message-part .text-msg',
-    'mws-message-part',
+  // ── Layer 1: known text-content child selectors ──────────────────────────
+  const childSelectors = [
+    // Current Google Messages (2024-2025 RCS/SMS)
+    '.text-msg-content',
+    '.ng-star-inserted .text-msg-content',
+    'mws-text-message-part .msg-content',
+    'mws-text-message-part',
+    // Older/fallback selectors
+    '.text-msg',
+    '[data-e2e-message-text]',
+    '.msg-content',
+    '.message-text-content',
     '.message-text',
     '.bubble-text',
+    // dir="auto" is consistently applied to localizable text in Google apps
     '[dir="auto"]',
   ];
-  for (const sel of selectors) {
+
+  for (const sel of childSelectors) {
+    // Check the node itself, then look inside it
     const el = node.matches?.(sel) ? node : node.querySelector?.(sel);
-    if (el?.textContent?.trim()) return el.textContent.trim();
+    if (!el) continue;
+    const text = (el.innerText ?? el.textContent ?? '').trim();
+    if (text.length > 0) return text;
   }
+
+  // ── Layer 2: the bubble element's own innerText ───────────────────────────
+  // innerText respects CSS visibility so it avoids hidden metadata.
+  // Skip nodes that are themselves the big list container.
+  const tag = node.tagName?.toLowerCase() || '';
+  if (
+    tag === 'mws-message-part' ||
+    tag === 'mws-message' ||
+    tag === 'mws-text-message-part' ||
+    node.hasAttribute?.('data-message-id') ||
+    node.hasAttribute?.('data-e2e-message-id')
+  ) {
+    const text = (node.innerText ?? node.textContent ?? '').trim();
+    // Sanity: require at least 1 char, reject strings that are only whitespace
+    // or look like bare timestamps (e.g. "3:42 PM")
+    if (text.length > 0 && !/^\d{1,2}:\d{2}\s*(AM|PM)?$/i.test(text)) {
+      return text;
+    }
+  }
+
   return null;
 }
 
+/**
+ * Determine whether a message was sent (outgoing) vs received (incoming).
+ * Checks a range of attributes and classes used across Google Messages versions.
+ */
 function isOutgoingMessage(node) {
-  // Outgoing (sent) messages typically have a class indicating "outgoing" or "sent"
-  return node.classList?.contains('sent') ||
-    node.hasAttribute?.('data-is-sending-user') ||
-    !!node.closest?.('[data-is-sending-user]') ||
-    node.classList?.contains('outgoing');
+  // Walk up a few levels to check containers too
+  const check = (el) =>
+    el?.classList?.contains('sent') ||
+    el?.classList?.contains('outgoing') ||
+    el?.hasAttribute?.('data-is-sending-user') ||
+    el?.getAttribute?.('data-e2e-is-outgoing') === 'true' ||
+    el?.hasAttribute?.('data-e2e-outgoing');
+
+  if (check(node)) return true;
+
+  // Check immediate ancestors (message wrappers sit above mws-message-part)
+  let ancestor = node.parentElement;
+  for (let i = 0; i < 5 && ancestor; i++) {
+    if (check(ancestor)) return true;
+    ancestor = ancestor.parentElement;
+  }
+
+  return false;
 }
 
-// ── Observer ──────────────────────────────────────────────────────────────────
-let observerStarted = false;
-let lastProcessedCount = 0;
+// ── Observer lifecycle ────────────────────────────────────────────────────────
 
+/** The MutationObserver instance currently active. */
+let activeObserver = null;
+/** The DOM node the active observer is attached to. */
+let activeTarget = null;
+
+/**
+ * Walk added DOM nodes, find message bubbles, extract text, deduplicate,
+ * and relay to background.js.
+ */
 function processNodes(nodes) {
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-    // Direct message node or containing new message nodes
-    const candidates = [];
-    const directMatch =
-      node.tagName?.toLowerCase().includes('message') ||
-      node.classList?.contains('message') ||
-      node.querySelector?.('mws-message-part');
+    const candidates = new Set();
+    const tag = node.tagName?.toLowerCase() || '';
 
-    if (directMatch) candidates.push(node);
-    // Also check children
-    const children = node.querySelectorAll?.('mws-message-part, .message-list-item, [class*="message-row"]') ?? [];
-    candidates.push(...children);
+    // Direct match: node is a message bubble or message row
+    if (
+      tag === 'mws-message-part' ||
+      tag === 'mws-message' ||
+      tag === 'mws-text-message-part' ||
+      tag.includes('message') ||
+      node.hasAttribute?.('data-message-id') ||
+      node.hasAttribute?.('data-e2e-message-id')
+    ) {
+      candidates.add(node);
+    }
+
+    // Children: cast a wide net — custom elements plus data attributes
+    const childMatches = node.querySelectorAll?.(
+      'mws-message-part, mws-message, mws-text-message-part, ' +
+      '[data-message-id], [data-e2e-message-id]'
+    ) ?? [];
+    for (const c of childMatches) candidates.add(c);
 
     for (const candidate of candidates) {
       const text = extractMessageText(candidate);
-      if (!text || text.length < 1) continue;
+      if (!text) continue;
 
       const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
       const contact = getContactName();
       const ts = Date.now();
 
-      isDuplicate(contact, text, ts).then(dup => {
-        if (dup) return;
-        chrome.runtime.sendMessage({
-          type: 'relay_sms',
-          address: contact,
-          body: text,
-          direction,
-          timestamp: new Date(ts).toISOString(),
-        });
-      });
+      isDuplicate(contact, text, ts)
+        .then(dup => {
+          if (dup) {
+            console.log(`[Keryx] Dedup skip (${direction}) from "${contact}": "${text.slice(0, 40)}"`);
+            return;
+          }
+          console.log(`[Keryx] Relaying ${direction} msg from "${contact}": "${text.slice(0, 60)}"`);
+          chrome.runtime.sendMessage(
+            {
+              type: 'relay_sms',
+              address: contact,
+              body: text,
+              direction,
+              timestamp: new Date(ts).toISOString(),
+            },
+            (resp) => {
+              if (chrome.runtime.lastError) {
+                console.warn('[Keryx] sendMessage error:', chrome.runtime.lastError.message);
+              } else if (resp?.ok) {
+                console.log('[Keryx] Relay OK — routed_to:', resp.data?.routed_to);
+              } else {
+                console.warn('[Keryx] Relay failed:', resp?.error);
+              }
+            }
+          );
+        })
+        .catch(err => console.error('[Keryx] Dedup error:', err));
     }
   }
 }
 
-function startObserver() {
-  if (observerStarted) return;
-
-  // Target the conversation body — try multiple possible containers
-  const containerSelectors = [
+/**
+ * Find the best DOM node to observe for incoming message mutations.
+ * Prefers the narrowest container that holds conversation messages.
+ */
+function findConversationContainer() {
+  const selectors = [
     'mws-messages-list',
-    '.message-list-content',
     '[data-testid="message-list"]',
+    '.message-list-content',
+    'mws-conversation-container',
+    '.conversation-container',
     'main',
     '#main-content',
   ];
-
-  let target = null;
-  for (const sel of containerSelectors) {
-    target = document.querySelector(sel);
-    if (target) break;
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el) return el;
   }
-  if (!target) {
-    // Last resort: observe the whole body but filter aggressively
-    target = document.body;
+  return document.body;
+}
+
+/**
+ * Attach (or re-attach) a MutationObserver to `targetEl`.
+ * If we're already watching a *different* element, disconnect first.
+ */
+function attachObserver(targetEl) {
+  if (activeTarget === targetEl) return; // already watching this element
+
+  if (activeObserver) {
+    activeObserver.disconnect();
+    console.log('[Keryx] Observer disconnected from', activeTarget?.tagName?.toLowerCase());
   }
 
   const observer = new MutationObserver((mutations) => {
-    const addedNodes = [];
+    const added = [];
     for (const m of mutations) {
-      for (const n of m.addedNodes) addedNodes.push(n);
+      for (const n of m.addedNodes) added.push(n);
     }
-    if (addedNodes.length > 0) processNodes(addedNodes);
+    if (added.length > 0) processNodes(added);
   });
 
-  observer.observe(target, { childList: true, subtree: true });
-  observerStarted = true;
-  console.log('[Keryx] MutationObserver attached to', target.tagName || 'body');
+  observer.observe(targetEl, { childList: true, subtree: true });
+  activeObserver = observer;
+  activeTarget = targetEl;
+  console.log('[Keryx] Observer attached to', targetEl.tagName?.toLowerCase() || 'body');
 
-  // Also process already-visible messages on load (scroll-into-view)
-  processNodes([target]);
+  // Process already-visible messages in the newly-opened conversation
+  processNodes([targetEl]);
 }
 
-// Google Messages is an SPA — wait for the conversation view to mount
-function waitForConversation() {
-  // Try immediately
-  startObserver();
-  // Also watch for SPA navigation
+// ── Initialisation ────────────────────────────────────────────────────────────
+
+/**
+ * Main entry point.
+ * - Immediately tries to find and observe the conversation container.
+ * - Installs a *separate* body-level observer that watches for SPA navigation
+ *   so we can re-attach when the user switches conversations.
+ */
+function init() {
+  console.log('[Keryx] Content script initialised on', location.href);
+
+  // Attach to whatever container exists right now
+  attachObserver(findConversationContainer());
+
+  // Watch for SPA navigation (conversation switches without a full page load).
+  // The navObserver watches direct children of <body> (subtree:false is fast)
+  // and triggers a container re-check on every structural change.
   const navObserver = new MutationObserver(() => {
-    const container = document.querySelector('mws-messages-list, .message-list-content, [data-testid="message-list"]');
-    if (container && !observerStarted) startObserver();
+    const newContainer = findConversationContainer();
+    if (newContainer !== activeTarget) {
+      console.log('[Keryx] Navigation detected — switching observer target');
+      attachObserver(newContainer);
+    }
   });
   navObserver.observe(document.body, { childList: true, subtree: false });
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', waitForConversation);
+  document.addEventListener('DOMContentLoaded', init);
 } else {
-  waitForConversation();
+  init();
 }
