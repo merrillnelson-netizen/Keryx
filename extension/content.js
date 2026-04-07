@@ -303,17 +303,32 @@ function init() {
   // Attach to whatever container exists right now
   attachObserver(findConversationContainer());
 
-  // Watch for SPA navigation (conversation switches without a full page load).
-  // The navObserver watches direct children of <body> (subtree:false is fast)
-  // and triggers a container re-check on every structural change.
+  // Watch for SPA navigation — two complementary mechanisms:
+
+  // 1. MutationObserver on body (catches structural app-shell swaps)
   const navObserver = new MutationObserver(() => {
     const newContainer = findConversationContainer();
     if (newContainer !== activeTarget) {
-      console.log('[Keryx] Navigation detected — switching observer target');
+      console.log('[Keryx] Navigation detected (DOM) — switching observer target');
       attachObserver(newContainer);
     }
   });
   navObserver.observe(document.body, { childList: true, subtree: false });
+
+  // 2. URL polling — Google Messages uses History.pushState for conversation
+  //    switches, which mutates the URL without touching body's direct children.
+  //    Poll every 1.5 s as a reliable safety net (querySelector is very cheap).
+  let lastHref = location.href;
+  setInterval(() => {
+    if (location.href !== lastHref) {
+      lastHref = location.href;
+      const newContainer = findConversationContainer();
+      if (newContainer !== activeTarget) {
+        console.log('[Keryx] Navigation detected (URL) — switching observer target');
+        attachObserver(newContainer);
+      }
+    }
+  }, 1500);
 }
 
 if (document.readyState === 'loading') {
