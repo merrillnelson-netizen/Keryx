@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff, Trash2 } from "lucide-react";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
@@ -584,6 +584,25 @@ function ThreadView() {
   const conversationId = params.conversationId;
   const [offset, setOffset] = useState(0);
   const limit = 100;
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const clearRelayMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", `/api/messages/conversations/${conversationId}/relay-messages`);
+      if (!response.ok) throw new Error("Failed to clear relay messages");
+      return response.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", conversationId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
+      toast({ title: "Relay messages cleared", description: data?.message || "Done" });
+    },
+    onError: () => {
+      toast({ title: "Failed to clear relay messages", variant: "destructive" });
+    },
+  });
 
   const { data: conversation } = useQuery<MessageConversation>({
     queryKey: ["/api/messages/conversations", conversationId],
@@ -644,6 +663,25 @@ function ThreadView() {
               </p>
             )}
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-2 hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+            onClick={() => {
+              if (window.confirm("Remove all live-relay messages from this conversation? Imported messages are kept.")) {
+                clearRelayMutation.mutate();
+              }
+            }}
+            disabled={clearRelayMutation.isPending}
+            title="Clear relay messages"
+            aria-label="Clear relay messages"
+          >
+            {clearRelayMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+          </Button>
         </div>
       </div>
 

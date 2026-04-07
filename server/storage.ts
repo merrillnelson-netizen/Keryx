@@ -203,6 +203,9 @@ export interface IStorage {
   createMessageImport(importRecord: InsertMessageImport): Promise<MessageImport>;
   updateMessageImport(id: string, userId: string, updates: Partial<MessageImport>): Promise<MessageImport | undefined>;
 
+  // Message cleanup
+  deleteConversationRelayMessages(userId: string, conversationId: string): Promise<number>;
+
   // Relay API
   getUserByRelayApiKey(apiKey: string): Promise<User | undefined>;
   getRelayDestinations(userId: string): Promise<RelayDestination[]>;
@@ -2660,6 +2663,18 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(messageImports.id, id), eq(messageImports.userId, userId)))
       .returning();
     return result;
+  }
+
+  // ── Message cleanup ──────────────────────────────────────────────────────────
+
+  async deleteConversationRelayMessages(userId: string, conversationId: string): Promise<number> {
+    const result = await db.delete(messages)
+      .where(and(
+        eq(messages.userId, userId),
+        eq(messages.conversationId, conversationId),
+        eq(messages.source, 'live_relay')
+      ));
+    return result.rowCount ?? 0;
   }
 
   // ── Relay API ────────────────────────────────────────────────────────────────

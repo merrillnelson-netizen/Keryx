@@ -6163,6 +6163,20 @@ Respond with JSON only.`
     }
   });
 
+  app.delete("/api/messages/conversations/:id/relay-messages", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const conversation = await storage.getMessageConversation(req.params.id, user.id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      const deleted = await storage.deleteConversationRelayMessages(user.id, req.params.id);
+      res.json({ deleted, message: `Removed ${deleted} relay message${deleted !== 1 ? 's' : ''}` });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to clear relay messages", error);
+    }
+  });
+
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
@@ -6503,7 +6517,13 @@ Respond with JSON only.`
 
       const normalizedAddress = normalizePhoneForRelay(address);
       const ts = timestamp ? new Date(timestamp) : new Date();
-      const externalId = `${isTest ? 'relay_test_' : 'relay_'}${normalizedAddress}_${ts.getTime()}`;
+      // Content-based externalId: same physical message always produces the same key
+      // regardless of when it is processed. Bucket by hour so the same text sent
+      // 2+ hours apart is treated as a new message, but rapid duplicates are dropped.
+      const hourBucket = Math.floor(ts.getTime() / (1000 * 60 * 60));
+      const bodySlug = body.trim().slice(0, 80).replace(/\s+/g, ' ');
+      const prefix = isTest ? 'relay_test' : 'relay';
+      const externalId = `${prefix}_${normalizedAddress}_${direction}_${hourBucket}_${bodySlug}`;
 
       const exists = await storage.messageExistsByExternalId(userId, externalId, 'live_relay');
       if (!exists) {

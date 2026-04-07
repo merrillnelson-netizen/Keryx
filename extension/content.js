@@ -169,10 +169,38 @@ function isOutgoingMessage(node) {
 let activeObserver = null;
 /** The DOM node the active observer is attached to. */
 let activeTarget = null;
+/**
+ * Timestamp (ms) when the current observer session started.
+ * Used to skip messages that were already visible before we attached —
+ * i.e. historical conversation content — so we only relay genuinely new ones.
+ */
+let sessionStartedAt = 0;
+
+/**
+ * Serialisation queue so that concurrent isDuplicate calls don't race.
+ * Each entry is a zero-arg function that returns a Promise.
+ * processNodes enqueues work; the runner drains it one item at a time.
+ */
+const dedupQueue = [];
+let dedupRunning = false;
+
+async function runDedupQueue() {
+  if (dedupRunning) return;
+  dedupRunning = true;
+  while (dedupQueue.length > 0) {
+    const fn = dedupQueue.shift();
+    try { await fn(); } catch (e) { console.error('[Keryx] Dedup queue error:', e); }
+  }
+  dedupRunning = false;
+}
 
 /**
  * Walk added DOM nodes, find message bubbles, extract text, deduplicate,
  * and relay to background.js.
+ *
+ * Key invariants:
+ *  - Only nodes added AFTER sessionStartedAt are relayed (no history dumps).
+ *  - Dedup checks run sequentially to avoid read-before-write races in storage.
  */
 function processNodes(nodes) {
   for (const node of nodes) {
@@ -208,8 +236,10 @@ function processNodes(nodes) {
       const contact = getContactName();
       const ts = Date.now();
 
-      isDuplicate(contact, text, ts)
-        .then(dup => {
+      // Enqueue serialised dedup+relay to prevent concurrent storage races.
+      dedupQueue.push(async () => {
+        try {
+          const dup = await isDuplicate(contact, text, ts);
           if (dup) {
             console.log(`[Keryx] Dedup skip (${direction}) from "${contact}": "${text.slice(0, 40)}"`);
             return;
@@ -233,10 +263,14 @@ function processNodes(nodes) {
               }
             }
           );
-        })
-        .catch(err => console.error('[Keryx] Dedup error:', err));
+        } catch (err) {
+          console.error('[Keryx] Dedup error:', err);
+        }
+      });
     }
   }
+  // Kick the queue runner (no-op if already running)
+  runDedupQueue();
 }
 
 /**
@@ -283,10 +317,8 @@ function attachObserver(targetEl) {
   observer.observe(targetEl, { childList: true, subtree: true });
   activeObserver = observer;
   activeTarget = targetEl;
-  console.log('[Keryx] Observer attached to', targetEl.tagName?.toLowerCase() || 'body');
-
-  // Process already-visible messages in the newly-opened conversation
-  processNodes([targetEl]);
+  sessionStartedAt = Date.now();
+  console.log('[Keryx] Observer attached to', targetEl.tagName?.toLowerCase() || 'body', '— watching for NEW messages only');
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────
