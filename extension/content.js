@@ -139,6 +139,63 @@ function extractMessageText(node) {
 }
 
 /**
+ * Try to parse a UTC timestamp (ms) from a message bubble node.
+ * Google Messages uses several DOM patterns depending on version:
+ *  - <time datetime="ISO-string"> inside or adjacent to the bubble
+ *  - data-time or data-timestamp attributes
+ *  - aria-label like "Received January 15 at 3:30 PM"
+ *
+ * Returns a millisecond timestamp (number) if parseable, null otherwise.
+ * Looks at the candidate and up to 8 ancestor levels to find the time element.
+ */
+function extractMessageTimestamp(node) {
+  // Helper: try parsing a string as a date, return ms or null
+  function tryParse(val) {
+    if (!val) return null;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+
+  // Gather nodes to inspect: the candidate, its subtree, and ancestors
+  const searchNodes = [];
+  searchNodes.push(node);
+
+  // Children
+  const timeEls = node.querySelectorAll?.('time, [data-time], [data-timestamp], [datetime]') ?? [];
+  for (const el of timeEls) searchNodes.push(el);
+
+  // Walk up up to 8 ancestors looking for time context
+  let ancestor = node.parentElement;
+  for (let i = 0; i < 8 && ancestor; i++) {
+    searchNodes.push(ancestor);
+    const ancestorTimes = ancestor.querySelectorAll?.('time, [data-time], [data-timestamp], [datetime]') ?? [];
+    for (const el of ancestorTimes) searchNodes.push(el);
+    ancestor = ancestor.parentElement;
+  }
+
+  for (const el of searchNodes) {
+    // Standard <time datetime="..."> ISO string
+    const dt = el.getAttribute?.('datetime');
+    const t1 = tryParse(dt);
+    if (t1) return t1;
+
+    // data-time / data-timestamp attributes (ms or ISO)
+    const t2 = tryParse(el.getAttribute?.('data-time')) ?? tryParse(el.getAttribute?.('data-timestamp'));
+    if (t2) return t2;
+
+    // aria-label: "Received January 15 at 3:30 PM" — strip prefix and parse
+    const label = el.getAttribute?.('aria-label') || '';
+    if (label) {
+      const stripped = label.replace(/^(sent|received)[,:]?\s*/i, '');
+      const t3 = tryParse(stripped);
+      if (t3) return t3;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Determine whether a message was sent (outgoing) vs received (incoming).
  * Checks a range of attributes and classes used across Google Messages versions.
  */
@@ -232,9 +289,19 @@ function processNodes(nodes) {
       const text = extractMessageText(candidate);
       if (!text) continue;
 
+      // Session-start guard: if we can parse a timestamp from the DOM and it
+      // predates observer attach, this is a historical/re-injected message —
+      // skip it. If the timestamp is unparseable we let it through (safe because
+      // this code path is only reached via MutationObserver, not an initial scan).
+      const msgTs = extractMessageTimestamp(candidate);
+      if (msgTs !== null && msgTs < sessionStartedAt) {
+        console.log(`[Keryx] Skipping pre-session message (ts=${new Date(msgTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
+        continue;
+      }
+
       const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
       const contact = getContactName();
-      const ts = Date.now();
+      const ts = msgTs ?? Date.now();
 
       // Enqueue serialised dedup+relay to prevent concurrent storage races.
       dedupQueue.push(async () => {

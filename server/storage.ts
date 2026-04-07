@@ -2674,7 +2674,24 @@ export class DatabaseStorage implements IStorage {
         eq(messages.conversationId, conversationId),
         eq(messages.source, 'live_relay')
       ));
-    return result.rowCount ?? 0;
+    const deleted = result.rowCount ?? 0;
+
+    // Recompute conversation aggregates so messageCount / lastMessageAt stay accurate
+    const [stats] = await db.select({
+      count: sql<number>`count(*)::int`,
+      lastAt: sql<Date | null>`max(${messages.timestamp})`,
+    })
+      .from(messages)
+      .where(and(eq(messages.userId, userId), eq(messages.conversationId, conversationId)));
+
+    await db.update(messageConversations)
+      .set({
+        messageCount: stats?.count ?? 0,
+        lastMessageAt: stats?.lastAt ?? null,
+      })
+      .where(and(eq(messageConversations.id, conversationId), eq(messageConversations.userId, userId)));
+
+    return deleted;
   }
 
   // ── Relay API ────────────────────────────────────────────────────────────────
