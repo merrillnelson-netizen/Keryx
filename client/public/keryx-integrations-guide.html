@@ -35,7 +35,7 @@
 <body>
 
 <h1>Keryx Integration Guide</h1>
-<p class="subtitle">Complete Where / Why / When / How Reference<br>Last updated: February 20, 2026</p>
+<p class="subtitle">Complete Where / Why / When / How Reference<br>Last updated: April 7, 2026</p>
 
 <nav class="toc">
 <h2>Table of Contents</h2>
@@ -59,6 +59,7 @@
 <li><a href="#high-signal">High-Signal Alerts</a></li>
 <li><a href="#database">Database (Neon PostgreSQL)</a></li>
 <li><a href="#auth">Authentication</a></li>
+<li><a href="#chrome-extension">Chrome Extension / Live SMS Relay</a></li>
 </ol>
 </nav>
 
@@ -953,6 +954,91 @@
 </div>
 </div>
 
+<!-- ====== 20. CHROME EXTENSION ====== -->
+<div class="section" id="chrome-extension">
+<h2>20. Chrome Extension / Live SMS Relay</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> A Chrome Extension (MV3) installed in your browser. Runs alongside Google Messages for Web. Relay API key configured in Settings → Integrations.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Unlike the SMS import (which is a one-time batch upload), the Chrome Extension relays new messages to Keryx in real time. As you receive and send texts inside Google Messages for Web, the extension automatically forwards them to Keryx. No manual exports, no delays — your message history stays continuously up to date.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>While you have Google Messages for Web open in Chrome: Observes new message bubbles as they appear in the DOM</li>
+<li>Only intercepts messages added after the extension session started (ignores the pre-loaded conversation history to avoid duplicate imports)</li>
+<li>Fires on both incoming (received) and outgoing (sent) messages</li>
+<li>Handles rapid multi-message sequences by processing them one at a time via a serialized queue</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How deduplication works:</span></p>
+<ul>
+<li>Each relayed message is assigned a content-based ID derived from: sender address + direction + hour-bucket + first 80 characters of message body</li>
+<li>A 24-hour local cache in <code>chrome.storage.local</code> tracks relayed message IDs to prevent the same message from being sent twice within the same session or across page reloads</li>
+<li>On the server side, the same content-based ID is used as the <code>externalId</code> for database deduplication — so even if the extension sends a message twice, only one record is stored</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works (technical flow):</span></p>
+<ul>
+<li>A <code>MutationObserver</code> in the content script watches for new message nodes added to the Google Messages DOM</li>
+<li>When a new message bubble is detected, the extension reads the contact address, message body, direction, and timestamp</li>
+<li>The message is queued and sent via <code>POST /api/relay/inbound</code> using your Relay API key (<code>X-API-Key</code> header)</li>
+<li>Keryx stores the message and routes it into the Messages page — the same view used for SMS archive imports</li>
+<li>The extension popup shows a green/red connection indicator so you can confirm it's active and connected</li>
+</ul>
+</div>
+
+<div class="detail">
+<h3>Installation steps</h3>
+<ol>
+<li>In Keryx Settings → Integrations, copy your Relay API key (starts with <code>rky_</code>)</li>
+<li>Download the extension folder from your Keryx project (<code>extension/</code> directory)</li>
+<li>Open Chrome → <code>chrome://extensions</code> → enable <strong>Developer mode</strong></li>
+<li>Click <strong>Load unpacked</strong> and select the <code>extension/</code> folder</li>
+<li>Open the extension popup, paste your Relay API key, and click Save</li>
+<li>Navigate to <a href="https://messages.google.com/web" target="_blank">messages.google.com/web</a> and open any conversation</li>
+<li>The status light should turn green — new messages will relay automatically</li>
+</ol>
+</div>
+
+<div class="detail">
+<h3>Updating the extension</h3>
+<ul>
+<li>When the extension files are updated (e.g., after a bug fix), return to <code>chrome://extensions</code> and click the reload/refresh icon on the Keryx extension card</li>
+<li>Current version: <strong>1.0.2</strong></li>
+<li>Your API key is saved in <code>chrome.storage.local</code> and persists across reloads — you only need to enter it once</li>
+</ul>
+</div>
+
+<div class="detail">
+<h3>Deleting relayed messages</h3>
+<ul>
+<li>In the Messages page, open any conversation and tap the trash icon in the top-right to remove all relay-sourced messages for that conversation</li>
+<li>This is useful if you want to reset a conversation after reconfiguring the extension</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">extension/content.js, extension/background.js, extension/popup.js, server/routes.ts (POST /api/relay/inbound)</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Chrome only (MV3)</span>
+<span class="tag">Requires: Relay API key from Settings</span>
+<span class="tag">No external service</span>
+</div>
+</div>
+
 <hr class="divider" style="margin: 32px 0;">
 
 <div class="section">
@@ -1048,12 +1134,13 @@
 <li><strong>Memory Auto-Linking</strong> &rarr; requires Calendar connected</li>
 <li><strong>Telegram Voice Notes</strong> &rarr; requires Telegram + OpenAI (Whisper transcription)</li>
 <li><strong>Personal Insights</strong> &rarr; requires OpenAI; enriched by all data sources</li>
+<li><strong>Chrome Extension Relay</strong> &rarr; requires a Relay API key (generated in Settings); data appears alongside SMS archive imports in Messages page</li>
 </ul>
 </div>
 
 <footer>
 <p>Keryx - Kinetic Enterprise & Resource Yielding X-system</p>
-<p>Generated February 20, 2026</p>
+<p>Generated April 7, 2026</p>
 </footer>
 
 </body>

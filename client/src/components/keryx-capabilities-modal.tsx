@@ -17,7 +17,8 @@ import {
   Newspaper,
   Compass,
   Target,
-  Bell
+  Bell,
+  Smartphone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -205,6 +206,20 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Find all memories about the client and draft a prep email", description: "Research and compose in one command" },
       { phrase: "How much did I spend after each meeting this week?", description: "Cross-reference spending with calendar events" },
     ]
+  },
+  {
+    id: "messages",
+    name: "Messages",
+    icon: Smartphone,
+    color: "text-violet-500",
+    description: "Browse and search your SMS/text history — imported archives and live relay via Chrome Extension",
+    examples: [
+      { phrase: "Show my recent messages from Mom", description: "Browse texts from a specific contact in the chat bubble view" },
+      { phrase: "What did Jake and I talk about last week?", description: "Search imported or relayed conversation history by person and date" },
+      { phrase: "Import my SMS backup from Android", description: "Upload an SMS archive (NDJSON/ZIP) from the SMS Backup & Restore app" },
+      { phrase: "Set up the Chrome Extension to relay live messages", description: "Install the extension so new Google Messages for Web texts sync automatically" },
+      { phrase: "Delete relayed messages from a conversation", description: "Use the trash icon in any conversation to remove relay-sourced messages" },
+    ]
   }
 ];
 
@@ -227,6 +242,8 @@ const hintExamples = [
   "Find content relevant to my projects",
   "How am I doing on my fitness goal?",
   "Remind me in 2 hours to take a break",
+  "Show my recent messages from Mom",
+  "Import my SMS backup from Android",
 ];
 
 export function useRotatingHints() {
@@ -350,7 +367,8 @@ export function KeryxCapabilitiesModal() {
                       cat.id === "synthesis" && "bg-indigo-500/20",
                       cat.id === "insights" && "bg-cyan-500/20",
                       cat.id === "discoveries" && "bg-teal-500/20",
-                      cat.id === "power" && "bg-rose-500/20"
+                      cat.id === "power" && "bg-rose-500/20",
+                      cat.id === "messages" && "bg-violet-500/20"
                     )}>
                       <Icon className={cn("w-6 h-6", cat.color)} />
                     </div>
@@ -391,6 +409,20 @@ export function KeryxCapabilitiesModal() {
                           <p className="text-sm text-muted-foreground">
                             Power tasks combine multiple integrations in one command. The more context you provide, 
                             the smarter Keryx can be about helping you.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {cat.id === "messages" && (
+                    <div className="glass-card p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                      <div className="flex items-start gap-3">
+                        <Smartphone className="w-5 h-5 text-violet-500 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Two ways to get messages in</p>
+                          <p className="text-sm text-muted-foreground">
+                            <strong>Archive import:</strong> Upload a backup file from the "SMS Backup & Restore" Android app (Settings → Integrations).<br />
+                            <strong>Live relay:</strong> Install the Chrome Extension so new texts from Google Messages for Web sync automatically as you send and receive them — no manual exports needed.
                           </p>
                         </div>
                       </div>
