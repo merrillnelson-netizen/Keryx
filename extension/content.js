@@ -527,6 +527,10 @@ function doInitialScan() {
   } else {
     console.log('[Keryx] Initial scan: no recent messages found');
   }
+
+  // Drain the queue — without this call the items enqueued above would sit idle
+  // until the next MutationObserver mutation triggers processNodes() → runDedupQueue().
+  runDedupQueue();
 }
 
 /**

@@ -6533,7 +6533,13 @@ Respond with JSON only.`
         throw err;
       }
 
-      const normalizedAddress = normalizePhoneForRelay(address);
+      // Normalize phone numbers (strip formatting, add country code) but
+      // preserve alphanumeric thread IDs (e.g. Google Messages thread IDs like
+      // "CgIEBISNZ7-gFRiCNTk") verbatim — normalizePhoneForRelay strips letters,
+      // which would mangle or empty a thread ID entirely.
+      const normalizedAddress = /[a-zA-Z]/.test(address)
+        ? address          // thread ID — keep verbatim
+        : normalizePhoneForRelay(address); // phone number — normalize
       const ts = timestamp ? new Date(timestamp) : new Date();
       // Content-based externalId: same physical message always produces the same key
       // regardless of when it is processed. Bucket by hour so the same text sent
