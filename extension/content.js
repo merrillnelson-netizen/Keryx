@@ -1,5 +1,5 @@
 /**
- * Keryx SMS Relay — content.js v1.0.4
+ * Keryx SMS Relay — content.js v1.0.5
  * Runs on https://messages.google.com/*
  *
  * Strategy:
@@ -100,6 +100,16 @@ function getContactName() {
  */
 function isViewingConversation() {
   return /\/conversations\/[^/\s]+/.test(location.pathname);
+}
+
+/**
+ * Extract the thread ID from the current URL path.
+ * Returns the segment after /conversations/ or null if not present.
+ * Used as a fallback contact address when the DOM header can't be read.
+ */
+function getThreadIdFromUrl() {
+  const m = location.pathname.match(/\/conversations\/([^/?#\s]+)/);
+  return m ? m[1] : null;
 }
 
 /**
@@ -302,13 +312,20 @@ function processNodes(nodes) {
     return;
   }
 
-  // ── Guard 2: resolve contact name before processing any nodes ───────────
-  // getContactName() returns null when no conversation header is readable.
-  // Without this we'd relay with address="unknown", collapsing all messages.
-  const contact = getContactName();
+  // ── Guard 2: resolve contact address before processing any nodes ─────────
+  // Prefer the human-readable name from the DOM header.  If none of the
+  // header selectors match (Google Messages DOM can vary by version/device),
+  // fall back to the thread ID from the URL — it's always unique per
+  // conversation and guarantees messages land in the right Keryx conversation.
+  // Only hard-skip if we're somehow in a conversation URL with no ID at all.
+  const domName = getContactName();
+  const contact = domName || getThreadIdFromUrl();
   if (!contact) {
-    console.log('[Keryx] Skipping — could not identify contact name for this conversation');
+    console.log('[Keryx] Skipping — could not identify contact or thread ID');
     return;
+  }
+  if (!domName) {
+    console.log(`[Keryx] DOM header not found — using thread ID as address: "${contact}"`);
   }
 
   for (const node of nodes) {
