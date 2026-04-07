@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff, Trash2 } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff, Trash2, FolderX } from "lucide-react";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
@@ -604,6 +604,23 @@ function ThreadView() {
     },
   });
 
+  const deleteConversationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", `/api/messages/conversations/${conversationId}`);
+      if (!response.ok) throw new Error("Failed to delete conversation");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
+      toast({ title: "Conversation deleted" });
+      setLocation("/messages");
+    },
+    onError: () => {
+      toast({ title: "Failed to delete conversation", variant: "destructive" });
+    },
+  });
+
   const { data: conversation } = useQuery<MessageConversation>({
     queryKey: ["/api/messages/conversations", conversationId],
     queryFn: async () => {
@@ -680,6 +697,25 @@ function ThreadView() {
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Trash2 className="w-4 h-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-2 hover:bg-red-500/20 text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+            onClick={() => {
+              if (window.confirm("Delete this entire conversation and all its messages? This cannot be undone.")) {
+                deleteConversationMutation.mutate();
+              }
+            }}
+            disabled={deleteConversationMutation.isPending}
+            title="Delete conversation"
+            aria-label="Delete conversation"
+          >
+            {deleteConversationMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FolderX className="w-4 h-4" />
             )}
           </Button>
         </div>

@@ -6181,6 +6181,20 @@ Respond with JSON only.`
     }
   });
 
+  app.delete("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const conversation = await storage.getMessageConversation(req.params.id, user.id);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      const ok = await storage.deleteConversation(user.id, req.params.id);
+      res.json({ ok, message: "Conversation deleted" });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete conversation", error);
+    }
+  });
+
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;

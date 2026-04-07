@@ -205,6 +205,7 @@ export interface IStorage {
 
   // Message cleanup
   deleteConversationRelayMessages(userId: string, conversationId: string): Promise<number>;
+  deleteConversation(userId: string, conversationId: string): Promise<boolean>;
 
   // Relay API
   getUserByRelayApiKey(apiKey: string): Promise<User | undefined>;
@@ -2692,6 +2693,15 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(messageConversations.id, conversationId), eq(messageConversations.userId, userId)));
 
     return deleted;
+  }
+
+  async deleteConversation(userId: string, conversationId: string): Promise<boolean> {
+    const result = await db.delete(messageConversations)
+      .where(and(
+        eq(messageConversations.id, conversationId),
+        eq(messageConversations.userId, userId)
+      ));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ── Relay API ────────────────────────────────────────────────────────────────
