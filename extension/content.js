@@ -496,12 +496,18 @@ function doInitialScan() {
     if (!text) continue;
 
     const msgTs = extractMessageTimestamp(candidate);
-    // No timestamp extractable → assume it's current; include it.
-    if (msgTs !== null && msgTs < cutoff) continue;
+    // Strict timestamp guard: skip any candidate where the timestamp is missing or
+    // outside the 5-minute window. Treating null as "current" risks relaying old
+    // history whose timestamps simply couldn't be read from the DOM.
+    if (msgTs === null) {
+      console.log('[Keryx] Initial scan: skipping candidate — timestamp not extractable');
+      continue;
+    }
+    if (msgTs < cutoff) continue;
 
     found++;
     const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-    const ts = msgTs ?? now;
+    const ts = msgTs;
 
     dedupQueue.push(async () => {
       try {
