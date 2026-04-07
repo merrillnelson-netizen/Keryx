@@ -574,6 +574,35 @@ function attachObserver(targetEl) {
 // ── Initialisation ────────────────────────────────────────────────────────────
 
 /**
+ * Track the last seen thread ID so we can detect conversation switches even
+ * when Google Messages SPA reuses the same container element across navigations.
+ */
+let activeThreadId = null;
+
+/**
+ * Called whenever URL or DOM nav is detected. Handles two cases:
+ * 1. Container node changed → re-attach MutationObserver (which also triggers doInitialScan).
+ * 2. Container same but thread ID changed → container element reused for new conversation;
+ *    call doInitialScan() directly so recent messages aren't missed without a full re-attach.
+ */
+function handleNavigation(reason) {
+  const newContainer = findConversationContainer();
+  const newThreadId = getThreadIdFromUrl();
+
+  if (newContainer !== activeTarget) {
+    console.log(`[Keryx] Navigation detected (${reason}) — switching observer target`);
+    activeThreadId = newThreadId;
+    attachObserver(newContainer); // attachObserver already calls setTimeout(doInitialScan, 800)
+  } else if (newThreadId && newThreadId !== activeThreadId) {
+    // Same DOM container, new thread — SPA reused the container element.
+    // MutationObserver is already attached, but we still need a fresh initial scan.
+    console.log(`[Keryx] Thread changed (${reason}): "${activeThreadId}" → "${newThreadId}" (container reused) — running initial scan`);
+    activeThreadId = newThreadId;
+    setTimeout(doInitialScan, 800);
+  }
+}
+
+/**
  * Main entry point.
  * - Immediately tries to find and observe the conversation container.
  * - Installs a *separate* body-level observer that watches for SPA navigation
@@ -582,19 +611,16 @@ function attachObserver(targetEl) {
 function init() {
   console.log('[Keryx] Content script initialised on', location.href);
 
+  // Capture starting thread ID
+  activeThreadId = getThreadIdFromUrl();
+
   // Attach to whatever container exists right now
   attachObserver(findConversationContainer());
 
   // Watch for SPA navigation — two complementary mechanisms:
 
   // 1. MutationObserver on body (catches structural app-shell swaps)
-  const navObserver = new MutationObserver(() => {
-    const newContainer = findConversationContainer();
-    if (newContainer !== activeTarget) {
-      console.log('[Keryx] Navigation detected (DOM) — switching observer target');
-      attachObserver(newContainer);
-    }
-  });
+  const navObserver = new MutationObserver(() => handleNavigation('DOM'));
   navObserver.observe(document.body, { childList: true, subtree: true });
 
   // 2. URL polling — Google Messages uses History.pushState for conversation
@@ -604,11 +630,7 @@ function init() {
   setInterval(() => {
     if (location.href !== lastHref) {
       lastHref = location.href;
-      const newContainer = findConversationContainer();
-      if (newContainer !== activeTarget) {
-        console.log('[Keryx] Navigation detected (URL) — switching observer target');
-        attachObserver(newContainer);
-      }
+      handleNavigation('URL');
     }
   }, 1500);
 }
