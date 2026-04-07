@@ -17,7 +17,6 @@ import {
   ChevronUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { queryClient } from "@/lib/queryClient";
 import { useState, useRef } from "react";
 
 interface PersonalNewsStory {
@@ -231,7 +230,6 @@ export default function PersonalInsights() {
 
   const handleRefresh = () => {
     forceRefreshRef.current = true;
-    queryClient.invalidateQueries({ queryKey: ["/api/news-feed"] });
     refetch();
   };
 
@@ -274,7 +272,7 @@ export default function PersonalInsights() {
       </CardHeader>
       
       <CardContent className="relative space-y-4">
-        {isLoading || isFetching ? (
+        {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="glass-card p-4 rounded-xl border-l-4 border-l-blue-500/50">
