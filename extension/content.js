@@ -1,5 +1,5 @@
 /**
- * Keryx SMS Relay — content.js v1.0.3
+ * Keryx SMS Relay — content.js v1.0.4
  * Runs on https://messages.google.com/*
  *
  * Strategy:
@@ -50,7 +50,9 @@ async function isDuplicate(sender, body, ts) {
 
 /**
  * Get the name/number of the currently-open conversation from the header.
- * Tries multiple selectors that have appeared across Google Messages versions.
+ * Returns null if no specific contact can be identified (e.g. when the user
+ * is viewing the conversation list, not an individual conversation).
+ * Callers must handle null and skip relaying in that case.
  */
 function getContactName() {
   const selectors = [
@@ -74,12 +76,30 @@ function getContactName() {
     const text = el?.textContent?.trim();
     if (text) return text;
   }
-  // Fall back: page title usually reads "Name – Messages" or "Messages | Name"
+  // Attempt to extract name from page title ("Name – Google Messages" format).
+  // If the title is just "Messages" or empty after stripping, return null so
+  // callers know we're not in a specific conversation.
   const title = document.title
+    .replace(/google\s*messages/gi, '')
     .replace(/messages/gi, '')
     .replace(/[–—|]/g, '')
     .trim();
-  return title || 'unknown';
+  return title || null;
+}
+
+/**
+ * Returns true when the URL indicates the user has a specific conversation
+ * open, as opposed to viewing the conversation list or home screen.
+ *
+ * Google Messages URL patterns:
+ *   List view:              /web/u/0/conversations
+ *   Specific conversation:  /web/u/0/conversations/<threadId>
+ *   (also handles /web/conversations/<threadId> without /u/N/ prefix)
+ *
+ * We require at least one non-empty path segment after /conversations/.
+ */
+function isViewingConversation() {
+  return /\/conversations\/[^/\s]+/.test(location.pathname);
 }
 
 /**
@@ -272,27 +292,49 @@ async function runDedupQueue() {
  *  - Dedup checks run sequentially to avoid read-before-write races in storage.
  */
 function processNodes(nodes) {
+  // ── Guard 1: only relay when a specific conversation is open ────────────
+  // When the user is on the conversation list (not inside a conversation),
+  // the observer fires for list-item mutations.  We must not relay those —
+  // they have no meaningful contact header and end up in a single "unknown"
+  // conversation in Keryx.
+  if (!isViewingConversation()) {
+    console.log('[Keryx] Skipping — not in a specific conversation (list view or home)');
+    return;
+  }
+
+  // ── Guard 2: resolve contact name before processing any nodes ───────────
+  // getContactName() returns null when no conversation header is readable.
+  // Without this we'd relay with address="unknown", collapsing all messages.
+  const contact = getContactName();
+  if (!contact) {
+    console.log('[Keryx] Skipping — could not identify contact name for this conversation');
+    return;
+  }
+
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
     const candidates = new Set();
     const tag = node.tagName?.toLowerCase() || '';
 
-    // Direct match: node is a message bubble or message row
+    // Direct match: node is a message bubble element.
+    // IMPORTANT: do NOT use tag.includes('message') — it is too broad and
+    // matches conversation list items (e.g. mws-conversation-list-item).
+    // Only match known message-bubble custom elements and explicit data attrs.
     if (
       tag === 'mws-message-part' ||
       tag === 'mws-message' ||
       tag === 'mws-text-message-part' ||
-      tag.includes('message') ||
       node.hasAttribute?.('data-message-id') ||
       node.hasAttribute?.('data-e2e-message-id') ||
-      node.hasAttribute?.('data-message-item') ||
-      (node.getAttribute?.('role') === 'listitem' && node.querySelector?.('[dir="auto"]'))
+      node.hasAttribute?.('data-message-item')
     ) {
       candidates.add(node);
     }
 
-    // Children: cast a wide net — custom elements plus data/role attributes
+    // Children: explicit element types + data attributes only.
+    // role="listitem" is intentionally excluded — conversation list rows
+    // also carry that role and would be incorrectly captured.
     const childMatches = node.querySelectorAll?.(
       'mws-message-part, mws-message, mws-text-message-part, ' +
       '[data-message-id], [data-e2e-message-id], ' +
@@ -323,7 +365,6 @@ function processNodes(nodes) {
       }
 
       const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-      const contact = getContactName();
       const ts = msgTs ?? Date.now();
 
       // Enqueue serialised dedup+relay to prevent concurrent storage races.
