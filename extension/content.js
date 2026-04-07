@@ -1,5 +1,5 @@
 /**
- * Keryx SMS Relay — content.js
+ * Keryx SMS Relay — content.js v1.0.3
  * Runs on https://messages.google.com/*
  *
  * Strategy:
@@ -14,6 +14,8 @@
  *  - Tracks the currently-observed element so SPA navigation between
  *    conversations cleanly re-attaches the observer to the new container.
  *  - All key steps log [Keryx] prefixed messages to the DevTools console.
+ *  - Session timestamp guard allows a 30-second grace window so messages
+ *    sent just before observer attach are still captured.
  */
 
 'use strict';
@@ -92,14 +94,17 @@ function getContactName() {
 function extractMessageText(node) {
   // ── Layer 1: known text-content child selectors ──────────────────────────
   const childSelectors = [
-    // Current Google Messages (2024-2025 RCS/SMS)
+    // Angular custom elements (current Google Messages 2024-2025)
     '.text-msg-content',
     '.ng-star-inserted .text-msg-content',
     'mws-text-message-part .msg-content',
     'mws-text-message-part',
-    // Older/fallback selectors
-    '.text-msg',
+    // Structural data attributes (stable across DOM refactors)
+    '[data-message-item]',
     '[data-e2e-message-text]',
+    '[jsmodel] [dir="auto"]',
+    // Older class-based selectors
+    '.text-msg',
     '.msg-content',
     '.message-text-content',
     '.message-text',
@@ -273,28 +278,41 @@ function processNodes(nodes) {
       tag === 'mws-text-message-part' ||
       tag.includes('message') ||
       node.hasAttribute?.('data-message-id') ||
-      node.hasAttribute?.('data-e2e-message-id')
+      node.hasAttribute?.('data-e2e-message-id') ||
+      node.hasAttribute?.('data-message-item') ||
+      (node.getAttribute?.('role') === 'listitem' && node.querySelector?.('[dir="auto"]'))
     ) {
       candidates.add(node);
     }
 
-    // Children: cast a wide net — custom elements plus data attributes
+    // Children: cast a wide net — custom elements plus data/role attributes
     const childMatches = node.querySelectorAll?.(
       'mws-message-part, mws-message, mws-text-message-part, ' +
-      '[data-message-id], [data-e2e-message-id]'
+      '[data-message-id], [data-e2e-message-id], ' +
+      '[data-message-item], [jsmodel][data-node-index]'
     ) ?? [];
     for (const c of childMatches) candidates.add(c);
 
     for (const candidate of candidates) {
       const text = extractMessageText(candidate);
-      if (!text) continue;
+      if (!text) {
+        // Log when extraction fails so the DOM structure is visible in DevTools
+        const hint = (candidate.innerText ?? candidate.textContent ?? '').trim().slice(0, 40);
+        if (hint.length > 0) {
+          console.warn('[Keryx] Could not extract text — node:', candidate.tagName?.toLowerCase(), '| hint:', hint);
+        }
+        continue;
+      }
 
       // Session-start guard: if we can parse a timestamp from the DOM and it
-      // predates observer attach, this is a historical/re-injected message —
-      // skip it. If the timestamp is unparseable we let it through (safe because
-      // this code path is only reached via MutationObserver, not an initial scan).
+      // predates observer attach by more than the grace window, this is a
+      // historical/re-injected message — skip it.
+      // The 30-second grace window ensures messages sent just before the observer
+      // attached are still captured (their DOM <time> reflects send time, not
+      // DOM-insertion time, so they'd otherwise be incorrectly dropped).
+      const SESSION_GRACE_MS = 30_000;
       const msgTs = extractMessageTimestamp(candidate);
-      if (msgTs !== null && msgTs < sessionStartedAt) {
+      if (msgTs !== null && msgTs < sessionStartedAt - SESSION_GRACE_MS) {
         console.log(`[Keryx] Skipping pre-session message (ts=${new Date(msgTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
         continue;
       }
@@ -346,11 +364,19 @@ function processNodes(nodes) {
  */
 function findConversationContainer() {
   const selectors = [
+    // Angular custom elements — most specific (current Google Messages)
     'mws-messages-list',
-    '[data-testid="message-list"]',
-    '.message-list-content',
     'mws-conversation-container',
+    // data-testid attributes (stable across DOM refactors)
+    '[data-testid="message-list"]',
+    '[data-testid="conversation-container"]',
+    // Class-based (may change across versions but common historically)
+    '.message-list-content',
     '.conversation-container',
+    // Semantic/structural — most stable, unlikely to change
+    '[role="list"][aria-label]',
+    'main [role="list"]',
+    // Broad fallbacks
     'main',
     '#main-content',
   ];
@@ -358,6 +384,7 @@ function findConversationContainer() {
     const el = document.querySelector(sel);
     if (el) return el;
   }
+  console.warn('[Keryx] Could not find conversation container — falling back to document.body. Google Messages DOM may have changed. Open DevTools to inspect the message list structure.');
   return document.body;
 }
 
@@ -412,7 +439,7 @@ function init() {
       attachObserver(newContainer);
     }
   });
-  navObserver.observe(document.body, { childList: true, subtree: false });
+  navObserver.observe(document.body, { childList: true, subtree: true });
 
   // 2. URL polling — Google Messages uses History.pushState for conversation
   //    switches, which mutates the URL without touching body's direct children.
