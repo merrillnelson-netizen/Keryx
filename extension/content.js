@@ -332,13 +332,14 @@ function processNodes(nodes) {
       candidates.add(node);
     }
 
-    // Children: explicit element types + data attributes only.
-    // role="listitem" is intentionally excluded — conversation list rows
-    // also carry that role and would be incorrectly captured.
+    // Children: explicit message-bubble element types and data attributes only.
+    // role="listitem" is intentionally excluded — conversation list rows also
+    // carry that role and would be incorrectly captured.
+    // [jsmodel][data-node-index] is also excluded — too broad in practice and
+    // fully covered by the known tag/data-attr selectors above.
     const childMatches = node.querySelectorAll?.(
       'mws-message-part, mws-message, mws-text-message-part, ' +
-      '[data-message-id], [data-e2e-message-id], ' +
-      '[data-message-item], [jsmodel][data-node-index]'
+      '[data-message-id], [data-e2e-message-id], [data-message-item]'
     ) ?? [];
     for (const c of childMatches) candidates.add(c);
 
