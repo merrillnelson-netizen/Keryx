@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Newspaper, 
   Users, 
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 interface PersonalNewsStory {
   id: string;
@@ -192,11 +193,16 @@ function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
 
 export default function PersonalInsights() {
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Ref to signal to queryFn that the next fetch should bypass server-side AI cache
+  const forceRefreshRef = useRef(false);
   
   const { data, isLoading, isFetching, refetch } = useQuery<NewsFeedResponse>({
     queryKey: ["/api/news-feed", userTimezone],
     queryFn: async () => {
-      const response = await fetch(`/api/news-feed?timezone=${encodeURIComponent(userTimezone)}`, { credentials: "include" });
+      const shouldForce = forceRefreshRef.current;
+      forceRefreshRef.current = false; // reset immediately so retries don't re-force
+      const url = `/api/news-feed?timezone=${encodeURIComponent(userTimezone)}${shouldForce ? '&refresh=true' : ''}`;
+      const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
         throw new Error(`${response.status}: ${text}`);
@@ -224,6 +230,7 @@ export default function PersonalInsights() {
     (sourceStatus.messages.available ? 1 : 0) : 0;
 
   const handleRefresh = () => {
+    forceRefreshRef.current = true;
     queryClient.invalidateQueries({ queryKey: ["/api/news-feed"] });
     refetch();
   };
@@ -244,21 +251,30 @@ export default function PersonalInsights() {
               </CardDescription>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-            className="border-white/20 hover:bg-white/10"
-          >
-            <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
-            Refresh
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isFetching}
+                  className="border-white/20 hover:bg-white/10"
+                >
+                  <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
+                  Refresh
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Regenerate from latest data</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </CardHeader>
       
       <CardContent className="relative space-y-4">
-        {isLoading ? (
+        {isLoading || isFetching ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="glass-card p-4 rounded-xl border-l-4 border-l-blue-500/50">
@@ -324,7 +340,7 @@ export default function PersonalInsights() {
               className="border-white/20 hover:bg-white/10"
             >
               <RefreshCw className={cn("w-4 h-4 mr-2", isFetching && "animate-spin")} />
-              Try Again
+              Retry
             </Button>
           </div>
         ) : (

@@ -3110,7 +3110,11 @@ Respond with JSON only.`
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
-      await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, 30);
+      // Only cache non-empty results for the full 30-minute TTL.
+      // An empty stories array (transient AI failure, timeout) is cached for only
+      // 3 minutes so the next request has a real chance of regenerating successfully.
+      const hasStories = (newsFeed as PersonalNewsFeed).stories?.length > 0;
+      await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, hasStories ? 30 : 3);
 
       const dataSourceStatus = {
         memories: { checked: true, count: recentMemories.length },
