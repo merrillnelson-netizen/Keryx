@@ -74,6 +74,82 @@ class RelayClient private constructor(private val context: Context) {
         scope.launch { flush() }
     }
 
+    /**
+     * Attempts to relay [payload] immediately (bypassing the debounce buffer).
+     * - On 2xx: records success, returns true.
+     * - On 5xx / network error: queues to Room for [RetryWorker], returns true
+     *   (caller can safely advance its checkpoint — delivery is now durable).
+     * - On 4xx: discards (bad config), increments error counter, returns false
+     *   (caller should NOT advance checkpoint — message is permanently lost).
+     *
+     * Designed for the outgoing-SMS observer path where the caller needs to
+     * tie checkpoint advancement to confirmed durability.
+     */
+    suspend fun sendOrQueue(payload: RelayPayload): Boolean {
+        val prefs = Prefs.get(context)
+        if (!prefs.enabled || !prefs.isConfigured()) return false
+        val serverUrl = prefs.serverUrl!!.trimEnd('/')
+        val apiKey = prefs.apiKey!!
+        return sendOrQueueInternal(serverUrl, apiKey, payload)
+    }
+
+    private suspend fun sendOrQueueInternal(
+        serverUrl: String,
+        apiKey: String,
+        payload: RelayPayload
+    ): Boolean {
+        val bodyJson = JSONObject().apply {
+            put("type", "sms")
+            put("source", "android-bridge")
+            put("address", payload.address)
+            put("body", payload.body)
+            put("direction", payload.direction)
+            put("timestamp", payload.timestamp)
+            payload.name?.let { put("name", it) }
+        }.toString()
+
+        val request = Request.Builder()
+            .url("$serverUrl/api/relay/inbound")
+            .addHeader("X-API-Key", apiKey)
+            .post(bodyJson.toRequestBody(jsonType))
+            .build()
+
+        return try {
+            val response = withContext(Dispatchers.IO) {
+                client.newCall(request).execute()
+            }
+            response.use {
+                when {
+                    response.isSuccessful -> {
+                        Log.d(TAG, "sendOrQueue OK ${response.code} — ${payload.direction} from ${payload.address}")
+                        Prefs.get(context).recordSuccess()
+                        true // delivered — caller can advance checkpoint
+                    }
+                    response.code in 400..499 -> {
+                        // Bad config; do not retry, do not advance checkpoint
+                        Log.e(TAG, "sendOrQueue 4xx ${response.code} — dropping, check API key")
+                        Prefs.get(context).incrementError()
+                        false
+                    }
+                    else -> {
+                        // 5xx: queue for retry — message is now durable
+                        Log.w(TAG, "sendOrQueue 5xx ${response.code} — queuing for retry")
+                        queueForRetry(payload)
+                        true // durable — caller can advance checkpoint
+                    }
+                }
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "sendOrQueue network error — queuing for retry: ${e.message}")
+            queueForRetry(payload)
+            true // durable — caller can advance checkpoint
+        } catch (e: Exception) {
+            Log.e(TAG, "sendOrQueue unexpected error: ${e.message}")
+            queueForRetry(payload)
+            true
+        }
+    }
+
     private suspend fun flush() {
         val toSend: List<RelayPayload>
         mutex.withLock {

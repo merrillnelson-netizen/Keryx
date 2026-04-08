@@ -12,19 +12,15 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
-import androidx.work.*
-import app.keryx.bridge.data.AppDatabase
-import app.keryx.bridge.data.PendingRelay
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import app.keryx.bridge.network.RelayClient
-import app.keryx.bridge.network.RetryWorker
 import app.keryx.bridge.network.ServiceRestartWorker
 import app.keryx.bridge.util.PhoneNormalizer
 import app.keryx.bridge.util.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 private const val TAG = "SmsObserverService"
 private const val NOTIFICATION_ID = 1001
@@ -129,19 +125,19 @@ class SmsObserverService : LifecycleService() {
     }
 
     /**
-     * Queries new sent SMS rows and durably queues them BEFORE advancing
-     * [Prefs.lastSentSmsId].
+     * Queries new sent SMS rows and relays them with checkpoint safety.
      *
-     * Flow:
-     * 1. Collect new rows (id > lastSentSmsId) from content://sms/sent.
-     * 2. For each row: insert to Room [PendingRelay] — this is the durable write.
-     * 3. Advance [lastSentSmsId] only after all Room inserts succeed.
-     * 4. Schedule [RetryWorker] for immediate delivery; it deletes Room rows on success.
+     * Flow for each new row:
+     * 1. Call [RelayClient.sendOrQueue] — this attempts immediate HTTP POST first.
+     *    - On 2xx success: message is delivered; returns `true`.
+     *    - On 5xx/network error: message is durably written to Room for [RetryWorker]; returns `true`.
+     *    - On 4xx (bad config): message is dropped; returns `false` — checkpoint NOT advanced.
+     * 2. Advance [Prefs.lastSentSmsId] to this row's `_id` ONLY when `sendOrQueue` returns `true`,
+     *    meaning the message is either delivered or durably queued for retry.
      *
-     * If the process is killed between steps 2 and 3: the same rows will be re-queried
-     * on the next observer callback (id > old checkpoint) and duplicate Room rows
-     * will be created. [RetryWorker] will then relay duplicates — acceptable trade-off
-     * (at-least-once delivery).
+     * The checkpoint is therefore always tied to confirmed durability — never advanced speculatively.
+     * This gives at-least-once delivery semantics (Room retry may deliver duplicate if process dies
+     * between successful relay and checkpoint write — acceptable trade-off).
      */
     private fun checkForNewSentSms() {
         val prefs = Prefs.get(applicationContext)
@@ -154,7 +150,6 @@ class SmsObserverService : LifecycleService() {
             val selectionArgs = if (lastId >= 0) arrayOf(lastId.toString()) else null
 
             data class SmsRow(val rowId: Long, val address: String, val body: String, val dateMs: Long)
-
             val newRows = mutableListOf<SmsRow>()
 
             try {
@@ -162,12 +157,10 @@ class SmsObserverService : LifecycleService() {
                     SMS_SENT_URI, projection, selection, selectionArgs, "_id ASC"
                 )?.use { cursor ->
                     if (!cursor.moveToFirst()) return@use
-
                     val idCol = cursor.getColumnIndex("_id")
                     val addrCol = cursor.getColumnIndex("address")
                     val bodyCol = cursor.getColumnIndex("body")
                     val dateCol = cursor.getColumnIndex("date")
-
                     do {
                         val rowId = cursor.getLong(idCol)
                         val address = cursor.getString(addrCol) ?: continue
@@ -185,56 +178,35 @@ class SmsObserverService : LifecycleService() {
 
             if (newRows.isEmpty()) return@launch
 
-            // Step 2: durable Room insert BEFORE advancing checkpoint
-            val dao = AppDatabase.get(applicationContext).pendingRelayDao()
-            var maxId = lastId
+            val relay = RelayClient.get(applicationContext)
 
             for (row in newRows) {
                 val normalizedAddress = PhoneNormalizer.normalize(row.address)
                 val timestampIso = Instant.ofEpochMilli(row.dateMs).toString()
 
-                val payloadJson = JSONObject().apply {
-                    put("address", normalizedAddress)
-                    put("body", row.body)
-                    put("direction", "sent")
-                    put("timestamp", timestampIso)
-                }.toString()
+                val payload = RelayClient.RelayPayload(
+                    address = normalizedAddress,
+                    body = row.body,
+                    direction = "sent",
+                    timestamp = timestampIso
+                )
 
-                try {
-                    dao.insert(PendingRelay(payloadJson = payloadJson))
-                    Log.d(TAG, "Durably queued sent SMS to $normalizedAddress (id=${row.rowId})")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to insert Room row for id=${row.rowId}: ${e.message}")
-                    // Do NOT advance checkpoint past this row — it will be retried on next observer
+                // Step 1: attempt immediate relay; Room-queue on transient failure.
+                // Returns true when message is either delivered OR durably in Room.
+                val durable = relay.sendOrQueue(payload)
+
+                if (durable) {
+                    // Step 2: advance checkpoint ONLY after durable outcome confirmed.
+                    prefs.lastSentSmsId = row.rowId
+                    Log.d(TAG, "Checkpoint advanced to _id=${row.rowId} for $normalizedAddress")
+                } else {
+                    // 4xx — message dropped due to bad config; stop processing further rows
+                    // to avoid silently dropping the rest (they'll retry on next observer event).
+                    Log.e(TAG, "Stopping checkpoint at _id=${row.rowId} — 4xx error (check API key)")
                     break
                 }
-
-                if (row.rowId > maxId) maxId = row.rowId
             }
-
-            // Step 3: advance checkpoint ONLY after successful Room inserts
-            if (maxId > lastId) {
-                prefs.lastSentSmsId = maxId
-                prefs.pendingRetryCount = dao.countPending()
-                Log.d(TAG, "Checkpoint advanced to _id=$maxId after durable write")
-            }
-
-            // Step 4: schedule immediate RetryWorker delivery
-            scheduleRetryWorker()
         }
-    }
-
-    private fun scheduleRetryWorker() {
-        val request = OneTimeWorkRequestBuilder<RetryWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .build()
-        WorkManager.getInstance(applicationContext)
-            .enqueueUniqueWork("keryx_relay_retry", ExistingWorkPolicy.KEEP, request)
     }
 
     companion object {
