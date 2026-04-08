@@ -102,12 +102,12 @@ export function AndroidBridgeCard() {
             ) : (
               <Button size="sm" variant="outline" asChild>
                 <a
-                  href="https://github.com/search?q=keryx-bridge&type=repositories"
+                  href="https://github.com/features/actions"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <ExternalLink className="w-4 h-4 mr-2" />
-                  View Build Actions (GitHub)
+                  Build via GitHub Actions
                 </a>
               </Button>
             )}

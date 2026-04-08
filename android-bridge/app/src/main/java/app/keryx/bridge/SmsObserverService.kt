@@ -11,13 +11,20 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
+import androidx.lifecycle.lifecycleScope
+import androidx.work.*
+import app.keryx.bridge.data.AppDatabase
+import app.keryx.bridge.data.PendingRelay
 import app.keryx.bridge.network.RelayClient
+import app.keryx.bridge.network.RetryWorker
 import app.keryx.bridge.network.ServiceRestartWorker
 import app.keryx.bridge.util.PhoneNormalizer
 import app.keryx.bridge.util.Prefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "SmsObserverService"
 private const val NOTIFICATION_ID = 1001
@@ -25,10 +32,17 @@ private val SMS_SENT_URI: Uri = Uri.parse("content://sms/sent")
 
 /**
  * Foreground service that observes the SMS sent content provider.
- * - Holds a persistent partial WakeLock (acquired in onStartCommand, held until onDestroy)
- *   to prevent the CPU from sleeping mid-query — critical on Samsung/Xiaomi MIUI.
- * - Publishes a persistent "Keryx Bridge is active" notification.
- * - Survives task-swipe via onTaskRemoved → ServiceRestartWorker.
+ *
+ * Checkpoint safety guarantee:
+ * Outgoing SMS rows are written to the Room retry queue BEFORE [lastSentSmsId] is
+ * advanced. This means that even if the process is killed between the Room insert
+ * and the [RetryWorker] delivery, the message survives in Room and will be relayed
+ * on the next network reconnect. The checkpoint is only advanced after durable
+ * Room storage is confirmed.
+ *
+ * - Holds a persistent partial WakeLock (acquired in onStartCommand, released in
+ *   onDestroy) — critical on Samsung / MIUI which aggressively kill background CPU.
+ * - Survives task-swipe via onTaskRemoved → [ServiceRestartWorker].
  */
 class SmsObserverService : LifecycleService() {
 
@@ -45,8 +59,6 @@ class SmsObserverService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        // Acquire (or re-acquire) persistent WakeLock here so it is held for
-        // the entire service lifetime, surviving any repeated START_STICKY restarts.
         acquireWakeLockIfNeeded()
         Log.d(TAG, "SmsObserverService started (WakeLock held: ${wakeLock?.isHeld})")
         return START_STICKY
@@ -116,68 +128,116 @@ class SmsObserverService : LifecycleService() {
         Log.d(TAG, "SMS ContentObserver registered on $SMS_SENT_URI")
     }
 
+    /**
+     * Queries new sent SMS rows and durably queues them BEFORE advancing
+     * [Prefs.lastSentSmsId].
+     *
+     * Flow:
+     * 1. Collect new rows (id > lastSentSmsId) from content://sms/sent.
+     * 2. For each row: insert to Room [PendingRelay] — this is the durable write.
+     * 3. Advance [lastSentSmsId] only after all Room inserts succeed.
+     * 4. Schedule [RetryWorker] for immediate delivery; it deletes Room rows on success.
+     *
+     * If the process is killed between steps 2 and 3: the same rows will be re-queried
+     * on the next observer callback (id > old checkpoint) and duplicate Room rows
+     * will be created. [RetryWorker] will then relay duplicates — acceptable trade-off
+     * (at-least-once delivery).
+     */
     private fun checkForNewSentSms() {
         val prefs = Prefs.get(applicationContext)
         if (!prefs.enabled || !prefs.isConfigured()) return
 
-        val lastId = prefs.lastSentSmsId
-        val projection = arrayOf("_id", "address", "body", "date")
-        val selection = if (lastId >= 0) "_id > ?" else null
-        val selectionArgs = if (lastId >= 0) arrayOf(lastId.toString()) else null
+        lifecycleScope.launch(Dispatchers.IO) {
+            val lastId = prefs.lastSentSmsId
+            val projection = arrayOf("_id", "address", "body", "date")
+            val selection = if (lastId >= 0) "_id > ?" else null
+            val selectionArgs = if (lastId >= 0) arrayOf(lastId.toString()) else null
 
-        try {
-            contentResolver.query(
-                SMS_SENT_URI, projection, selection, selectionArgs, "_id ASC"
-            )?.use { cursor ->
-                if (!cursor.moveToFirst()) return
+            data class SmsRow(val rowId: Long, val address: String, val body: String, val dateMs: Long)
 
-                val idCol = cursor.getColumnIndex("_id")
-                val addrCol = cursor.getColumnIndex("address")
-                val bodyCol = cursor.getColumnIndex("body")
-                val dateCol = cursor.getColumnIndex("date")
+            val newRows = mutableListOf<SmsRow>()
 
-                var maxId = lastId
-                do {
-                    val rowId = cursor.getLong(idCol)
-                    val address = cursor.getString(addrCol) ?: continue
-                    val body = cursor.getString(bodyCol) ?: continue
-                    val dateMs = cursor.getLong(dateCol).takeIf { it > 0 }
-                        ?: System.currentTimeMillis()
+            try {
+                contentResolver.query(
+                    SMS_SENT_URI, projection, selection, selectionArgs, "_id ASC"
+                )?.use { cursor ->
+                    if (!cursor.moveToFirst()) return@use
 
-                    if (body.isBlank()) continue
+                    val idCol = cursor.getColumnIndex("_id")
+                    val addrCol = cursor.getColumnIndex("address")
+                    val bodyCol = cursor.getColumnIndex("body")
+                    val dateCol = cursor.getColumnIndex("date")
 
-                    val normalizedAddress = PhoneNormalizer.normalize(address)
-                    val timestampIso = Instant.ofEpochMilli(dateMs).toString()
-
-                    Log.d(TAG, "Sent SMS to $normalizedAddress: \"${body.take(40)}\"")
-
-                    RelayClient.get(applicationContext).enqueue(
-                        RelayClient.RelayPayload(
-                            address = normalizedAddress,
-                            body = body,
-                            direction = "sent",
-                            timestamp = timestampIso
-                        )
-                    )
-
-                    if (rowId > maxId) maxId = rowId
-                } while (cursor.moveToNext())
-
-                if (maxId > lastId) {
-                    prefs.lastSentSmsId = maxId
-                    Log.d(TAG, "Updated lastSentSmsId to $maxId")
+                    do {
+                        val rowId = cursor.getLong(idCol)
+                        val address = cursor.getString(addrCol) ?: continue
+                        val body = cursor.getString(bodyCol) ?: continue
+                        val dateMs = cursor.getLong(dateCol).takeIf { it > 0 }
+                            ?: System.currentTimeMillis()
+                        if (body.isBlank()) continue
+                        newRows += SmsRow(rowId, address, body, dateMs)
+                    } while (cursor.moveToNext())
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error querying SMS content provider: ${e.message}")
+                return@launch
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying SMS content provider: ${e.message}")
+
+            if (newRows.isEmpty()) return@launch
+
+            // Step 2: durable Room insert BEFORE advancing checkpoint
+            val dao = AppDatabase.get(applicationContext).pendingRelayDao()
+            var maxId = lastId
+
+            for (row in newRows) {
+                val normalizedAddress = PhoneNormalizer.normalize(row.address)
+                val timestampIso = Instant.ofEpochMilli(row.dateMs).toString()
+
+                val payloadJson = JSONObject().apply {
+                    put("address", normalizedAddress)
+                    put("body", row.body)
+                    put("direction", "sent")
+                    put("timestamp", timestampIso)
+                }.toString()
+
+                try {
+                    dao.insert(PendingRelay(payloadJson = payloadJson))
+                    Log.d(TAG, "Durably queued sent SMS to $normalizedAddress (id=${row.rowId})")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to insert Room row for id=${row.rowId}: ${e.message}")
+                    // Do NOT advance checkpoint past this row — it will be retried on next observer
+                    break
+                }
+
+                if (row.rowId > maxId) maxId = row.rowId
+            }
+
+            // Step 3: advance checkpoint ONLY after successful Room inserts
+            if (maxId > lastId) {
+                prefs.lastSentSmsId = maxId
+                prefs.pendingRetryCount = dao.countPending()
+                Log.d(TAG, "Checkpoint advanced to _id=$maxId after durable write")
+            }
+
+            // Step 4: schedule immediate RetryWorker delivery
+            scheduleRetryWorker()
         }
     }
 
+    private fun scheduleRetryWorker() {
+        val request = OneTimeWorkRequestBuilder<RetryWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(applicationContext)
+            .enqueueUniqueWork("keryx_relay_retry", ExistingWorkPolicy.KEEP, request)
+    }
+
     companion object {
-        /**
-         * Returns true if this service is currently running.
-         * Set in onCreate/onDestroy. Used by MainActivity to reflect live status.
-         */
         @Volatile var isRunning = false
             private set
     }

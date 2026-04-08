@@ -79,26 +79,48 @@ class KeryxNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Detect if this is an outgoing-RCS "sent" notification.
-     * Patterns vary by Google Messages version — log unexpected patterns for debugging.
+     * Detect if this is an outgoing-RCS "sent" or "sending" notification.
+     * Google Messages posts transient progress notifications ("Sending") and
+     * final confirmation notifications ("Sent"). We capture both — the relay
+     * server deduplicates by conversation/timestamp.
+     *
+     * Known patterns (vary by Google Messages version):
+     *   title == "You" — older versions
+     *   title == "Message sent" | "Message sending" — newer versions
+     *   title starts with "Sent" | "Sending" — some OEM variants
+     *   text == "Message sent" | "Sending…"
+     *   text starts with "Message sent to " | "Sending to "
      */
     private fun isSentRcsNotification(title: String, text: String): Boolean {
         val titleLower = title.lowercase()
         val textLower = text.lowercase()
         return titleLower == "you"
             || titleLower == "message sent"
+            || titleLower == "message sending"
             || titleLower.startsWith("sent")
+            || titleLower.startsWith("sending")
             || textLower == "message sent"
+            || textLower == "sending"
+            || textLower == "sending\u2026" // ellipsis variant
             || textLower.startsWith("message sent to ")
+            || textLower.startsWith("sending to ")
+            || textLower.startsWith("message sending")
     }
 
     private fun extractSentBody(text: String): String? {
+        val textLower = text.lowercase()
+        // Skip pure status strings that carry no body content
+        if (textLower == "message sent"
+            || textLower == "sending"
+            || textLower == "sending\u2026") return null
+
         // "Message sent to John: Hello there" → "Hello there"
+        // "Sending to John: Hello there" → "Hello there"
         val colonIdx = text.indexOf(':')
         return if (colonIdx > 0 && colonIdx < text.length - 1) {
             text.substring(colonIdx + 1).trim().takeIf { it.isNotBlank() }
         } else {
-            text.takeIf { it.isNotBlank() && it.lowercase() != "message sent" }
+            text.takeIf { it.isNotBlank() }
         }
     }
 
