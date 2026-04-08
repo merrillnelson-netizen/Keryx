@@ -6848,6 +6848,45 @@ Respond with JSON only.`
     }
   });
 
+  /**
+   * GET /api/android-bridge/apk-info — check if a built APK is available for download
+   * Returns { available: boolean, url: string }
+   */
+  app.get("/api/android-bridge/apk-info", requireAuth, async (req, res) => {
+    try {
+      const { existsSync } = await import("fs");
+      const { join } = await import("path");
+      const apkPath = join(process.cwd(), "android-bridge", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+      const available = existsSync(apkPath);
+      res.json({
+        available,
+        url: available ? "/api/android-bridge/apk" : null,
+      });
+    } catch (error) {
+      res.json({ available: false, url: null });
+    }
+  });
+
+  /**
+   * GET /api/android-bridge/apk — stream the debug APK for download
+   * Only available if a build exists on disk (produced by GitHub Actions or local build)
+   */
+  app.get("/api/android-bridge/apk", requireAuth, async (req, res) => {
+    try {
+      const { existsSync } = await import("fs");
+      const { join } = await import("path");
+      const apkPath = join(process.cwd(), "android-bridge", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+      if (!existsSync(apkPath)) {
+        return res.status(404).json({ message: "APK not built yet. See android-bridge/INSTALL.md for build instructions." });
+      }
+      res.setHeader("Content-Disposition", "attachment; filename=KeryxBridge.apk");
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.sendFile(apkPath);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to serve APK", error);
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

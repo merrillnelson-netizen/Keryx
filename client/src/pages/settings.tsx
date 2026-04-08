@@ -26,6 +26,7 @@ import { PushNotificationCard } from "@/components/settings/push-notification-ca
 import { PlaidCard } from "@/components/settings/plaid-card";
 import { SmsImportSection } from "@/components/settings/sms-import-section";
 import { BillingCard } from "@/components/settings/billing-card";
+import { AndroidBridgeCard } from "@/components/settings/android-bridge-card";
 
 interface BackfillStatus {
   status: 'idle' | 'running' | 'completed' | 'failed' | 'started' | 'already_running';
@@ -1325,6 +1326,8 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+
+          <AndroidBridgeCard />
 
           <RelayApiCard />
 
