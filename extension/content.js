@@ -779,17 +779,39 @@ async function doInitialScan() {
           const dup = await isDuplicate(msgAddress, msgBody, msgFinalTs);
           if (dup) return;
           console.log(`[Keryx] Initial scan relaying (${msgDir}) from "${msgAddress}"${msgDomName ? ` (${msgDomName})` : ''}: "${msgBody.slice(0, 60)}"`);
-          chrome.runtime.sendMessage({
-            type: 'relay_sms',
-            address: msgAddress,
-            ...(msgDomName ? { name: msgDomName } : {}),
-            body: msgBody,
-            direction: msgDir,
-            timestamp: new Date(msgFinalTs).toISOString(),
+
+          // Promisify sendMessage so we can wait for relay confirmation
+          // before advancing the checkpoint.  Only a confirmed ok:true response
+          // from background.js (successful HTTP 2xx to Keryx) counts as success.
+          const resp = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              {
+                type: 'relay_sms',
+                address: msgAddress,
+                ...(msgDomName ? { name: msgDomName } : {}),
+                body: msgBody,
+                direction: msgDir,
+                timestamp: new Date(msgFinalTs).toISOString(),
+              },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn('[Keryx] Initial scan sendMessage error:', chrome.runtime.lastError.message);
+                  resolve(null);
+                } else {
+                  resolve(response);
+                }
+              }
+            );
           });
-          // Track highest timestamp in this relay batch
-          if (batch.maxTs === null || msgFinalTs > batch.maxTs) {
-            batch.maxTs = msgFinalTs;
+
+          // Only advance the checkpoint when the relay was confirmed successful
+          if (resp?.ok === true) {
+            console.log('[Keryx] Initial scan relay OK — routed_to:', resp.data?.routed_to);
+            if (batch.maxTs === null || msgFinalTs > batch.maxTs) {
+              batch.maxTs = msgFinalTs;
+            }
+          } else {
+            console.warn('[Keryx] Initial scan relay failed or no response — checkpoint will not advance for this message');
           }
         } catch (err) {
           console.error('[Keryx] Initial scan relay error:', err);
