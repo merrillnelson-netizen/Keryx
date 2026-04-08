@@ -74,6 +74,7 @@ export default function People() {
   const [mergeMode, setMergeMode] = useState(false);
   const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [aiQuery, setAiQuery] = useState("");
   const [aiResult, setAiResult] = useState<{
     sortFields: Array<{ field: string; direction: 'asc' | 'desc' }>;
@@ -338,8 +339,14 @@ export default function People() {
       });
       return;
     }
+    setShowMergeConfirm(true);
+  };
+
+  const handleConfirmMerge = () => {
+    if (!mergeTarget) return;
     const sourceIds = Array.from(selectedForMerge).filter(id => id !== mergeTarget);
     mergeMutation.mutate({ targetId: mergeTarget, sourceIds });
+    setShowMergeConfirm(false);
   };
 
   const handleCancelMerge = () => {
@@ -1361,6 +1368,59 @@ export default function People() {
               data-testid="confirm-delete-person"
             >
               {deletePersonMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── People merge confirmation dialog ──────────────────────── */}
+      <AlertDialog open={showMergeConfirm} onOpenChange={setShowMergeConfirm}>
+        <AlertDialogContent className="glass-card-strong border-white/20">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Merge className="w-5 h-5 text-primary" />
+              Confirm Merge
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  The following records will be merged into{" "}
+                  <span className="font-semibold text-foreground">
+                    {people.find(p => p.id === mergeTarget)?.name || "Primary"}
+                  </span>
+                  :
+                </p>
+                <div className="space-y-1.5">
+                  {Array.from(selectedForMerge)
+                    .filter(id => id !== mergeTarget)
+                    .map(id => {
+                      const person = people.find(p => p.id === id);
+                      if (!person) return null;
+                      return (
+                        <div key={id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                          <span className="font-medium text-foreground truncate">{person.name}</span>
+                          <Badge variant="secondary" className="ml-2 shrink-0 bg-violet-500/20 text-violet-400 border-violet-500/30 text-xs">
+                            {person.mentionCount ?? 0} mentions
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                </div>
+                <p className="text-xs text-destructive/80">
+                  All memories and references will be re-attributed to {people.find(p => p.id === mergeTarget)?.name || "the primary record"}. Source records will be permanently deleted. This cannot be undone.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20" onClick={() => setShowMergeConfirm(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmMerge}
+              disabled={mergeMutation.isPending}
+              className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+              data-testid="confirm-merge-people"
+            >
+              {mergeMutation.isPending ? "Merging..." : "Merge People"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -14,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff, Trash2, FolderX } from "lucide-react";
+import { MessageCircle, ArrowLeft, User, Clock, ChevronDown, Smartphone, Loader2, Search, X, LayoutGrid, Table as TableIcon, Sparkles, Edit2, Check, Phone, Mic, MicOff, Trash2, FolderX, Merge } from "lucide-react";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { useLocation, useParams } from "wouter";
 import { MessageConversation, Message } from "@shared/schema";
@@ -61,6 +71,13 @@ function ConversationList() {
   const [aiResult, setAiResult] = useState<AiSearchResult | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+
+  // Merge mode state
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedForMerge, setSelectedForMerge] = useState<Set<string>>(new Set());
+  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+
   const { toast } = useToast();
   const { isListening: isVoiceListening, isSupported: isVoiceSupported, startListening: startVoiceInput, stopListening: stopVoiceInput } = useVoiceInput(
     useCallback((text: string) => setAiQuery(text), [])
@@ -135,6 +152,71 @@ function ConversationList() {
       toast({ title: "Update failed", description: "Could not save the name. Please try again.", variant: "destructive" });
     },
   });
+
+  const mergeMutation = useMutation({
+    mutationFn: async ({ targetId, sourceIds }: { targetId: string; sourceIds: string[] }) => {
+      const response = await apiRequest("POST", "/api/messages/conversations/merge", { targetId, sourceIds });
+      if (!response.ok) throw new Error("Failed to merge conversations");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/stats"] });
+      toast({
+        title: "Conversations merged",
+        description: data.message || "Successfully consolidated conversations",
+      });
+      setMergeMode(false);
+      setSelectedForMerge(new Set());
+      setMergeTarget(null);
+      setShowMergeConfirm(false);
+    },
+    onError: () => {
+      toast({ title: "Merge failed", description: "Could not merge conversations. Please try again.", variant: "destructive" });
+      setShowMergeConfirm(false);
+    },
+  });
+
+  const handleToggleMergeSelection = (convoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedForMerge(prev => {
+      const next = new Set(prev);
+      if (next.has(convoId)) {
+        next.delete(convoId);
+        if (mergeTarget === convoId) setMergeTarget(null);
+      } else {
+        next.add(convoId);
+        // Auto-set target to first selected
+        if (next.size === 1) setMergeTarget(convoId);
+      }
+      return next;
+    });
+  };
+
+  const handleSetMergeTarget = (convoId: string) => {
+    if (selectedForMerge.has(convoId)) setMergeTarget(convoId);
+  };
+
+  const handleCancelMerge = () => {
+    setMergeMode(false);
+    setSelectedForMerge(new Set());
+    setMergeTarget(null);
+    setShowMergeConfirm(false);
+  };
+
+  const handleExecuteMerge = () => {
+    if (!mergeTarget || selectedForMerge.size < 2) {
+      toast({ title: "Cannot merge", description: "Select at least 2 conversations and designate one as Primary", variant: "destructive" });
+      return;
+    }
+    setShowMergeConfirm(true);
+  };
+
+  const handleConfirmMerge = () => {
+    if (!mergeTarget) return;
+    const sourceIds = Array.from(selectedForMerge).filter(id => id !== mergeTarget);
+    mergeMutation.mutate({ targetId: mergeTarget, sourceIds });
+  };
 
   const handleStartEdit = (convo: MessageConversation, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -258,7 +340,7 @@ function ConversationList() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className={cn("space-y-6 animate-fade-in", mergeMode && selectedForMerge.size >= 2 && "pb-24")}>
       {/* Header Section - matches People page layout */}
       <div className="glass-card p-6 rounded-2xl">
         <div className="flex items-center justify-between">
@@ -302,8 +384,34 @@ function ConversationList() {
             >
               <TableIcon className="w-4 h-4" />
             </Button>
+            {conversations.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => mergeMode ? handleCancelMerge() : setMergeMode(true)}
+                className={cn(
+                  "h-9 w-9 p-0 transition-all",
+                  mergeMode
+                    ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/10"
+                )}
+                title={mergeMode ? "Exit merge mode" : "Merge conversations"}
+              >
+                <Merge className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
+
+        {mergeMode && (
+          <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <p className="text-sm text-amber-300 font-medium">Merge Mode Active</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Tap conversations to select them. The first one selected is automatically the Primary (it keeps its name and absorbs the others).
+              Tap a badge in the bar below to promote a different conversation as Primary.
+            </p>
+          </div>
+        )}
       </div>
 
       {processingStatus && processingStatus.unprocessed > 0 && (
@@ -496,83 +604,235 @@ function ConversationList() {
         </div>
       ) : (
         <div className="space-y-2">
-          {displayConversations.map((convo) => (
-            <Card
-              key={convo.id}
-              className="glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]"
-              onClick={() => editingId !== convo.id && setLocation(`/messages/${convo.id}`)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {editingId === convo.id ? (
-                      <form onSubmit={handleSaveEdit} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
-                        <Input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="h-8 text-sm bg-white/5 border-white/20 flex-1"
-                          placeholder="Enter name..."
-                          autoFocus
-                          onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
-                        />
-                        <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-emerald-400 hover:text-emerald-300" disabled={renameMutation.isPending}>
-                          <Check className="w-4 h-4" />
-                        </Button>
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground" onClick={handleCancelEdit}>
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </form>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <h3 className="font-semibold text-foreground truncate">
-                              {convo.contactName || convo.contactAddress}
-                            </h3>
-                            <button
-                              type="button"
-                              onClick={(e) => handleStartEdit(convo, e)}
-                              className="text-muted-foreground hover:text-foreground transition-opacity p-0.5 shrink-0"
-                              title="Edit contact name"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
+          {displayConversations.map((convo) => {
+            const isSelected = mergeMode && selectedForMerge.has(convo.id);
+            const isPrimary = mergeMode && mergeTarget === convo.id;
+            return (
+              <Card
+                key={convo.id}
+                className={cn(
+                  "glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] active:scale-[0.99]",
+                  isSelected && "ring-2 ring-amber-500/60",
+                  isPrimary && "ring-2 ring-primary/80 bg-primary/5",
+                )}
+                onClick={(e) => {
+                  if (mergeMode) {
+                    handleToggleMergeSelection(convo.id, e);
+                  } else if (editingId !== convo.id) {
+                    setLocation(`/messages/${convo.id}`);
+                  }
+                }}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0 relative">
+                      <User className="w-5 h-5 text-white" />
+                      {isSelected && (
+                        <div className={cn(
+                          "absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                          isPrimary ? "bg-primary text-white" : "bg-amber-500 text-white"
+                        )}>
+                          {isPrimary ? "★" : "✓"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {!mergeMode && editingId === convo.id ? (
+                        <form onSubmit={handleSaveEdit} onClick={(e) => e.stopPropagation()} className="flex items-center gap-2">
+                          <Input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="h-8 text-sm bg-white/5 border-white/20 flex-1"
+                            placeholder="Enter name..."
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
+                          />
+                          <Button type="submit" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-emerald-400 hover:text-emerald-300" disabled={renameMutation.isPending}>
+                            <Check className="w-4 h-4" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground" onClick={handleCancelEdit}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </form>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <h3 className="font-semibold text-foreground truncate">
+                                {convo.contactName || convo.contactAddress}
+                              </h3>
+                              {isPrimary && (
+                                <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] px-1.5 py-0 h-4 shrink-0">
+                                  Primary
+                                </Badge>
+                              )}
+                              {!mergeMode && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleStartEdit(convo, e)}
+                                  className="text-muted-foreground hover:text-foreground transition-opacity p-0.5 shrink-0"
+                                  title="Edit contact name"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              {formatTimestamp(convo.lastMessageAt)}
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {formatTimestamp(convo.lastMessageAt)}
-                          </span>
-                        </div>
-                        {convo.contactAddress && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Phone className="w-3 h-3 shrink-0" />
-                            {convo.contactAddress}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge
-                            variant="outline"
-                            className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                          >
-                            <Smartphone className="w-3 h-3 mr-1" />
-                            {convo.platform}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MessageCircle className="w-3 h-3" />
-                            {convo.messageCount ?? 0}
-                          </span>
-                        </div>
-                      </>
-                    )}
+                          {convo.contactAddress && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 shrink-0" />
+                              {convo.contactAddress}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                            >
+                              <Smartphone className="w-3 h-3 mr-1" />
+                              {convo.platform}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <MessageCircle className="w-3 h-3" />
+                              {convo.messageCount ?? 0}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
+
+      {/* ── Merge sticky action bar ─────────────────────────────────── */}
+      {mergeMode && selectedForMerge.size >= 2 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur-md border-t border-white/10 shadow-2xl">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Badge className="bg-primary/20 text-primary border-primary/30 text-sm px-3 py-1 shrink-0">
+                {selectedForMerge.size} selected
+              </Badge>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-1">
+                  {Array.from(selectedForMerge).map(id => {
+                    const convo = conversations.find(c => c.id === id);
+                    if (!convo) return null;
+                    const label = convo.contactName || convo.contactAddress || id.slice(0, 8);
+                    return (
+                      <Badge
+                        key={id}
+                        variant="outline"
+                        className={cn(
+                          "cursor-pointer whitespace-nowrap shrink-0 transition-all",
+                          mergeTarget === id
+                            ? "bg-primary/20 border-primary text-primary"
+                            : "bg-white/10 border-white/20 hover:bg-white/20"
+                        )}
+                        onClick={() => handleSetMergeTarget(id)}
+                      >
+                        {mergeTarget === id && "★ "}
+                        {label}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {!mergeTarget && (
+                  <p className="text-xs text-amber-400 mt-1">Tap a name above to set it as Primary (the one to keep)</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setSelectedForMerge(new Set()); setMergeTarget(null); }}
+                  className="border-white/20 hover:bg-white/10 gap-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleExecuteMerge}
+                  disabled={selectedForMerge.size < 2 || !mergeTarget || mergeMutation.isPending}
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 gap-1"
+                >
+                  <Merge className="w-3.5 h-3.5" />
+                  {mergeMutation.isPending ? "Merging..." : "Merge"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Merge confirmation dialog ───────────────────────────────── */}
+      <AlertDialog open={showMergeConfirm} onOpenChange={setShowMergeConfirm}>
+        <AlertDialogContent className="glass-card border-white/20">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Merge className="w-5 h-5 text-primary" />
+              Confirm Merge
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  The following conversations will be merged into{" "}
+                  <span className="font-semibold text-foreground">
+                    {conversations.find(c => c.id === mergeTarget)?.contactName
+                      || conversations.find(c => c.id === mergeTarget)?.contactAddress
+                      || "Primary"}
+                  </span>
+                  :
+                </p>
+                <div className="space-y-1.5">
+                  {Array.from(selectedForMerge)
+                    .filter(id => id !== mergeTarget)
+                    .map(id => {
+                      const convo = conversations.find(c => c.id === id);
+                      if (!convo) return null;
+                      return (
+                        <div key={id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                          <span className="font-medium text-foreground truncate">
+                            {convo.contactName || convo.contactAddress}
+                          </span>
+                          <Badge variant="secondary" className="ml-2 shrink-0 bg-sky-500/20 text-sky-400 border-sky-500/30 text-xs">
+                            {convo.messageCount ?? 0} msgs
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                </div>
+                <p className="text-xs text-destructive/80">
+                  All messages will be moved into the Primary conversation. The source conversations will be permanently deleted. This cannot be undone.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-white/20 hover:bg-white/10">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmMerge}
+              disabled={mergeMutation.isPending}
+              className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+            >
+              {mergeMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />Merging...</>
+              ) : (
+                <><Merge className="w-4 h-4 mr-2" />Merge Conversations</>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

@@ -203,9 +203,10 @@ export interface IStorage {
   createMessageImport(importRecord: InsertMessageImport): Promise<MessageImport>;
   updateMessageImport(id: string, userId: string, updates: Partial<MessageImport>): Promise<MessageImport | undefined>;
 
-  // Message cleanup
+  // Message cleanup & merge
   deleteConversationRelayMessages(userId: string, conversationId: string): Promise<number>;
   deleteConversation(userId: string, conversationId: string): Promise<boolean>;
+  mergeConversations(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; movedMessages: number }>;
 
   // Relay API
   getUserByRelayApiKey(apiKey: string): Promise<User | undefined>;
@@ -2702,6 +2703,73 @@ export class DatabaseStorage implements IStorage {
         eq(messageConversations.userId, userId)
       ));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async mergeConversations(userId: string, targetId: string, sourceIds: string[]): Promise<{ merged: number; movedMessages: number }> {
+    if (sourceIds.length === 0) throw new Error('No source conversations provided');
+
+    // Verify all IDs belong to this user before touching anything
+    const allIds = [targetId, ...sourceIds];
+    const owned = await db.select({ id: messageConversations.id })
+      .from(messageConversations)
+      .where(and(
+        eq(messageConversations.userId, userId),
+        inArray(messageConversations.id, allIds)
+      ));
+    if (owned.length !== allIds.length) {
+      throw new Error('One or more conversations not found or not owned by user');
+    }
+
+    // Move all messages from source conversations into the target.
+    // Do this BEFORE deleting source rows so the FK cascade doesn't drop them.
+    let movedMessages = 0;
+    for (const sourceId of sourceIds) {
+      const moved = await db.update(messages)
+        .set({ conversationId: targetId })
+        .where(and(
+          eq(messages.userId, userId),
+          eq(messages.conversationId, sourceId)
+        ))
+        .returning({ id: messages.id });
+      movedMessages += moved.length;
+    }
+
+    // Recalculate target conversation aggregates from the (now-merged) messages
+    const [stats] = await db.select({
+      count: sql<number>`count(*)::int`,
+      latest: sql<Date | null>`max(${messages.timestamp})`,
+    })
+      .from(messages)
+      .where(and(
+        eq(messages.userId, userId),
+        eq(messages.conversationId, targetId)
+      ));
+
+    await db.update(messageConversations)
+      .set({
+        messageCount: stats?.count ?? 0,
+        unprocessedCount: sql`(
+          SELECT count(*)::int FROM ${messages}
+          WHERE ${messages.conversationId} = ${targetId}
+            AND ${messages.userId} = ${userId}
+            AND ${messages.topicTag} IS NULL
+        )`,
+        lastMessageAt: stats?.latest ?? sql`now()`,
+      })
+      .where(and(
+        eq(messageConversations.id, targetId),
+        eq(messageConversations.userId, userId)
+      ));
+
+    // Delete source conversation rows. Any messages still pointing to them
+    // (none, since we moved them all) would cascade-delete; that is intentional.
+    await db.delete(messageConversations)
+      .where(and(
+        eq(messageConversations.userId, userId),
+        inArray(messageConversations.id, sourceIds)
+      ));
+
+    return { merged: sourceIds.length, movedMessages };
   }
 
   // ── Relay API ────────────────────────────────────────────────────────────────

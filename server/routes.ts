@@ -6195,6 +6195,42 @@ Respond with JSON only.`
     }
   });
 
+  app.post("/api/messages/conversations/merge", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const schema = z.object({
+        targetId: z.string().uuid(),
+        sourceIds: z.array(z.string().uuid()).min(1).max(50),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid request body", errors: parsed.error.issues });
+      }
+      const { targetId, sourceIds } = parsed.data;
+
+      // Guard: targetId cannot appear in sourceIds
+      if (sourceIds.includes(targetId)) {
+        return res.status(400).json({ message: "Target conversation cannot also be a source" });
+      }
+
+      const result = await storage.mergeConversations(user.id, targetId, sourceIds);
+      const target = await storage.getMessageConversation(targetId, user.id);
+
+      res.json({
+        ok: true,
+        message: `Merged ${result.merged} conversation(s), moved ${result.movedMessages} message(s)`,
+        merged: result.merged,
+        movedMessages: result.movedMessages,
+        conversation: target,
+      });
+    } catch (error: any) {
+      if (error?.message?.includes('not found or not owned')) {
+        return res.status(403).json({ message: "One or more conversations not found" });
+      }
+      sendErrorResponse(res, 500, "Failed to merge conversations", error);
+    }
+  });
+
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
