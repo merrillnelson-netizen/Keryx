@@ -127,17 +127,25 @@ class SmsObserverService : LifecycleService() {
     /**
      * Queries new sent SMS rows and relays them with checkpoint safety.
      *
-     * Flow for each new row:
-     * 1. Call [RelayClient.sendOrQueue] — this attempts immediate HTTP POST first.
-     *    - On 2xx success: message is delivered; returns `true`.
-     *    - On 5xx/network error: message is durably written to Room for [RetryWorker]; returns `true`.
-     *    - On 4xx (bad config): message is dropped; returns `false` — checkpoint NOT advanced.
-     * 2. Advance [Prefs.lastSentSmsId] to this row's `_id` ONLY when `sendOrQueue` returns `true`,
-     *    meaning the message is either delivered or durably queued for retry.
+     * Design note — immediate send vs. debounce buffer:
+     * The notification listener (incoming messages) uses [RelayClient.enqueue] which batches
+     * via a 2.5s debounce buffer. The SMS content-observer path intentionally uses
+     * [RelayClient.sendOrQueue] (immediate send) because it requires a per-message durability
+     * acknowledgement to safely advance the `_id` checkpoint. Batching multiple rows into the
+     * debounce buffer would make it impossible to know which individual `_id` values are safe
+     * to checkpoint on a partial success.
      *
-     * The checkpoint is therefore always tied to confirmed durability — never advanced speculatively.
-     * This gives at-least-once delivery semantics (Room retry may deliver duplicate if process dies
-     * between successful relay and checkpoint write — acceptable trade-off).
+     * Flow for each new row:
+     * 1. Call [RelayClient.sendOrQueue] — attempts immediate HTTP POST first.
+     *    - On 2xx success: delivered; returns `true`.
+     *    - On 5xx/network error: durably written to Room for [RetryWorker]; returns `true`.
+     *    - On 4xx (bad config): dropped permanently; returns `false`.
+     * 2. Advance [Prefs.lastSentSmsId] ONLY when `sendOrQueue` returns `true` — meaning the
+     *    message is either confirmed delivered or durably queued for retry.
+     *    If `false` (4xx): stop processing further rows without advancing checkpoint.
+     *
+     * At-least-once semantics: if the process dies between successful relay and checkpoint write,
+     * the same row is re-queried on next observer callback and relayed again — acceptable.
      */
     private fun checkForNewSentSms() {
         val prefs = Prefs.get(applicationContext)
