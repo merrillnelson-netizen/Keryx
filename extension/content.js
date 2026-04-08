@@ -1,5 +1,5 @@
 /**
- * Keryx SMS Relay — content.js v1.0.6
+ * Keryx SMS Relay — content.js v1.0.8
  * Runs on https://messages.google.com/*
  *
  * Strategy:
@@ -16,20 +16,24 @@
  *  - All key steps log [Keryx] prefixed messages to the DevTools console.
  *  - Session timestamp guard allows a 30-second grace window so messages
  *    sent just before observer attach are still captured.
+ *  - Per-conversation "seen" tracking prevents full conversation dumps on
+ *    every load — only genuinely new messages are relayed.
  */
 
 'use strict';
 
 // ── Deduplication ─────────────────────────────────────────────────────────────
 // Key: "<contact>|<body>|<minuteBucket>"
-// Stores the last 200 keys in chrome.storage.local with a 24h expiry.
+// Stores the last 500 keys in chrome.storage.local with a 24h expiry.
 const DEDUP_TTL_MS = 24 * 60 * 60 * 1000;
 const DEDUP_KEY = 'keryx_seen_messages';
-const DEDUP_MAX = 200;
+const DEDUP_MAX = 500;
 
-// How far back the initial scan looks when navigating to a conversation.
-// Captures messages that arrived while Lemur Browser was paused/in background.
-const INITIAL_SCAN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+// ── Per-thread "seen" tracking ────────────────────────────────────────────────
+// Tracks which threads have had an initial "mark-only" scan so subsequent
+// scans only relay NEW messages (not the whole visible conversation history).
+// Key: 'keryx_seen_threads' → { [threadId]: timestampMs }
+const SEEN_THREADS_KEY = 'keryx_seen_threads';
 
 async function isDuplicate(sender, body, ts) {
   const bucket = Math.floor(ts / 60000);
@@ -48,6 +52,23 @@ async function isDuplicate(sender, body, ts) {
   }
   await chrome.storage.local.set({ [DEDUP_KEY]: seen });
   return false;
+}
+
+/**
+ * Returns true if this thread has already had its initial mark-only scan.
+ * On first encounter of a thread, we mark all visible messages as seen
+ * without relaying so we don't dump the whole conversation history.
+ */
+async function isThreadSeen(threadId) {
+  const { [SEEN_THREADS_KEY]: seen = {} } = await chrome.storage.local.get(SEEN_THREADS_KEY);
+  return !!seen[threadId];
+}
+
+/** Record that we have completed the initial mark-only scan for this thread. */
+async function markThreadSeen(threadId) {
+  const { [SEEN_THREADS_KEY]: seen = {} } = await chrome.storage.local.get(SEEN_THREADS_KEY);
+  seen[threadId] = Date.now();
+  await chrome.storage.local.set({ [SEEN_THREADS_KEY]: seen });
 }
 
 // ── DOM Helpers ───────────────────────────────────────────────────────────────
@@ -471,34 +492,40 @@ async function runDedupQueue() {
 }
 
 /**
+ * Sort an array of DOM nodes by their document order (ascending).
+ * Nodes earlier in the DOM come first.
+ */
+function sortByDomOrder(nodes) {
+  return nodes.slice().sort((a, b) => {
+    const pos = a.compareDocumentPosition(b);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1; // b comes after a → a first
+    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  });
+}
+
+/**
  * Walk added DOM nodes, find message bubbles, extract text, deduplicate,
  * and relay to background.js.
  *
  * Key invariants:
  *  - Only nodes added AFTER sessionStartedAt are relayed (no history dumps).
  *  - Dedup checks run sequentially to avoid read-before-write races in storage.
+ *  - DOM-order tiebreaker: messages in the same cluster get distinct timestamps
+ *    (base + N×1000 ms) so Keryx can sort them correctly even when the header
+ *    covers the whole cluster with a single minute-level time.
  */
 function processNodes(nodes) {
   // ── Guard 1: only relay when a specific conversation is open ────────────
-  // When the user is on the conversation list (not inside a conversation),
-  // the observer fires for list-item mutations.  We must not relay those —
-  // they have no meaningful contact header and end up in a single "unknown"
-  // conversation in Keryx.
   if (!isViewingConversation()) {
     console.log('[Keryx] Skipping — not in a specific conversation (list view or home)');
     return;
   }
 
   // ── Guard 2: resolve contact address before processing any nodes ─────────
-  // DESIGN: thread ID is the STABLE contact address (unique per conversation),
-  // so Keryx always groups messages correctly even if the DOM name changes.
-  // The human-readable DOM name is sent separately as "name" so it becomes the
-  // conversation's contactName in Keryx (displayed as "Michael Nelson" rather
-  // than "CgIEBISNZ7...").  DOM name falls back to thread ID only when we are
-  // genuinely in a conversation URL that somehow has no thread ID segment.
   const domName = getContactName();
   const threadId = getThreadIdFromUrl();
-  const address = threadId || domName; // thread ID preferred; DOM name as last resort
+  const address = threadId || domName;
   if (!address) {
     console.log('[Keryx] Skipping — could not identify thread ID or contact name');
     return;
@@ -509,20 +536,15 @@ function processNodes(nodes) {
     console.log(`[Keryx] No thread ID in URL — using DOM name as address: "${address}"`);
   }
 
-  // Scan the container once for timestamp group-header elements so each
-  // candidate can look up the nearest preceding header for its timestamp.
+  // Scan the container once for timestamp group-header elements
   const headerTimestamps = extractHeaderTimestamps(activeTarget || findConversationContainer());
 
+  // Collect and sort candidates by DOM order for consistent tiebreaking
+  const candidates = new Set();
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
-    const candidates = new Set();
     const tag = node.tagName?.toLowerCase() || '';
-
-    // Direct match: node is a message bubble element.
-    // IMPORTANT: do NOT use tag.includes('message') — it is too broad and
-    // matches conversation list items (e.g. mws-conversation-list-item).
-    // Only match known message-bubble custom elements and explicit data attrs.
     if (
       tag === 'mws-message-part' ||
       tag === 'mws-message' ||
@@ -534,83 +556,87 @@ function processNodes(nodes) {
       candidates.add(node);
     }
 
-    // Children: explicit message-bubble element types and data attributes only.
-    // role="listitem" is intentionally excluded — conversation list rows also
-    // carry that role and would be incorrectly captured.
-    // [jsmodel][data-node-index] is also excluded — too broad in practice and
-    // fully covered by the known tag/data-attr selectors above.
     const childMatches = node.querySelectorAll?.(
       'mws-message-part, mws-message, mws-text-message-part, ' +
       '[data-message-id], [data-e2e-message-id], [data-message-item]'
     ) ?? [];
     for (const c of childMatches) candidates.add(c);
-
-    for (const candidate of candidates) {
-      const text = extractMessageText(candidate);
-      if (!text) {
-        // Log when extraction fails so the DOM structure is visible in DevTools.
-        // Always log (even for empty nodes) so silent failures are never invisible.
-        const hint = (candidate.innerText ?? candidate.textContent ?? '').trim().slice(0, 40);
-        console.warn('[Keryx] Could not extract text — node:', candidate.tagName?.toLowerCase(), '| hint:', hint || '(empty)');
-        continue;
-      }
-
-      // Per-bubble timestamp (usually null for Google Messages — it stores
-      // timestamps on group-header separators, not individual bubbles).
-      const msgTs = extractMessageTimestamp(candidate);
-
-      // Context timestamp: nearest preceding group-header separator.
-      // Used when per-bubble timestamp is unavailable.
-      const ctxTs = msgTs ?? getContextTimestamp(candidate, headerTimestamps);
-
-      // Session-start guard: if we can resolve a timestamp and it predates
-      // observer attach by more than the grace window, this is a historical
-      // message — skip it.  When neither source yields a timestamp (brand-new
-      // message whose header hasn't rendered yet) ctxTs is null and we fall
-      // through to Date.now(), which is the correct time for a just-sent msg.
-      if (ctxTs !== null && ctxTs < sessionStartedAt - SESSION_GRACE_MS) {
-        console.log(`[Keryx] Skipping pre-session message (ts=${new Date(ctxTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
-        continue;
-      }
-
-      const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-      // Use per-bubble → context header → now (in that precedence order)
-      const ts = ctxTs ?? Date.now();
-
-      // Enqueue serialised dedup+relay to prevent concurrent storage races.
-      dedupQueue.push(async () => {
-        try {
-          const dup = await isDuplicate(address, text, ts);
-          if (dup) {
-            console.log(`[Keryx] Dedup skip (${direction}) from "${address}": "${text.slice(0, 40)}"`);
-            return;
-          }
-          console.log(`[Keryx] Relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
-          chrome.runtime.sendMessage(
-            {
-              type: 'relay_sms',
-              address,
-              ...(domName ? { name: domName } : {}),
-              body: text,
-              direction,
-              timestamp: new Date(ts).toISOString(),
-            },
-            (resp) => {
-              if (chrome.runtime.lastError) {
-                console.warn('[Keryx] sendMessage error:', chrome.runtime.lastError.message);
-              } else if (resp?.ok) {
-                console.log('[Keryx] Relay OK — routed_to:', resp.data?.routed_to);
-              } else {
-                console.warn('[Keryx] Relay failed:', resp?.error);
-              }
-            }
-          );
-        } catch (err) {
-          console.error('[Keryx] Dedup error:', err);
-        }
-      });
-    }
   }
+
+  // Sort by DOM order so timestamp tiebreaker is deterministic
+  const sortedCandidates = sortByDomOrder(Array.from(candidates));
+
+  // ── DOM-order timestamp tiebreaker state ─────────────────────────────────
+  // Google Messages groups messages under a single cluster header. Every
+  // message in the cluster gets the same ctxTs from that header. We add
+  // N×1000 ms per message (by DOM position) so Keryx can sort them correctly.
+  let lastClusterTs = null;
+  let clusterOffset = 0;
+
+  for (const candidate of sortedCandidates) {
+    const text = extractMessageText(candidate);
+    if (!text) {
+      const hint = (candidate.innerText ?? candidate.textContent ?? '').trim().slice(0, 40);
+      console.warn('[Keryx] Could not extract text — node:', candidate.tagName?.toLowerCase(), '| hint:', hint || '(empty)');
+      continue;
+    }
+
+    const msgTs = extractMessageTimestamp(candidate);
+    const ctxTs = msgTs ?? getContextTimestamp(candidate, headerTimestamps);
+
+    // Session-start guard: skip pre-session historical messages.
+    // When ctxTs is null (brand-new message, header not yet rendered) we fall
+    // through to Date.now() which is the correct time for a just-sent message.
+    if (ctxTs !== null && ctxTs < sessionStartedAt - SESSION_GRACE_MS) {
+      console.log(`[Keryx] Skipping pre-session message (ts=${new Date(ctxTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
+      continue;
+    }
+
+    // Apply DOM-order tiebreaker within the same cluster
+    const baseTs = ctxTs ?? Date.now();
+    if (baseTs === lastClusterTs) {
+      clusterOffset++;
+    } else {
+      lastClusterTs = baseTs;
+      clusterOffset = 0;
+    }
+    const finalTs = baseTs + clusterOffset * 1000;
+
+    const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
+
+    dedupQueue.push(async () => {
+      try {
+        const dup = await isDuplicate(address, text, finalTs);
+        if (dup) {
+          console.log(`[Keryx] Dedup skip (${direction}) from "${address}": "${text.slice(0, 40)}"`);
+          return;
+        }
+        console.log(`[Keryx] Relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
+        chrome.runtime.sendMessage(
+          {
+            type: 'relay_sms',
+            address,
+            ...(domName ? { name: domName } : {}),
+            body: text,
+            direction,
+            timestamp: new Date(finalTs).toISOString(),
+          },
+          (resp) => {
+            if (chrome.runtime.lastError) {
+              console.warn('[Keryx] sendMessage error:', chrome.runtime.lastError.message);
+            } else if (resp?.ok) {
+              console.log('[Keryx] Relay OK — routed_to:', resp.data?.routed_to);
+            } else {
+              console.warn('[Keryx] Relay failed:', resp?.error);
+            }
+          }
+        );
+      } catch (err) {
+        console.error('[Keryx] Dedup error:', err);
+      }
+    });
+  }
+
   // Kick the queue runner (no-op if already running)
   runDedupQueue();
 }
@@ -621,19 +647,14 @@ function processNodes(nodes) {
  */
 function findConversationContainer() {
   const selectors = [
-    // Angular custom elements — most specific (current Google Messages)
     'mws-messages-list',
     'mws-conversation-container',
-    // data-testid attributes (stable across DOM refactors)
     '[data-testid="message-list"]',
     '[data-testid="conversation-container"]',
-    // Class-based (may change across versions but common historically)
     '.message-list-content',
     '.conversation-container',
-    // Semantic/structural — most stable, unlikely to change
     '[role="list"][aria-label]',
     'main [role="list"]',
-    // Broad fallbacks
     'main',
     '#main-content',
   ];
@@ -641,91 +662,129 @@ function findConversationContainer() {
     const el = document.querySelector(sel);
     if (el) return el;
   }
-  console.warn('[Keryx] Could not find conversation container — falling back to document.body. Google Messages DOM may have changed. Open DevTools to inspect the message list structure.');
+  console.warn('[Keryx] Could not find conversation container — falling back to document.body.');
   return document.body;
 }
 
 /**
  * One-time scan of currently-visible messages in the open conversation.
- * Runs after the observer attaches (with a short delay for DOM to settle).
  *
- * Purpose: capture messages that arrived while Lemur Browser was paused or
- * in the background — the MutationObserver only fires on NEW mutations, so
- * these would otherwise be missed until the next incoming message.
+ * Behaviour depends on whether this thread has been scanned before:
  *
- * Only relays messages whose timestamp is within INITIAL_SCAN_WINDOW_MS (5 min).
- * Older history is skipped to prevent accidental history dumps.
- * All candidates go through the normal dedup queue so no duplicates are created.
+ *  FIRST LOAD (thread not in keryx_seen_threads):
+ *    Mark all visible messages in the dedup cache WITHOUT relaying them.
+ *    This prevents the full conversation history from dumping into Keryx.
+ *    Records the thread as "seen" so subsequent scans use relay mode.
+ *
+ *  SUBSEQUENT LOADS (thread already in keryx_seen_threads):
+ *    Relay any message not already in the dedup cache — i.e. messages that
+ *    arrived since the last time this conversation was active.
+ *
+ * In both modes, a DOM-order tiebreaker adds N×1000 ms to messages that share
+ * the same cluster-header timestamp so Keryx can sort them correctly.
  */
-function doInitialScan() {
+async function doInitialScan() {
   if (!isViewingConversation()) return;
 
   const domName = getContactName();
   const threadId = getThreadIdFromUrl();
   const address = threadId || domName;
-  if (!address) return;
+  if (!address || !threadId) return;
 
-  const now = Date.now();
-  const cutoff = now - INITIAL_SCAN_WINDOW_MS;
   const container = findConversationContainer();
-
-  // Build header-context map once for the whole scan
   const headers = extractHeaderTimestamps(container);
 
-  const candidates = container.querySelectorAll(
+  const rawCandidates = container.querySelectorAll(
     'mws-message-part, mws-message, mws-text-message-part, ' +
     '[data-message-id], [data-e2e-message-id], [data-message-item]'
   );
 
+  // Sort by DOM order for consistent tiebreaker
+  const candidates = sortByDomOrder(Array.from(rawCandidates));
+
+  // Check whether this is the first time we've scanned this thread
+  const firstLoad = !(await isThreadSeen(threadId));
+
+  if (firstLoad) {
+    console.log(`[Keryx] Initial scan (MARK-ONLY): first encounter of thread "${threadId}" — marking ${candidates.length} visible message(s) as seen without relaying`);
+  } else {
+    console.log(`[Keryx] Initial scan (RELAY mode): checking ${candidates.length} visible message(s) for new arrivals`);
+  }
+
+  // DOM-order tiebreaker state
+  let lastClusterTs = null;
+  let clusterOffset = 0;
   let found = 0;
+
   for (const candidate of candidates) {
     const text = extractMessageText(candidate);
     if (!text) continue;
 
-    // Try per-bubble timestamp first, then nearest preceding group header.
     const msgTs = extractMessageTimestamp(candidate);
     const ctxTs = msgTs ?? getContextTimestamp(candidate, headers);
 
-    // If neither source yields a timestamp, we cannot determine whether this
-    // message is within the recent window — skip it to avoid history dumps.
+    // Skip messages with no resolvable timestamp — we can't dedup or order them
     if (ctxTs === null) {
       console.log('[Keryx] Initial scan: skipping candidate — no timestamp (per-bubble or header context)');
       continue;
     }
-    // Outside the 5-minute recency window — skip old history
-    if (ctxTs < cutoff) continue;
 
-    found++;
-    const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-    const ts = ctxTs;
+    // Apply DOM-order tiebreaker within the same cluster
+    if (ctxTs === lastClusterTs) {
+      clusterOffset++;
+    } else {
+      lastClusterTs = ctxTs;
+      clusterOffset = 0;
+    }
+    const finalTs = ctxTs + clusterOffset * 1000;
 
+    if (firstLoad) {
+      // MARK-ONLY: register in dedup cache without relaying
+      dedupQueue.push(async () => {
+        try {
+          await isDuplicate(address, text, finalTs); // side effect: registers key in cache
+        } catch (err) {
+          console.error('[Keryx] Mark-only dedup error:', err);
+        }
+      });
+    } else {
+      // RELAY MODE: send new messages to Keryx
+      found++;
+      const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
+
+      dedupQueue.push(async () => {
+        try {
+          const dup = await isDuplicate(address, text, finalTs);
+          if (dup) return;
+          console.log(`[Keryx] Initial scan relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
+          chrome.runtime.sendMessage({
+            type: 'relay_sms',
+            address,
+            ...(domName ? { name: domName } : {}),
+            body: text,
+            direction,
+            timestamp: new Date(finalTs).toISOString(),
+          });
+        } catch (err) {
+          console.error('[Keryx] Initial scan relay error:', err);
+        }
+      });
+    }
+  }
+
+  if (firstLoad) {
+    // After marking all visible messages, record this thread as seen
+    // so the NEXT scan uses relay mode
     dedupQueue.push(async () => {
-      try {
-        const dup = await isDuplicate(address, text, ts);
-        if (dup) return;
-        console.log(`[Keryx] Initial scan relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
-        chrome.runtime.sendMessage({
-          type: 'relay_sms',
-          address,
-          ...(domName ? { name: domName } : {}),
-          body: text,
-          direction,
-          timestamp: new Date(ts).toISOString(),
-        });
-      } catch (err) {
-        console.error('[Keryx] Initial scan relay error:', err);
-      }
+      await markThreadSeen(threadId);
+      console.log(`[Keryx] Thread "${threadId}" marked as seen — future scans will relay new messages`);
     });
-  }
-
-  if (found > 0) {
-    console.log(`[Keryx] Initial scan queued ${found} recent message(s) for relay`);
+  } else if (found > 0) {
+    console.log(`[Keryx] Initial scan queued ${found} message(s) for relay`);
   } else {
-    console.log('[Keryx] Initial scan: no recent messages found');
+    console.log('[Keryx] Initial scan: no new messages found');
   }
 
-  // Drain the queue — without this call the items enqueued above would sit idle
-  // until the next MutationObserver mutation triggers processNodes() → runDedupQueue().
   runDedupQueue();
 }
 
@@ -755,25 +814,20 @@ function attachObserver(targetEl) {
   sessionStartedAt = Date.now();
   console.log('[Keryx] Observer attached to', targetEl.tagName?.toLowerCase() || 'body', '— watching for NEW messages only');
 
-  // Run a one-time scan of currently-visible messages after a short delay so
-  // the DOM has time to finish rendering the conversation thread.
-  // This picks up messages that arrived while Lemur Browser was in the background.
+  // Run a one-time scan after a short delay so the DOM finishes rendering.
   setTimeout(doInitialScan, 800);
 }
 
 // ── Initialisation ────────────────────────────────────────────────────────────
 
-/**
- * Track the last seen thread ID so we can detect conversation switches even
- * when Google Messages SPA reuses the same container element across navigations.
- */
+/** Track the last seen thread ID to detect conversation switches. */
 let activeThreadId = null;
 
 /**
  * Called whenever URL or DOM nav is detected. Handles two cases:
- * 1. Container node changed → re-attach MutationObserver (which also triggers doInitialScan).
- * 2. Container same but thread ID changed → container element reused for new conversation;
- *    call doInitialScan() directly so recent messages aren't missed without a full re-attach.
+ * 1. Container node changed → re-attach MutationObserver (also triggers doInitialScan).
+ * 2. Container same but thread ID changed → SPA reused container;
+ *    call doInitialScan() directly so recent messages aren't missed.
  */
 function handleNavigation(reason) {
   const newContainer = findConversationContainer();
@@ -785,12 +839,28 @@ function handleNavigation(reason) {
     attachObserver(newContainer); // attachObserver already calls setTimeout(doInitialScan, 800)
   } else if (newThreadId && newThreadId !== activeThreadId) {
     // Same DOM container, new thread — SPA reused the container element.
-    // MutationObserver is already attached, but we still need a fresh initial scan.
     console.log(`[Keryx] Thread changed (${reason}): "${activeThreadId}" → "${newThreadId}" (container reused) — running initial scan`);
     activeThreadId = newThreadId;
     setTimeout(doInitialScan, 800);
   }
 }
+
+/**
+ * Handle messages from the background service worker.
+ *  - background_scan: service worker alarm triggered a periodic check;
+ *    run doInitialScan() to pick up any messages that arrived while the
+ *    content script was suspended in a background tab.
+ */
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'background_scan') {
+    console.log('[Keryx] Background scan triggered by service worker alarm');
+    // doInitialScan enqueues async work and returns synchronously
+    doInitialScan();
+    sendResponse({ ok: true });
+  }
+  // Return false (sync response already sent above) — do NOT return true
+  // unless we need to send an async response, to avoid keeping the channel open.
+});
 
 /**
  * Main entry point.

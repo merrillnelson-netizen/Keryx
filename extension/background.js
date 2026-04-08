@@ -6,12 +6,78 @@
  *  - POST them to /api/relay/inbound using the stored API key + endpoint
  *  - Track connection status (last 200 OK timestamp) in chrome.storage.local
  *  - Provide status to popup.js via chrome.runtime.onMessage
+ *  - Periodically ping the Google Messages tab so content.js can scan for
+ *    new messages even while Lemur Browser is in the background
  */
 
 'use strict';
 
 const STATUS_KEY = 'keryx_relay_status'; // { lastOk, lastError, errorMsg }
 const CONFIG_KEY = 'keryx_config';       // { apiKey, endpoint }
+
+// ── Background alarm: periodic scan of Google Messages tab ───────────────────
+
+const BG_ALARM_NAME = 'keryx_bg_scan';
+const BG_ALARM_PERIOD_MIN = 2; // every 2 minutes
+
+/**
+ * Create the periodic scan alarm if it doesn't already exist.
+ * Safe to call multiple times — won't create duplicates.
+ */
+function setupAlarm() {
+  chrome.alarms.get(BG_ALARM_NAME, (existing) => {
+    if (!existing) {
+      chrome.alarms.create(BG_ALARM_NAME, { periodInMinutes: BG_ALARM_PERIOD_MIN });
+      console.log(`[Keryx] Background scan alarm created (every ${BG_ALARM_PERIOD_MIN} min)`);
+    }
+  });
+}
+
+// Set up alarm on install, browser start, and immediately on service worker launch
+chrome.runtime.onInstalled.addListener(setupAlarm);
+chrome.runtime.onStartup.addListener(setupAlarm);
+setupAlarm();
+
+/**
+ * Send a background_scan message to every open Google Messages tab.
+ * content.js handles the message by running doInitialScan() to pick up
+ * any messages that arrived while the content script was throttled/suspended.
+ */
+async function triggerBackgroundScan() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({ url: 'https://messages.google.com/*' });
+  } catch (err) {
+    console.log('[Keryx] Background scan: tabs.query failed —', err.message);
+    return;
+  }
+
+  if (!tabs.length) {
+    console.log('[Keryx] Background scan: no Google Messages tab found');
+    return;
+  }
+
+  for (const tab of tabs) {
+    chrome.tabs.sendMessage(tab.id, { type: 'background_scan' }, (resp) => {
+      if (chrome.runtime.lastError) {
+        // Tab may be discarded or content script not yet injected — safe to ignore
+        console.log(
+          `[Keryx] Background scan: content script not ready in tab ${tab.id} —`,
+          chrome.runtime.lastError.message
+        );
+      } else {
+        console.log(`[Keryx] Background scan triggered in tab ${tab.id}`, resp ?? '');
+      }
+    });
+  }
+}
+
+// Handle alarm events
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === BG_ALARM_NAME) {
+    triggerBackgroundScan();
+  }
+});
 
 // ── Message handler ───────────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -71,9 +137,6 @@ async function handleRelaySms({ address, body, direction, timestamp, name }) {
     body,
     direction: direction ?? 'received',
     timestamp,
-    // name is the human-readable contact label (e.g. "Michael Nelson").
-    // Included when content.js can read it from the DOM header; omitted otherwise.
-    // The relay server stores it as contactName on the conversation.
     ...(name ? { name } : {}),
   };
 
