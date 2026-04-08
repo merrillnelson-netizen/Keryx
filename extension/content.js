@@ -255,10 +255,6 @@ function parseRelativeTime(text) {
   if (!text) return null;
   text = text.trim();
 
-  // Direct parse first — handles ISO strings and other absolute formats
-  const direct = new Date(text).getTime();
-  if (!isNaN(direct) && direct > 946684800000 /* year 2000 */) return direct;
-
   const now = new Date();
 
   // Apply HH:MM AM/PM to a base Date, return ms or null
@@ -276,13 +272,15 @@ function parseRelativeTime(text) {
     return isNaN(result) ? null : result;
   }
 
-  // "Today, 3:42 PM" — or just "Today"
+  // ── Relative patterns (checked BEFORE direct parse to avoid JS mis-parsing) ──
+
+  // "Today, 3:42 PM" or just "Today"
   if (/^today/i.test(text)) {
     const timeStr = text.replace(/^today[,\s]*/i, '').trim();
     return timeStr ? applyTime(now, timeStr) : (() => { const d = new Date(now); d.setHours(0,0,0,0); return d.getTime(); })();
   }
 
-  // "Yesterday, 3:42 PM"
+  // "Yesterday, 3:42 PM" or just "Yesterday"
   if (/^yesterday/i.test(text)) {
     const timeStr = text.replace(/^yesterday[,\s]*/i, '').trim();
     const yesterday = new Date(now);
@@ -305,8 +303,11 @@ function parseRelativeTime(text) {
   }
 
   // "Apr 7, 3:42 PM" or "Apr 7, 2025, 3:42 PM"
+  // IMPORTANT: handle BEFORE the direct-parse fallback — new Date("Apr 7, 3:42 PM")
+  // resolves to an incorrect year (2001) in some JS engines.
   const mDate = text.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),\s*(?:(\d{4}),\s*)?(.+)$/);
   if (mDate) {
+    // If an explicit 4-digit year is present use it; otherwise force current year.
     const year = mDate[3] ? parseInt(mDate[3], 10) : now.getFullYear();
     const base = new Date(`${mDate[1]} ${mDate[2]}, ${year}`);
     if (!isNaN(base.getTime())) return applyTime(base, mDate[4]);
@@ -316,6 +317,12 @@ function parseRelativeTime(text) {
   if (/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(text)) {
     return applyTime(now, text);
   }
+
+  // ── Absolute fallback: ISO strings / RFC-2822 / full date strings ─────────
+  // Only reached for strings that matched none of the relative patterns above.
+  // Validate the year is plausible (post-2000) to catch mis-parses.
+  const direct = new Date(text).getTime();
+  if (!isNaN(direct) && direct > 946684800000 /* 2000-01-01 */) return direct;
 
   return null;
 }
