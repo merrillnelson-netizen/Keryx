@@ -2756,7 +2756,9 @@ export class DatabaseStorage implements IStorage {
         )`,
         // Use null when no messages remain, not now() — keeps true aggregate semantics
         // and avoids artificially inflating the lastMessageAt timestamp.
-        lastMessageAt: stats?.latest ?? null,
+        // MAX() returns a string from postgres; wrap in new Date() so Drizzle's
+        // PgTimestamp.mapToDriverValue can call .toISOString() on it.
+        lastMessageAt: stats?.latest ? new Date(stats.latest as any) : null,
       })
       .where(and(
         eq(messageConversations.id, targetId),
