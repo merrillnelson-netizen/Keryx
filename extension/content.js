@@ -16,8 +16,8 @@
  *  - All key steps log [Keryx] prefixed messages to the DevTools console.
  *  - Session timestamp guard allows a 30-second grace window so messages
  *    sent just before observer attach are still captured.
- *  - Per-conversation "seen" tracking prevents full conversation dumps on
- *    every load — only genuinely new messages are relayed.
+ *  - Per-conversation relay checkpoint (keryx_relay_checkpoint) prevents
+ *    full conversation history dumps — only genuinely new messages relay.
  */
 
 'use strict';
@@ -29,11 +29,12 @@ const DEDUP_TTL_MS = 24 * 60 * 60 * 1000;
 const DEDUP_KEY = 'keryx_seen_messages';
 const DEDUP_MAX = 500;
 
-// ── Per-thread "seen" tracking ────────────────────────────────────────────────
-// Tracks which threads have had an initial "mark-only" scan so subsequent
-// scans only relay NEW messages (not the whole visible conversation history).
-// Key: 'keryx_seen_threads' → { [threadId]: timestampMs }
-const SEEN_THREADS_KEY = 'keryx_seen_threads';
+// ── Per-conversation relay checkpoint ─────────────────────────────────────────
+// Key: 'keryx_relay_checkpoint' → { [threadId]: timestampMs }
+// Tracks the highest message timestamp relayed for each conversation thread.
+// First load (null): mark all visible messages as seen + set checkpoint to now.
+// Subsequent loads: only relay messages with resolvedTs > checkpoint.
+const CHECKPOINT_KEY = 'keryx_relay_checkpoint';
 
 async function isDuplicate(sender, body, ts) {
   const bucket = Math.floor(ts / 60000);
@@ -55,20 +56,24 @@ async function isDuplicate(sender, body, ts) {
 }
 
 /**
- * Returns true if this thread has already had its initial mark-only scan.
- * On first encounter of a thread, we mark all visible messages as seen
- * without relaying so we don't dump the whole conversation history.
+ * Returns the stored relay checkpoint timestamp for a thread, or null if this
+ * thread has never been scanned (i.e. this is the first load).
  */
-async function isThreadSeen(threadId) {
-  const { [SEEN_THREADS_KEY]: seen = {} } = await chrome.storage.local.get(SEEN_THREADS_KEY);
-  return !!seen[threadId];
+async function getCheckpoint(threadId) {
+  const { [CHECKPOINT_KEY]: cp = {} } = await chrome.storage.local.get(CHECKPOINT_KEY);
+  return cp[threadId] ?? null;
 }
 
-/** Record that we have completed the initial mark-only scan for this thread. */
-async function markThreadSeen(threadId) {
-  const { [SEEN_THREADS_KEY]: seen = {} } = await chrome.storage.local.get(SEEN_THREADS_KEY);
-  seen[threadId] = Date.now();
-  await chrome.storage.local.set({ [SEEN_THREADS_KEY]: seen });
+/**
+ * Advance the relay checkpoint for a thread.
+ * Only moves forward — never decrements the stored value.
+ */
+async function updateCheckpoint(threadId, ts) {
+  const { [CHECKPOINT_KEY]: cp = {} } = await chrome.storage.local.get(CHECKPOINT_KEY);
+  if (!cp[threadId] || ts > cp[threadId]) {
+    cp[threadId] = ts;
+    await chrome.storage.local.set({ [CHECKPOINT_KEY]: cp });
+  }
 }
 
 // ── DOM Helpers ───────────────────────────────────────────────────────────────
@@ -492,8 +497,8 @@ async function runDedupQueue() {
 }
 
 /**
- * Sort an array of DOM nodes by their document order (ascending).
- * Nodes earlier in the DOM come first.
+ * Sort an array of DOM nodes into document order (ascending).
+ * Earlier nodes in the DOM come first.
  */
 function sortByDomOrder(nodes) {
   return nodes.slice().sort((a, b) => {
@@ -511,9 +516,8 @@ function sortByDomOrder(nodes) {
  * Key invariants:
  *  - Only nodes added AFTER sessionStartedAt are relayed (no history dumps).
  *  - Dedup checks run sequentially to avoid read-before-write races in storage.
- *  - DOM-order tiebreaker: messages in the same cluster get distinct timestamps
- *    (base + N×1000 ms) so Keryx can sort them correctly even when the header
- *    covers the whole cluster with a single minute-level time.
+ *  - DOM-order tiebreaker: messages sharing the same cluster header timestamp
+ *    each get base + N×1000 ms so Keryx can sort them correctly.
  */
 function processNodes(nodes) {
   // ── Guard 1: only relay when a specific conversation is open ────────────
@@ -539,8 +543,8 @@ function processNodes(nodes) {
   // Scan the container once for timestamp group-header elements
   const headerTimestamps = extractHeaderTimestamps(activeTarget || findConversationContainer());
 
-  // Collect and sort candidates by DOM order for consistent tiebreaking
-  const candidates = new Set();
+  // Collect all candidate message nodes from the mutation batch
+  const candidateSet = new Set();
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
@@ -553,27 +557,27 @@ function processNodes(nodes) {
       node.hasAttribute?.('data-e2e-message-id') ||
       node.hasAttribute?.('data-message-item')
     ) {
-      candidates.add(node);
+      candidateSet.add(node);
     }
 
     const childMatches = node.querySelectorAll?.(
       'mws-message-part, mws-message, mws-text-message-part, ' +
       '[data-message-id], [data-e2e-message-id], [data-message-item]'
     ) ?? [];
-    for (const c of childMatches) candidates.add(c);
+    for (const c of childMatches) candidateSet.add(c);
   }
 
-  // Sort by DOM order so timestamp tiebreaker is deterministic
-  const sortedCandidates = sortByDomOrder(Array.from(candidates));
+  // Sort by DOM order so the timestamp tiebreaker is deterministic
+  const candidates = sortByDomOrder(Array.from(candidateSet));
 
-  // ── DOM-order timestamp tiebreaker state ─────────────────────────────────
-  // Google Messages groups messages under a single cluster header. Every
-  // message in the cluster gets the same ctxTs from that header. We add
-  // N×1000 ms per message (by DOM position) so Keryx can sort them correctly.
+  // ── DOM-order timestamp tiebreaker ────────────────────────────────────────
+  // Google Messages groups messages under one cluster header — every message
+  // in that cluster gets the same ctxTs.  We add N×1000 ms (by DOM position)
+  // so Keryx receives distinct, ordered timestamps even within a cluster.
   let lastClusterTs = null;
   let clusterOffset = 0;
 
-  for (const candidate of sortedCandidates) {
+  for (const candidate of candidates) {
     const text = extractMessageText(candidate);
     if (!text) {
       const hint = (candidate.innerText ?? candidate.textContent ?? '').trim().slice(0, 40);
@@ -585,8 +589,6 @@ function processNodes(nodes) {
     const ctxTs = msgTs ?? getContextTimestamp(candidate, headerTimestamps);
 
     // Session-start guard: skip pre-session historical messages.
-    // When ctxTs is null (brand-new message, header not yet rendered) we fall
-    // through to Date.now() which is the correct time for a just-sent message.
     if (ctxTs !== null && ctxTs < sessionStartedAt - SESSION_GRACE_MS) {
       console.log(`[Keryx] Skipping pre-session message (ts=${new Date(ctxTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
       continue;
@@ -604,22 +606,29 @@ function processNodes(nodes) {
 
     const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
 
+    // Capture loop variables for the async closure
+    const msgBody = text;
+    const msgFinalTs = finalTs;
+    const msgDir = direction;
+    const msgAddress = address;
+    const msgDomName = domName;
+
     dedupQueue.push(async () => {
       try {
-        const dup = await isDuplicate(address, text, finalTs);
+        const dup = await isDuplicate(msgAddress, msgBody, msgFinalTs);
         if (dup) {
-          console.log(`[Keryx] Dedup skip (${direction}) from "${address}": "${text.slice(0, 40)}"`);
+          console.log(`[Keryx] Dedup skip (${msgDir}) from "${msgAddress}": "${msgBody.slice(0, 40)}"`);
           return;
         }
-        console.log(`[Keryx] Relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
+        console.log(`[Keryx] Relaying ${msgDir} msg from "${msgAddress}"${msgDomName ? ` (${msgDomName})` : ''}: "${msgBody.slice(0, 60)}"`);
         chrome.runtime.sendMessage(
           {
             type: 'relay_sms',
-            address,
-            ...(domName ? { name: domName } : {}),
-            body: text,
-            direction,
-            timestamp: new Date(finalTs).toISOString(),
+            address: msgAddress,
+            ...(msgDomName ? { name: msgDomName } : {}),
+            body: msgBody,
+            direction: msgDir,
+            timestamp: new Date(msgFinalTs).toISOString(),
           },
           (resp) => {
             if (chrome.runtime.lastError) {
@@ -669,19 +678,22 @@ function findConversationContainer() {
 /**
  * One-time scan of currently-visible messages in the open conversation.
  *
- * Behaviour depends on whether this thread has been scanned before:
+ * Uses a per-thread relay checkpoint (keryx_relay_checkpoint) to decide what
+ * to do with visible messages:
  *
- *  FIRST LOAD (thread not in keryx_seen_threads):
- *    Mark all visible messages in the dedup cache WITHOUT relaying them.
- *    This prevents the full conversation history from dumping into Keryx.
- *    Records the thread as "seen" so subsequent scans use relay mode.
+ *  FIRST LOAD — no checkpoint stored for this thread:
+ *    Registers all visible messages in the dedup cache WITHOUT relaying.
+ *    Sets the checkpoint to Date.now() so only messages arriving after this
+ *    moment can relay in future scans.  This prevents history dumps.
  *
- *  SUBSEQUENT LOADS (thread already in keryx_seen_threads):
- *    Relay any message not already in the dedup cache — i.e. messages that
- *    arrived since the last time this conversation was active.
+ *  SUBSEQUENT LOADS — checkpoint = T:
+ *    Relays any message whose resolved timestamp is strictly greater than T
+ *    AND that hasn't been seen in the dedup cache.  After the batch, advances
+ *    the checkpoint to the highest successfully queued timestamp.
  *
- * In both modes, a DOM-order tiebreaker adds N×1000 ms to messages that share
- * the same cluster-header timestamp so Keryx can sort them correctly.
+ * In both modes, a DOM-order tiebreaker (N×1000 ms offset) ensures messages
+ * that share the same cluster-header timestamp arrive at Keryx in the correct
+ * order.
  */
 async function doInitialScan() {
   if (!isViewingConversation()) return;
@@ -699,22 +711,25 @@ async function doInitialScan() {
     '[data-message-id], [data-e2e-message-id], [data-message-item]'
   );
 
-  // Sort by DOM order for consistent tiebreaker
+  // Sort by DOM order for deterministic tiebreaker
   const candidates = sortByDomOrder(Array.from(rawCandidates));
 
-  // Check whether this is the first time we've scanned this thread
-  const firstLoad = !(await isThreadSeen(threadId));
+  const checkpoint = await getCheckpoint(threadId); // null on first load
+  const firstLoad = checkpoint === null;
 
   if (firstLoad) {
-    console.log(`[Keryx] Initial scan (MARK-ONLY): first encounter of thread "${threadId}" — marking ${candidates.length} visible message(s) as seen without relaying`);
+    console.log(`[Keryx] Initial scan (MARK-ONLY): first encounter of thread "${threadId}" — ${candidates.length} visible message(s) will be marked without relaying`);
   } else {
-    console.log(`[Keryx] Initial scan (RELAY mode): checking ${candidates.length} visible message(s) for new arrivals`);
+    console.log(`[Keryx] Initial scan (RELAY): thread "${threadId}" | checkpoint=${new Date(checkpoint).toISOString()} | scanning ${candidates.length} candidate(s)`);
   }
+
+  // Shared mutable object to track the highest timestamp we relay in this batch.
+  // Populated inside queued closures; read by the checkpoint-update entry.
+  const batch = { maxTs: null };
 
   // DOM-order tiebreaker state
   let lastClusterTs = null;
   let clusterOffset = 0;
-  let found = 0;
 
   for (const candidate of candidates) {
     const text = extractMessageText(candidate);
@@ -723,9 +738,9 @@ async function doInitialScan() {
     const msgTs = extractMessageTimestamp(candidate);
     const ctxTs = msgTs ?? getContextTimestamp(candidate, headers);
 
-    // Skip messages with no resolvable timestamp — we can't dedup or order them
+    // Skip messages with no resolvable timestamp — can't determine recency
     if (ctxTs === null) {
-      console.log('[Keryx] Initial scan: skipping candidate — no timestamp (per-bubble or header context)');
+      console.log('[Keryx] Initial scan: skipping candidate — no timestamp resolvable');
       continue;
     }
 
@@ -738,33 +753,44 @@ async function doInitialScan() {
     }
     const finalTs = ctxTs + clusterOffset * 1000;
 
+    // Capture loop variables for async closures
+    const msgBody = text;
+    const msgFinalTs = finalTs;
+    const msgAddress = address;
+    const msgDomName = domName;
+
     if (firstLoad) {
       // MARK-ONLY: register in dedup cache without relaying
       dedupQueue.push(async () => {
         try {
-          await isDuplicate(address, text, finalTs); // side effect: registers key in cache
+          await isDuplicate(msgAddress, msgBody, msgFinalTs); // side effect: registers key
         } catch (err) {
           console.error('[Keryx] Mark-only dedup error:', err);
         }
       });
     } else {
-      // RELAY MODE: send new messages to Keryx
-      found++;
-      const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
+      // RELAY MODE: skip if at or before checkpoint
+      if (msgFinalTs <= checkpoint) continue;
+
+      const msgDir = isOutgoingMessage(candidate) ? 'sent' : 'received';
 
       dedupQueue.push(async () => {
         try {
-          const dup = await isDuplicate(address, text, finalTs);
+          const dup = await isDuplicate(msgAddress, msgBody, msgFinalTs);
           if (dup) return;
-          console.log(`[Keryx] Initial scan relaying ${direction} msg from "${address}"${domName ? ` (${domName})` : ''}: "${text.slice(0, 60)}"`);
+          console.log(`[Keryx] Initial scan relaying (${msgDir}) from "${msgAddress}"${msgDomName ? ` (${msgDomName})` : ''}: "${msgBody.slice(0, 60)}"`);
           chrome.runtime.sendMessage({
             type: 'relay_sms',
-            address,
-            ...(domName ? { name: domName } : {}),
-            body: text,
-            direction,
-            timestamp: new Date(finalTs).toISOString(),
+            address: msgAddress,
+            ...(msgDomName ? { name: msgDomName } : {}),
+            body: msgBody,
+            direction: msgDir,
+            timestamp: new Date(msgFinalTs).toISOString(),
           });
+          // Track highest timestamp in this relay batch
+          if (batch.maxTs === null || msgFinalTs > batch.maxTs) {
+            batch.maxTs = msgFinalTs;
+          }
         } catch (err) {
           console.error('[Keryx] Initial scan relay error:', err);
         }
@@ -772,17 +798,21 @@ async function doInitialScan() {
     }
   }
 
+  // After all message entries drain, update the checkpoint
   if (firstLoad) {
-    // After marking all visible messages, record this thread as seen
-    // so the NEXT scan uses relay mode
+    // Set checkpoint to now so only messages arriving after this instant relay
     dedupQueue.push(async () => {
-      await markThreadSeen(threadId);
-      console.log(`[Keryx] Thread "${threadId}" marked as seen — future scans will relay new messages`);
+      await updateCheckpoint(threadId, Date.now());
+      console.log(`[Keryx] Thread "${threadId}" checkpoint initialized — history marked, future messages will relay`);
     });
-  } else if (found > 0) {
-    console.log(`[Keryx] Initial scan queued ${found} message(s) for relay`);
   } else {
-    console.log('[Keryx] Initial scan: no new messages found');
+    // Advance checkpoint to the max ts we relayed (only if we relayed something)
+    dedupQueue.push(async () => {
+      if (batch.maxTs !== null) {
+        await updateCheckpoint(threadId, batch.maxTs);
+        console.log(`[Keryx] Thread "${threadId}" checkpoint advanced to ${new Date(batch.maxTs).toISOString()}`);
+      }
+    });
   }
 
   runDedupQueue();
@@ -854,12 +884,11 @@ function handleNavigation(reason) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'background_scan') {
     console.log('[Keryx] Background scan triggered by service worker alarm');
-    // doInitialScan enqueues async work and returns synchronously
-    doInitialScan();
+    doInitialScan(); // async; enqueues work and returns
     sendResponse({ ok: true });
   }
-  // Return false (sync response already sent above) — do NOT return true
-  // unless we need to send an async response, to avoid keeping the channel open.
+  // Returning undefined (no explicit return) closes the channel synchronously,
+  // which is correct since sendResponse is called above before returning.
 });
 
 /**
