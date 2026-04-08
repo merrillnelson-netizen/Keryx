@@ -1398,16 +1398,23 @@ export default function People() {
                       if (!person) return null;
                       return (
                         <div key={id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5 border border-white/10">
-                          <span className="font-medium text-foreground truncate">{person.name}</span>
-                          <Badge variant="secondary" className="ml-2 shrink-0 bg-violet-500/20 text-violet-400 border-violet-500/30 text-xs">
-                            {person.mentionCount ?? 0} mentions
-                          </Badge>
+                          <div className="min-w-0">
+                            <span className="font-medium text-foreground truncate block">{person.name}</span>
+                            {person.relationship && (
+                              <span className="text-xs text-muted-foreground capitalize">{person.relationship}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                            <Badge variant="secondary" className="bg-violet-500/20 text-violet-400 border-violet-500/30 text-xs">
+                              {person.mentionCount ?? 0} {(person.mentionCount ?? 0) === 1 ? "memory" : "memories"}
+                            </Badge>
+                          </div>
                         </div>
                       );
                     })}
                 </div>
                 <p className="text-xs text-destructive/80">
-                  All memories and references will be re-attributed to {people.find(p => p.id === mergeTarget)?.name || "the primary record"}. Source records will be permanently deleted. This cannot be undone.
+                  All memories and references will be re-attributed to <span className="font-medium">{people.find(p => p.id === mergeTarget)?.name || "the primary record"}</span>. Source records will be permanently deleted. This cannot be undone.
                 </p>
               </div>
             </AlertDialogDescription>

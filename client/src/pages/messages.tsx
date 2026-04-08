@@ -528,16 +528,37 @@ function ConversationList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {displayConversations.map((convo) => (
+                {displayConversations.map((convo) => {
+                  const isTableSelected = mergeMode && selectedForMerge.has(convo.id);
+                  const isTablePrimary = mergeMode && mergeTarget === convo.id;
+                  return (
                   <TableRow
                     key={convo.id}
-                    className="border-white/10 hover:bg-white/5 transition-colors cursor-pointer"
-                    onClick={() => setLocation(`/messages/${convo.id}`)}
+                    className={cn(
+                      "border-white/10 hover:bg-white/5 transition-colors cursor-pointer",
+                      isTableSelected && "bg-amber-500/5 ring-1 ring-inset ring-amber-500/40",
+                      isTablePrimary && "bg-primary/5 ring-1 ring-inset ring-primary/40",
+                    )}
+                    onClick={(e) => {
+                      if (mergeMode) {
+                        handleToggleMergeSelection(convo.id, e);
+                      } else {
+                        setLocation(`/messages/${convo.id}`);
+                      }
+                    }}
                   >
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0 relative">
                           <User className="w-4 h-4 text-white" />
+                          {isTableSelected && (
+                            <div className={cn(
+                              "absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold",
+                              isTablePrimary ? "bg-primary text-white" : "bg-amber-500 text-white"
+                            )}>
+                              {isTablePrimary ? "★" : "✓"}
+                            </div>
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           {editingId === convo.id ? (
@@ -597,7 +618,8 @@ function ConversationList() {
                       {formatTimestamp(convo.lastMessageAt)}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

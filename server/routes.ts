@@ -6213,6 +6213,21 @@ Respond with JSON only.`
         return res.status(400).json({ message: "Target conversation cannot also be a source" });
       }
 
+      // Enforce same-platform constraint: all conversations being merged must share
+      // the same platform (e.g. all 'sms'). Cross-platform merges are out of scope.
+      const allIds = [targetId, ...sourceIds];
+      const convs = await Promise.all(
+        allIds.map(id => storage.getMessageConversation(id, user.id))
+      );
+      const missing = convs.findIndex(c => !c);
+      if (missing !== -1) {
+        return res.status(404).json({ message: "One or more conversations not found" });
+      }
+      const platforms = new Set(convs.map(c => c!.platform));
+      if (platforms.size > 1) {
+        return res.status(400).json({ message: "All conversations must be on the same platform to merge" });
+      }
+
       const result = await storage.mergeConversations(user.id, targetId, sourceIds);
       const target = await storage.getMessageConversation(targetId, user.id);
 
