@@ -20,8 +20,9 @@ private const val MAX_ATTEMPTS = 6
 /**
  * WorkManager worker that drains the pending_relay Room table.
  * - Runs only when a network connection is available (declared via Constraints).
- * - After [MAX_ATTEMPTS] failures a row is permanently purged (message lost).
- * - Uses the same shared OkHttpClient as [RelayClient] via Keep-Alive.
+ * - After [MAX_ATTEMPTS] failures a row is marked `failed = true` and its count is
+ *   recorded in [Prefs.permanentFailureCount] before being purged.
+ * - Uses a dedicated OkHttpClient with Keep-Alive.
  */
 class RetryWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
@@ -41,8 +42,14 @@ class RetryWorker(context: Context, params: WorkerParameters) :
         val apiKey = prefs.apiKey!!
         val dao = AppDatabase.get(applicationContext).pendingRelayDao()
 
-        // Purge rows that have already exhausted their retries
-        dao.purgeExhausted(MAX_ATTEMPTS)
+        // Mark rows that have exhausted all retries as permanently failed,
+        // tally them in Prefs, then purge them from the queue.
+        val exhaustedCount = dao.markExhaustedAsFailed(MAX_ATTEMPTS)
+        if (exhaustedCount > 0) {
+            Log.w(TAG, "$exhaustedCount message(s) permanently failed after $MAX_ATTEMPTS attempts")
+            repeat(exhaustedCount) { prefs.incrementPermanentFailure() }
+            dao.purgeFailedRows()
+        }
 
         val pending = dao.getAll()
         if (pending.isEmpty()) {
@@ -63,7 +70,7 @@ class RetryWorker(context: Context, params: WorkerParameters) :
             }
         }
 
-        prefs.pendingRetryCount = dao.count()
+        prefs.pendingRetryCount = dao.countPending()
 
         return if (anyFailed) Result.retry() else Result.success()
     }
@@ -96,10 +103,10 @@ class RetryWorker(context: Context, params: WorkerParameters) :
                         true
                     }
                     response.code in 400..499 -> {
-                        // 4xx = bad config, not a transient error — don't retry
-                        Log.e(TAG, "4xx error on retry ${response.code} — discarding")
+                        // 4xx = bad config — not a transient error, discard immediately
+                        Log.e(TAG, "4xx error on retry ${response.code} — discarding row")
                         Prefs.get(applicationContext).incrementError()
-                        true // return true so we delete the row
+                        true // delete the row
                     }
                     else -> false
                 }

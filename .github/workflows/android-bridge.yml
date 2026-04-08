@@ -31,8 +31,26 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Grant gradlew execute permission
-        run: chmod +x gradlew 2>/dev/null || gradle wrapper --gradle-version=8.11.1
+      - name: Download Gradle wrapper jar
+        run: |
+          mkdir -p gradle/wrapper
+          curl -fsSL \
+            "https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradle/wrapper/gradle-wrapper.jar" \
+            -o gradle/wrapper/gradle-wrapper.jar || \
+          curl -fsSL \
+            "https://services.gradle.org/distributions/gradle-8.11.1-wrapper.jar.sha256" \
+            > /dev/null && \
+          wget -q \
+            "https://github.com/gradle/gradle/raw/v8.11.1/gradle/wrapper/gradle-wrapper.jar" \
+            -O gradle/wrapper/gradle-wrapper.jar || true
+
+      - name: Bootstrap wrapper if jar missing
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "Wrapper jar not found — bootstrapping via system gradle"
+            gradle wrapper --gradle-version=8.11.1 --distribution-type=bin
+          fi
+          chmod +x gradlew
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace

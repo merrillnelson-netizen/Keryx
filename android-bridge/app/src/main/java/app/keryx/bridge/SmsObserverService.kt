@@ -25,7 +25,8 @@ private val SMS_SENT_URI: Uri = Uri.parse("content://sms/sent")
 
 /**
  * Foreground service that observes the SMS sent content provider.
- * - Holds a partial WakeLock to prevent the CPU from sleeping mid-query.
+ * - Holds a persistent partial WakeLock (acquired in onStartCommand, held until onDestroy)
+ *   to prevent the CPU from sleeping mid-query — critical on Samsung/Xiaomi MIUI.
  * - Publishes a persistent "Keryx Bridge is active" notification.
  * - Survives task-swipe via onTaskRemoved → ServiceRestartWorker.
  */
@@ -37,14 +38,17 @@ class SmsObserverService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
-        acquireWakeLock()
         startForeground(NOTIFICATION_ID, buildNotification())
         registerSmsObserver()
-        Log.d(TAG, "SmsObserverService started")
+        Log.d(TAG, "SmsObserverService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        // Acquire (or re-acquire) persistent WakeLock here so it is held for
+        // the entire service lifetime, surviving any repeated START_STICKY restarts.
+        acquireWakeLockIfNeeded()
+        Log.d(TAG, "SmsObserverService started (WakeLock held: ${wakeLock?.isHeld})")
         return START_STICKY
     }
 
@@ -64,12 +68,16 @@ class SmsObserverService : LifecycleService() {
             .enqueue(OneTimeWorkRequestBuilder<ServiceRestartWorker>().build())
     }
 
-    private fun acquireWakeLock() {
-        val pm = getSystemService(PowerManager::class.java)
-        wakeLock = pm?.newWakeLock(
+    private fun acquireWakeLockIfNeeded() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        wakeLock = pm.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "KeryxBridge:SmsObserverWakeLock"
-        )?.also { it.acquire(10 * 60 * 1000L) } // 10-minute max; reacquired on each observation
+        ).also {
+            it.setReferenceCounted(false)
+            it.acquire() // No timeout — released explicitly in onDestroy
+        }
     }
 
     private fun releaseWakeLock() {
@@ -101,8 +109,6 @@ class SmsObserverService : LifecycleService() {
             }
 
             override fun onChange(selfChange: Boolean, uri: Uri?) {
-                // Briefly reacquire WakeLock to ensure we don't sleep mid-query
-                wakeLock?.takeIf { !it.isHeld }?.acquire(30_000L)
                 checkForNewSentSms()
             }
         }
@@ -170,7 +176,7 @@ class SmsObserverService : LifecycleService() {
     companion object {
         /**
          * Returns true if this service is currently running.
-         * Used by MainActivity to reflect live status.
+         * Set in onCreate/onDestroy. Used by MainActivity to reflect live status.
          */
         @Volatile var isRunning = false
             private set

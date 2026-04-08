@@ -2,32 +2,31 @@ package app.keryx.bridge.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
  * Encrypted preferences store for Keryx Bridge.
  * Stores server URL, API key, and runtime counters.
+ *
+ * If [EncryptedSharedPreferences] cannot be initialised (e.g. bad keystore state),
+ * we throw rather than silently falling back to plaintext storage — API keys must
+ * always be encrypted at rest.
  */
 class Prefs private constructor(context: Context) {
 
-    private val prefs: SharedPreferences by lazy {
-        try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                context,
-                "keryx_bridge_prefs",
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            // Fallback to unencrypted prefs if encryption fails (e.g., keystore issues)
-            android.util.Log.w("Prefs", "Encrypted prefs unavailable, falling back: ${e.message}")
-            context.getSharedPreferences("keryx_bridge_prefs_fallback", Context.MODE_PRIVATE)
-        }
+    private val prefs: SharedPreferences = run {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            context,
+            "keryx_bridge_prefs",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
     var serverUrl: String?
@@ -62,6 +61,10 @@ class Prefs private constructor(context: Context) {
         get() = prefs.getInt(KEY_ERROR_COUNT, 0)
         set(value) = prefs.edit().putInt(KEY_ERROR_COUNT, value).apply()
 
+    var permanentFailureCount: Int
+        get() = prefs.getInt(KEY_PERM_FAILURE_COUNT, 0)
+        set(value) = prefs.edit().putInt(KEY_PERM_FAILURE_COUNT, value).apply()
+
     var pendingRetryCount: Int
         get() = prefs.getInt(KEY_PENDING_RETRY, 0)
         set(value) = prefs.edit().putInt(KEY_PENDING_RETRY, value).apply()
@@ -82,9 +85,15 @@ class Prefs private constructor(context: Context) {
         errorCount++
     }
 
+    fun incrementPermanentFailure() {
+        permanentFailureCount++
+        incrementError()
+    }
+
     fun isConfigured(): Boolean = !serverUrl.isNullOrBlank() && !apiKey.isNullOrBlank()
 
     companion object {
+        private const val TAG = "Prefs"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_ENABLED = "enabled"
@@ -93,6 +102,7 @@ class Prefs private constructor(context: Context) {
         private const val KEY_RELAYED_TODAY = "relayed_today"
         private const val KEY_RELAYED_TODAY_DATE = "relayed_today_date"
         private const val KEY_ERROR_COUNT = "error_count"
+        private const val KEY_PERM_FAILURE_COUNT = "perm_failure_count"
         private const val KEY_PENDING_RETRY = "pending_retry"
 
         @Volatile private var instance: Prefs? = null

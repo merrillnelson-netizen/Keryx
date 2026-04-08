@@ -9,5 +9,6 @@ data class PendingRelay(
     val id: Long = 0,
     val payloadJson: String,
     val attempts: Int = 0,
+    val failed: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
