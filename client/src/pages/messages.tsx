@@ -156,8 +156,24 @@ function ConversationList() {
   const mergeMutation = useMutation({
     mutationFn: async ({ targetId, sourceIds }: { targetId: string; sourceIds: string[] }) => {
       const response = await apiRequest("POST", "/api/messages/conversations/merge", { targetId, sourceIds });
-      if (!response.ok) throw new Error("Failed to merge conversations");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as any).message || "Failed to merge conversations");
+      }
       return response.json();
+    },
+    onMutate: async ({ targetId, sourceIds }) => {
+      // Optimistically remove source conversations from the list immediately
+      await queryClient.cancelQueries({ queryKey: ["/api/messages/conversations"] });
+      const previous = queryClient.getQueryData<any[]>(["/api/messages/conversations"]);
+      if (previous) {
+        const sourceSet = new Set(sourceIds);
+        queryClient.setQueryData<any[]>(
+          ["/api/messages/conversations"],
+          previous.filter(c => !sourceSet.has(c.id) || c.id === targetId)
+        );
+      }
+      return { previous };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
@@ -171,8 +187,12 @@ function ConversationList() {
       setMergeTarget(null);
       setShowMergeConfirm(false);
     },
-    onError: () => {
-      toast({ title: "Merge failed", description: "Could not merge conversations. Please try again.", variant: "destructive" });
+    onError: (err: Error, _vars, context: any) => {
+      // Roll back optimistic update
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/messages/conversations"], context.previous);
+      }
+      toast({ title: "Merge failed", description: err.message || "Could not merge conversations. Please try again.", variant: "destructive" });
       setShowMergeConfirm(false);
     },
   });

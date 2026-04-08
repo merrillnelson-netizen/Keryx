@@ -2754,7 +2754,9 @@ export class DatabaseStorage implements IStorage {
             AND ${messages.userId} = ${userId}
             AND ${messages.topicTag} IS NULL
         )`,
-        lastMessageAt: stats?.latest ?? sql`now()`,
+        // Use null when no messages remain, not now() — keeps true aggregate semantics
+        // and avoids artificially inflating the lastMessageAt timestamp.
+        lastMessageAt: stats?.latest ?? null,
       })
       .where(and(
         eq(messageConversations.id, targetId),
