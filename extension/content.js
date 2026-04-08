@@ -234,6 +234,172 @@ function extractMessageTimestamp(node) {
   return null;
 }
 
+// ── Header-context timestamp helpers ─────────────────────────────────────────
+
+/**
+ * Convert a relative timestamp label from a Google Messages group-header
+ * separator (e.g. "Today, 3:42 PM", "Yesterday, 3:42 PM", "Monday, 3:42 PM",
+ * "Apr 7, 3:42 PM", "Apr 7, 2025, 3:42 PM") to a UTC millisecond timestamp.
+ * Returns null if the string cannot be parsed.
+ *
+ * Format coverage:
+ *   "3:42 PM"               → today at 3:42 PM local
+ *   "Today, 3:42 PM"        → today at 3:42 PM local
+ *   "Yesterday, 3:42 PM"    → yesterday at 3:42 PM local
+ *   "Sunday, 3:42 PM"       → most recent Sunday at 3:42 PM local
+ *   "Sun, 3:42 PM"          → most recent Sunday at 3:42 PM local
+ *   "Apr 7, 3:42 PM"        → April 7 current year at 3:42 PM local
+ *   "Apr 7, 2025, 3:42 PM"  → April 7, 2025 at 3:42 PM local
+ */
+function parseRelativeTime(text) {
+  if (!text) return null;
+  text = text.trim();
+
+  // Direct parse first — handles ISO strings and other absolute formats
+  const direct = new Date(text).getTime();
+  if (!isNaN(direct) && direct > 946684800000 /* year 2000 */) return direct;
+
+  const now = new Date();
+
+  // Apply HH:MM AM/PM to a base Date, return ms or null
+  function applyTime(base, timeStr) {
+    const m = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!m) return null;
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const period = (m[3] || '').toUpperCase();
+    if (period === 'PM' && h !== 12) h += 12;
+    if (period === 'AM' && h === 12) h = 0;
+    const d = new Date(base);
+    d.setHours(h, min, 0, 0);
+    const result = d.getTime();
+    return isNaN(result) ? null : result;
+  }
+
+  // "Today, 3:42 PM" — or just "Today"
+  if (/^today/i.test(text)) {
+    const timeStr = text.replace(/^today[,\s]*/i, '').trim();
+    return timeStr ? applyTime(now, timeStr) : (() => { const d = new Date(now); d.setHours(0,0,0,0); return d.getTime(); })();
+  }
+
+  // "Yesterday, 3:42 PM"
+  if (/^yesterday/i.test(text)) {
+    const timeStr = text.replace(/^yesterday[,\s]*/i, '').trim();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return timeStr ? applyTime(yesterday, timeStr) : (() => { yesterday.setHours(0,0,0,0); return yesterday.getTime(); })();
+  }
+
+  // "Monday, 3:42 PM" or "Mon, 3:42 PM"
+  const DAY_NAMES_FULL  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const DAY_NAMES_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  for (let i = 0; i < 7; i++) {
+    const re = new RegExp(`^(${DAY_NAMES_FULL[i]}|${DAY_NAMES_SHORT[i]})[,\\s]+`, 'i');
+    if (re.test(text)) {
+      const timeStr = text.replace(re, '').trim();
+      const target = new Date(now);
+      const diff = ((now.getDay() - i) + 7) % 7 || 7; // at least 1 day back
+      target.setDate(target.getDate() - diff);
+      return timeStr ? applyTime(target, timeStr) : (() => { target.setHours(0,0,0,0); return target.getTime(); })();
+    }
+  }
+
+  // "Apr 7, 3:42 PM" or "Apr 7, 2025, 3:42 PM"
+  const mDate = text.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),\s*(?:(\d{4}),\s*)?(.+)$/);
+  if (mDate) {
+    const year = mDate[3] ? parseInt(mDate[3], 10) : now.getFullYear();
+    const base = new Date(`${mDate[1]} ${mDate[2]}, ${year}`);
+    if (!isNaN(base.getTime())) return applyTime(base, mDate[4]);
+  }
+
+  // Bare "3:42 PM" with no date prefix — use today
+  if (/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(text)) {
+    return applyTime(now, text);
+  }
+
+  return null;
+}
+
+/**
+ * Scan the conversation container in DOM order for timestamp separator elements
+ * (the group headers Google Messages places between message clusters, e.g.
+ * "Today, 3:42 PM", "Monday, 3:42 PM").
+ *
+ * Returns an array of { node, ms } pairs sorted in DOM order (ascending).
+ * Only entries where the timestamp is parseable are included.
+ */
+function extractHeaderTimestamps(container) {
+  const results = [];
+  if (!container) return results;
+
+  const seen = new WeakSet();
+
+  function tryAdd(el) {
+    if (!el || seen.has(el)) return;
+    seen.add(el);
+
+    // Prefer structured attribute (most reliable, no need to parse text)
+    const attrVal =
+      el.getAttribute?.('datetime') ||
+      el.getAttribute?.('data-e2e-timestamp') ||
+      el.getAttribute?.('data-timestamp') ||
+      el.getAttribute?.('data-time');
+    if (attrVal) {
+      const ms = new Date(attrVal).getTime();
+      if (!isNaN(ms) && ms > 0) { results.push({ node: el, ms }); return; }
+    }
+
+    // Fall back to element text — must look like a timestamp, not a message body
+    const text = (el.innerText ?? el.textContent ?? '').trim();
+    if (!text || text.length > 80) return;
+    // Must contain HH:MM to be considered a timestamp label
+    if (!/\d{1,2}:\d{2}/.test(text)) return;
+    const ms = parseRelativeTime(text);
+    if (ms !== null && !isNaN(ms) && ms > 946684800000) results.push({ node: el, ms });
+  }
+
+  // Structural selectors covering known Google Messages DOM patterns
+  const candidates = container.querySelectorAll(
+    'mws-conversation-timestamp, ' +
+    'mws-relative-timestamp, ' +
+    '[data-e2e-timestamp], ' +
+    '[role="separator"], ' +
+    '[role="note"], ' +
+    '[class*="timestamp"], ' +
+    '[class*="time-divider"], ' +
+    '[class*="date-divider"], ' +
+    '[class*="time_stamp"]'
+  );
+  for (const el of candidates) tryAdd(el);
+
+  // Sort by DOM order so we can binary-search / linear-scan safely
+  results.sort((a, b) => {
+    const pos = a.node.compareDocumentPosition(b.node);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1; // b is after a → a first
+    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    return 0;
+  });
+
+  return results;
+}
+
+/**
+ * Find the nearest timestamp header that precedes messageNode in DOM order.
+ * Returns the ms timestamp of the last header that appears before the message,
+ * or null if no parseable header precedes it.
+ */
+function getContextTimestamp(messageNode, headers) {
+  if (!headers.length) return null;
+  let best = null;
+  for (const { node, ms } of headers) {
+    // DOCUMENT_POSITION_FOLLOWING means messageNode comes after node
+    if (node.compareDocumentPosition(messageNode) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      best = ms;
+    }
+  }
+  return best;
+}
+
 /**
  * Determine whether a message was sent (outgoing) vs received (incoming).
  * Checks a range of attributes and classes used across Google Messages versions.
@@ -336,6 +502,10 @@ function processNodes(nodes) {
     console.log(`[Keryx] No thread ID in URL — using DOM name as address: "${address}"`);
   }
 
+  // Scan the container once for timestamp group-header elements so each
+  // candidate can look up the nearest preceding header for its timestamp.
+  const headerTimestamps = extractHeaderTimestamps(activeTarget || findConversationContainer());
+
   for (const node of nodes) {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
@@ -378,20 +548,27 @@ function processNodes(nodes) {
         continue;
       }
 
-      // Session-start guard: if we can parse a timestamp from the DOM and it
-      // predates observer attach by more than the grace window, this is a
-      // historical/re-injected message — skip it.
-      // The grace window (SESSION_GRACE_MS) ensures messages sent just before the
-      // observer attached are still captured (their DOM <time> reflects send time,
-      // not DOM-insertion time, so they'd otherwise be incorrectly dropped).
+      // Per-bubble timestamp (usually null for Google Messages — it stores
+      // timestamps on group-header separators, not individual bubbles).
       const msgTs = extractMessageTimestamp(candidate);
-      if (msgTs !== null && msgTs < sessionStartedAt - SESSION_GRACE_MS) {
-        console.log(`[Keryx] Skipping pre-session message (ts=${new Date(msgTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
+
+      // Context timestamp: nearest preceding group-header separator.
+      // Used when per-bubble timestamp is unavailable.
+      const ctxTs = msgTs ?? getContextTimestamp(candidate, headerTimestamps);
+
+      // Session-start guard: if we can resolve a timestamp and it predates
+      // observer attach by more than the grace window, this is a historical
+      // message — skip it.  When neither source yields a timestamp (brand-new
+      // message whose header hasn't rendered yet) ctxTs is null and we fall
+      // through to Date.now(), which is the correct time for a just-sent msg.
+      if (ctxTs !== null && ctxTs < sessionStartedAt - SESSION_GRACE_MS) {
+        console.log(`[Keryx] Skipping pre-session message (ts=${new Date(ctxTs).toISOString()}, session=${new Date(sessionStartedAt).toISOString()}): "${text.slice(0, 40)}"`);
         continue;
       }
 
       const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-      const ts = msgTs ?? Date.now();
+      // Use per-bubble → context header → now (in that precedence order)
+      const ts = ctxTs ?? Date.now();
 
       // Enqueue serialised dedup+relay to prevent concurrent storage races.
       dedupQueue.push(async () => {
@@ -485,6 +662,9 @@ function doInitialScan() {
   const cutoff = now - INITIAL_SCAN_WINDOW_MS;
   const container = findConversationContainer();
 
+  // Build header-context map once for the whole scan
+  const headers = extractHeaderTimestamps(container);
+
   const candidates = container.querySelectorAll(
     'mws-message-part, mws-message, mws-text-message-part, ' +
     '[data-message-id], [data-e2e-message-id], [data-message-item]'
@@ -495,19 +675,22 @@ function doInitialScan() {
     const text = extractMessageText(candidate);
     if (!text) continue;
 
+    // Try per-bubble timestamp first, then nearest preceding group header.
     const msgTs = extractMessageTimestamp(candidate);
-    // Strict timestamp guard: skip any candidate where the timestamp is missing or
-    // outside the 5-minute window. Treating null as "current" risks relaying old
-    // history whose timestamps simply couldn't be read from the DOM.
-    if (msgTs === null) {
-      console.log('[Keryx] Initial scan: skipping candidate — timestamp not extractable');
+    const ctxTs = msgTs ?? getContextTimestamp(candidate, headers);
+
+    // If neither source yields a timestamp, we cannot determine whether this
+    // message is within the recent window — skip it to avoid history dumps.
+    if (ctxTs === null) {
+      console.log('[Keryx] Initial scan: skipping candidate — no timestamp (per-bubble or header context)');
       continue;
     }
-    if (msgTs < cutoff) continue;
+    // Outside the 5-minute recency window — skip old history
+    if (ctxTs < cutoff) continue;
 
     found++;
     const direction = isOutgoingMessage(candidate) ? 'sent' : 'received';
-    const ts = msgTs;
+    const ts = ctxTs;
 
     dedupQueue.push(async () => {
       try {
