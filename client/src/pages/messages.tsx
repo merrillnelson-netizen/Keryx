@@ -163,14 +163,21 @@ function ConversationList() {
       return response.json();
     },
     onMutate: async ({ targetId, sourceIds }) => {
-      // Optimistically remove source conversations from the list immediately
+      // Optimistically remove source conversations from the list immediately.
+      // The API returns { conversations: [], total, limit, offset } — not a plain array.
       await queryClient.cancelQueries({ queryKey: ["/api/messages/conversations"] });
-      const previous = queryClient.getQueryData<any[]>(["/api/messages/conversations"]);
-      if (previous) {
+      const previous = queryClient.getQueryData<{ conversations: any[]; total: number; limit: number; offset: number }>(
+        ["/api/messages/conversations"]
+      );
+      if (previous?.conversations) {
         const sourceSet = new Set(sourceIds);
-        queryClient.setQueryData<any[]>(
+        queryClient.setQueryData(
           ["/api/messages/conversations"],
-          previous.filter(c => !sourceSet.has(c.id) || c.id === targetId)
+          {
+            ...previous,
+            conversations: previous.conversations.filter(c => !sourceSet.has(c.id) || c.id === targetId),
+            total: Math.max(0, previous.total - sourceIds.length),
+          }
         );
       }
       return { previous };
