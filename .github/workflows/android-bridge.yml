@@ -54,7 +54,7 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
-
+       
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
