@@ -221,6 +221,4 @@ class SmsObserverService : LifecycleService() {
         @Volatile var isRunning = false
             private set
     }
-
-    override fun onBind(intent: Intent?) = super.onBind(intent)
 }
