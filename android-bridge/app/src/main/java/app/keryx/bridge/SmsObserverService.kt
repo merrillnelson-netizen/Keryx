@@ -50,6 +50,10 @@ class SmsObserverService : LifecycleService() {
         isRunning = true
         startForeground(NOTIFICATION_ID, buildNotification())
         registerSmsObserver()
+        // Startup backfill: catch any sent SMS that arrived while the service was down.
+        // On fresh install this also initialises the checkpoint so we don't flood the
+        // server with the user's entire SMS history.
+        checkForNewSentSms()
         Log.d(TAG, "SmsObserverService created")
     }
 
@@ -153,9 +157,20 @@ class SmsObserverService : LifecycleService() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             val lastId = prefs.lastSentSmsId
+
+            // Fresh install: initialise checkpoint to the current max _id so we
+            // only relay NEW messages going forward and avoid flooding the server
+            // with the user's entire SMS history on first run.
+            if (lastId < 0) {
+                val maxId = queryMaxSentSmsId()
+                prefs.lastSentSmsId = if (maxId >= 0) maxId else 0L
+                Log.d(TAG, "Fresh install: SMS checkpoint initialised to _id=$maxId")
+                return@launch
+            }
+
             val projection = arrayOf("_id", "address", "body", "date")
-            val selection = if (lastId >= 0) "_id > ?" else null
-            val selectionArgs = if (lastId >= 0) arrayOf(lastId.toString()) else null
+            val selection = "_id > ?"
+            val selectionArgs = arrayOf(lastId.toString())
 
             data class SmsRow(val rowId: Long, val address: String, val body: String, val dateMs: Long)
             val newRows = mutableListOf<SmsRow>()
@@ -214,6 +229,30 @@ class SmsObserverService : LifecycleService() {
                     break
                 }
             }
+        }
+    }
+
+    /**
+     * Returns the largest _id currently in content://sms/sent, or -1 if empty.
+     * Used to set the initial checkpoint on fresh install so we don't relay
+     * the user's entire SMS history.
+     */
+    private fun queryMaxSentSmsId(): Long {
+        return try {
+            contentResolver.query(
+                SMS_SENT_URI,
+                arrayOf("_id"),
+                null, null,
+                "_id DESC"
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val col = cursor.getColumnIndex("_id")
+                    if (col >= 0) cursor.getLong(col) else -1L
+                } else -1L
+            } ?: -1L
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying max SMS _id: ${e.message}")
+            -1L
         }
     }
 

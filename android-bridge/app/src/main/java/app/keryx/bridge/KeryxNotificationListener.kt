@@ -1,5 +1,6 @@
 package app.keryx.bridge
 
+import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -14,12 +15,20 @@ private const val GOOGLE_MESSAGES_PKG = "com.google.android.apps.messaging"
 /**
  * Captures Google Messages notifications and relays them to Keryx.
  *
- * Received messages: title = sender name, text = message body
- * Outgoing RCS (best-effort): Google Messages sometimes posts a "sent" notification.
- *   Known patterns:
- *   - EXTRA_TITLE = "You" (some versions)
- *   - EXTRA_TITLE contains "Message sent" (some versions)
- *   These are highly version-dependent and may not fire on all devices.
+ * Two notification formats are handled:
+ *
+ * 1. MessagingStyle (Android 12+ / modern Google Messages with RCS):
+ *    extras["android.messages"] = Parcelable[] of Bundles, each with:
+ *      "text"   → CharSequence message body
+ *      "time"   → Long timestamp ms
+ *      "sender" → CharSequence sender name, null/empty for outgoing
+ *    This format is tried first. It correctly handles multi-message bundles
+ *    where android.text would only contain a count like "3 new messages".
+ *
+ * 2. Simple notification (older / SMS fallback):
+ *    extras["android.title"] = sender name or conversation title
+ *    extras["android.text"]  = message body
+ *    extras["android.bigText"] = full body (fallback)
  */
 class KeryxNotificationListener : NotificationListenerService() {
 
@@ -32,26 +41,37 @@ class KeryxNotificationListener : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        // Skip group summary notifications — they duplicate content
+        // Skip group summary notifications — they duplicate child notification content
         val isGroupSummary = (notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0
         if (isGroupSummary) return
 
         val title = extras.getCharSequence("android.title")?.toString() ?: return
-        val text = extras.getCharSequence("android.text")?.toString() ?: return
+        val relay = RelayClient.get(applicationContext)
 
-        if (text.isBlank()) return
+        // ── Path 1: MessagingStyle ────────────────────────────────────────────
+        // Modern Google Messages uses MessagingStyle which packs all messages in
+        // android.messages. This is the authoritative source for RCS/MMS and
+        // correctly handles multi-message bundles where android.text is a count.
+        val messagingStyleMessages = extras.getParcelableArray("android.messages")
+        if (!messagingStyleMessages.isNullOrEmpty()) {
+            processMessagingStyleMessages(relay, messagingStyleMessages, sbn.postTime)
+            return
+        }
+
+        // ── Path 2: Simple notification (SMS / older Google Messages) ─────────
+        val text = extras.getCharSequence("android.text")?.toString()
+            ?: extras.getCharSequence("android.bigText")?.toString()
+            ?: return
+        if (text.isBlank() || isCountOnlyText(text)) return
 
         val timestampMs = sbn.postTime.takeIf { it > 0 } ?: System.currentTimeMillis()
         val timestampIso = Instant.ofEpochMilli(timestampMs).toString()
 
-        // Detect direction
-        val isSentNotification = isSentRcsNotification(title, text)
-
-        if (isSentNotification) {
-            // Best-effort outgoing RCS
+        val isSent = isSentRcsNotification(title, text)
+        if (isSent) {
             val body = extractSentBody(text) ?: return
-            Log.d(TAG, "Outgoing RCS notification detected (best-effort): \"${body.take(40)}\"")
-            RelayClient.get(applicationContext).enqueue(
+            Log.d(TAG, "Outgoing RCS (simple): \"${body.take(40)}\"")
+            relay.enqueue(
                 RelayClient.RelayPayload(
                     address = "outgoing",
                     body = body,
@@ -61,12 +81,10 @@ class KeryxNotificationListener : NotificationListenerService() {
                 )
             )
         } else {
-            // Standard received message
             val normalizedAddress = PhoneNormalizer.normalize(title)
             val senderName = if (normalizedAddress != title) null else title
-
-            Log.d(TAG, "Received notification from \"$title\": \"${text.take(60)}\"")
-            RelayClient.get(applicationContext).enqueue(
+            Log.d(TAG, "Received (simple) from \"$title\": \"${text.take(60)}\"")
+            relay.enqueue(
                 RelayClient.RelayPayload(
                     address = normalizedAddress,
                     body = text,
@@ -79,12 +97,72 @@ class KeryxNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Detect if this is an outgoing-RCS "sent" or "sending" notification.
-     * Google Messages posts transient progress notifications ("Sending") and
-     * final confirmation notifications ("Sent"). We capture both — the relay
-     * server deduplicates by conversation/timestamp.
+     * Processes MessagingStyle notification messages.
+     * Each item in the Parcelable array is a Bundle with keys:
+     *   "text"   → message body (CharSequence)
+     *   "time"   → timestamp ms (Long)
+     *   "sender" → sender name (CharSequence), null/empty for outgoing messages
      *
-     * Known patterns (vary by Google Messages version):
+     * Outgoing messages (sender == null/blank) are relayed with direction="sent".
+     * Incoming messages use sender as the address/name.
+     */
+    private fun processMessagingStyleMessages(
+        relay: RelayClient,
+        messages: Array<out android.os.Parcelable>,
+        notifPostTime: Long,
+    ) {
+        for (item in messages) {
+            val bundle = item as? Bundle ?: continue
+            val body = bundle.getCharSequence("text")?.toString()?.trim() ?: continue
+            if (body.isBlank()) continue
+
+            val timeMs = bundle.getLong("time", 0L).takeIf { it > 0 }
+                ?: notifPostTime.takeIf { it > 0 }
+                ?: System.currentTimeMillis()
+            val timestampIso = Instant.ofEpochMilli(timeMs).toString()
+
+            val sender = bundle.getCharSequence("sender")?.toString()?.trim()
+            val isOutgoing = sender.isNullOrBlank()
+
+            if (isOutgoing) {
+                Log.d(TAG, "MessagingStyle outgoing: \"${body.take(40)}\"")
+                relay.enqueue(
+                    RelayClient.RelayPayload(
+                        address = "outgoing",
+                        body = body,
+                        direction = "sent",
+                        timestamp = timestampIso,
+                        name = null
+                    )
+                )
+            } else {
+                val normalizedAddress = PhoneNormalizer.normalize(sender)
+                val senderName = if (normalizedAddress != sender) null else sender
+                Log.d(TAG, "MessagingStyle received from \"$sender\": \"${body.take(60)}\"")
+                relay.enqueue(
+                    RelayClient.RelayPayload(
+                        address = normalizedAddress,
+                        body = body,
+                        direction = "received",
+                        timestamp = timestampIso,
+                        name = senderName
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Returns true for strings that are message count summaries rather than
+     * actual message content, e.g. "3 new messages", "2 messages".
+     */
+    private fun isCountOnlyText(text: String): Boolean {
+        return text.lowercase().trim().matches(Regex("""\d+\s+(new\s+)?messages?"""))
+    }
+
+    /**
+     * Detects outgoing-RCS "sent" / "sending" notifications.
+     * Known patterns (vary by Google Messages version and OEM):
      *   title == "You" — older versions
      *   title == "Message sent" | "Message sending" — newer versions
      *   title starts with "Sent" | "Sending" — some OEM variants
@@ -101,7 +179,7 @@ class KeryxNotificationListener : NotificationListenerService() {
             || titleLower.startsWith("sending")
             || textLower == "message sent"
             || textLower == "sending"
-            || textLower == "sending\u2026" // ellipsis variant
+            || textLower == "sending\u2026"
             || textLower.startsWith("message sent to ")
             || textLower.startsWith("sending to ")
             || textLower.startsWith("message sending")
@@ -109,13 +187,10 @@ class KeryxNotificationListener : NotificationListenerService() {
 
     private fun extractSentBody(text: String): String? {
         val textLower = text.lowercase()
-        // Skip pure status strings that carry no body content
         if (textLower == "message sent"
             || textLower == "sending"
             || textLower == "sending\u2026") return null
 
-        // "Message sent to John: Hello there" → "Hello there"
-        // "Sending to John: Hello there" → "Hello there"
         val colonIdx = text.indexOf(':')
         return if (colonIdx > 0 && colonIdx < text.length - 1) {
             text.substring(colonIdx + 1).trim().takeIf { it.isNotBlank() }
