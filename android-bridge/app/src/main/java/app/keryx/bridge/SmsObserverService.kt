@@ -163,8 +163,15 @@ class SmsObserverService : LifecycleService() {
             // with the user's entire SMS history on first run.
             if (lastId < 0) {
                 val maxId = queryMaxSentSmsId()
-                prefs.lastSentSmsId = if (maxId >= 0) maxId else 0L
-                Log.d(TAG, "Fresh install: SMS checkpoint initialised to _id=$maxId")
+                if (maxId >= 0) {
+                    prefs.lastSentSmsId = maxId
+                    Log.d(TAG, "Fresh install: SMS checkpoint initialised to _id=$maxId")
+                } else {
+                    // Provider query failed — leave checkpoint at -1 so we retry
+                    // initialisation on the next observer callback rather than
+                    // defaulting to 0 and replaying all historical SMS.
+                    Log.w(TAG, "Fresh install: could not query max SMS _id — will retry")
+                }
                 return@launch
             }
 

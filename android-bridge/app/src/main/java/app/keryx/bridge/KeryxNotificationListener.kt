@@ -45,13 +45,14 @@ class KeryxNotificationListener : NotificationListenerService() {
         val isGroupSummary = (notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0
         if (isGroupSummary) return
 
-        val title = extras.getCharSequence("android.title")?.toString() ?: return
+        val title = extras.getCharSequence("android.title")?.toString()
         val relay = RelayClient.get(applicationContext)
 
         // ── Path 1: MessagingStyle ────────────────────────────────────────────
         // Modern Google Messages uses MessagingStyle which packs all messages in
         // android.messages. This is the authoritative source for RCS/MMS and
         // correctly handles multi-message bundles where android.text is a count.
+        // Title is not required here — sender info comes from each message bundle.
         val messagingStyleMessages = extras.getParcelableArray("android.messages")
         if (!messagingStyleMessages.isNullOrEmpty()) {
             processMessagingStyleMessages(relay, messagingStyleMessages, sbn.postTime)
@@ -59,6 +60,8 @@ class KeryxNotificationListener : NotificationListenerService() {
         }
 
         // ── Path 2: Simple notification (SMS / older Google Messages) ─────────
+        // Title is required for the simple path to identify the sender.
+        if (title == null) return
         val text = extras.getCharSequence("android.text")?.toString()
             ?: extras.getCharSequence("android.bigText")?.toString()
             ?: return
