@@ -125,9 +125,8 @@ class KeryxNotificationListener : NotificationListenerService() {
             val timestampIso = Instant.ofEpochMilli(timeMs).toString()
 
             val sender = bundle.getCharSequence("sender")?.toString()?.trim()
-            val isOutgoing = sender.isNullOrBlank()
 
-            if (isOutgoing) {
+            if (sender.isNullOrBlank()) {
                 Log.d(TAG, "MessagingStyle outgoing: \"${body.take(40)}\"")
                 relay.enqueue(
                     RelayClient.RelayPayload(
