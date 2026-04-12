@@ -6603,7 +6603,15 @@ Respond with JSON only.`
 
   const GITHUB_REPO = "merrillnelson-netizen/Keryx";
 
-  async function getLatestGithubApk(): Promise<{ available: boolean; downloadUrl: string | null; releaseUrl: string | null; version: string | null }> {
+  // In-memory cache for GitHub Releases API response (5-minute TTL)
+  let githubApkCache: { data: { available: boolean; downloadUrl: string | null; releaseUrl: string | null; version: string | null; publishedAt: string | null }; expiresAt: number } | null = null;
+
+  async function getLatestGithubApk(): Promise<{ available: boolean; downloadUrl: string | null; releaseUrl: string | null; version: string | null; publishedAt: string | null }> {
+    // Serve from cache if still fresh
+    if (githubApkCache && Date.now() < githubApkCache.expiresAt) {
+      return githubApkCache.data;
+    }
+
     try {
       const headers: Record<string, string> = {
         "Accept": "application/vnd.github+json",
@@ -6613,20 +6621,33 @@ Respond with JSON only.`
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers });
-      if (!resp.ok) return { available: false, downloadUrl: null, releaseUrl: null, version: null };
+      if (!resp.ok) {
+        const result = { available: false, downloadUrl: null, releaseUrl: null, version: null, publishedAt: null };
+        githubApkCache = { data: result, expiresAt: Date.now() + 60_000 }; // 1-min cache on failure
+        return result;
+      }
 
-      const data = await resp.json() as { tag_name?: string; html_url?: string; assets?: Array<{ name: string; browser_download_url: string }> };
+      const data = await resp.json() as { tag_name?: string; html_url?: string; published_at?: string; assets?: Array<{ name: string; browser_download_url: string }> };
       const apkAsset = data.assets?.find(a => a.name.endsWith(".apk"));
-      if (!apkAsset) return { available: false, downloadUrl: null, releaseUrl: data.html_url ?? null, version: data.tag_name ?? null };
+      if (!apkAsset) {
+        const result = { available: false, downloadUrl: null, releaseUrl: data.html_url ?? null, version: data.tag_name ?? null, publishedAt: data.published_at ?? null };
+        githubApkCache = { data: result, expiresAt: Date.now() + 5 * 60_000 };
+        return result;
+      }
 
-      return {
+      const result = {
         available: true,
         downloadUrl: apkAsset.browser_download_url,
         releaseUrl: data.html_url ?? null,
         version: data.tag_name ?? null,
+        publishedAt: data.published_at ?? null,
       };
+      githubApkCache = { data: result, expiresAt: Date.now() + 5 * 60_000 };
+      return result;
     } catch {
-      return { available: false, downloadUrl: null, releaseUrl: null, version: null };
+      const result = { available: false, downloadUrl: null, releaseUrl: null, version: null, publishedAt: null };
+      githubApkCache = { data: result, expiresAt: Date.now() + 60_000 };
+      return result;
     }
   }
 
@@ -6651,6 +6672,7 @@ Respond with JSON only.`
         url: ghInfo.available ? "/api/android-bridge/apk" : null,
         releaseUrl: ghInfo.releaseUrl ?? `https://github.com/${GITHUB_REPO}/releases`,
         version: ghInfo.version,
+        publishedAt: ghInfo.publishedAt,
         githubDownloadUrl: ghInfo.downloadUrl,
       });
     } catch (error) {

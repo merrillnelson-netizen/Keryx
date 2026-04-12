@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Smartphone, Copy, Download, Circle, ExternalLink } from "lucide-react";
-import type { Settings } from "@shared/schema";
 
 interface RelayEvent {
   id: string;
@@ -29,10 +28,14 @@ export function AndroidBridgeCard() {
     refetchInterval: 60_000,
   });
 
-  // Find most recent event from android-bridge
-  const lastBridgeEvent = relayEvents.find(e => e.source === "android-bridge");
-
-  const { data: apkInfo } = useQuery<{ available: boolean; url: string | null; releaseUrl: string | null; version: string | null; githubDownloadUrl?: string | null }>({
+  const { data: apkInfo } = useQuery<{
+    available: boolean;
+    url: string | null;
+    releaseUrl: string | null;
+    version: string | null;
+    publishedAt: string | null;
+    githubDownloadUrl?: string | null;
+  }>({
     queryKey: ["/api/android-bridge/apk-info"],
     staleTime: 5 * 60_000,
   });
@@ -43,7 +46,10 @@ export function AndroidBridgeCard() {
     });
   };
 
-  const bridgeOnline = !!lastBridgeEvent && 
+  // Find most recent event from android-bridge
+  const lastBridgeEvent = relayEvents.find(e => e.source === "android-bridge");
+
+  const bridgeOnline = !!lastBridgeEvent &&
     (Date.now() - new Date(lastBridgeEvent.createdAt).getTime()) < 30 * 60 * 1000;
 
   const formatLastSeen = (dateStr: string) => {
@@ -56,6 +62,15 @@ export function AndroidBridgeCard() {
     if (diffHrs < 24) return `${diffHrs}h ago`;
     return date.toLocaleDateString();
   };
+
+  const formatReleaseDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
+    return new Date(dateStr).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  };
+
+  // Direct GitHub download URL — prefer githubDownloadUrl over the proxy route
+  const downloadUrl = apkInfo?.githubDownloadUrl ?? (apkInfo?.available ? "/api/android-bridge/apk" : null);
+  const isGithubDirect = !!apkInfo?.githubDownloadUrl;
 
   return (
     <Card className="glass-card border-white/20">
@@ -92,12 +107,17 @@ export function AndroidBridgeCard() {
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 1 — Get the App</p>
           <div className="flex gap-2 flex-wrap">
-            {apkInfo?.available ? (
+            {downloadUrl ? (
               <Button size="sm" asChild>
-                <a href="/api/android-bridge/apk" download="KeryxBridge.apk">
+                <a
+                  href={downloadUrl}
+                  download={isGithubDirect ? undefined : "KeryxBridge.apk"}
+                  target={isGithubDirect ? "_blank" : undefined}
+                  rel={isGithubDirect ? "noopener noreferrer" : undefined}
+                >
                   <Download className="w-4 h-4 mr-2" />
                   Download APK
-                  {apkInfo.version && apkInfo.version !== "local" && (
+                  {apkInfo?.version && apkInfo.version !== "local" && (
                     <span className="ml-1 text-[10px] opacity-70">({apkInfo.version})</span>
                   )}
                 </a>
@@ -115,14 +135,43 @@ export function AndroidBridgeCard() {
               </Button>
             )}
           </div>
+
+          {/* Version + date info */}
           {apkInfo?.available && apkInfo.version && apkInfo.version !== "local" && (
-            <p className="text-xs text-muted-foreground">
-              Latest GitHub Release: {apkInfo.version}
-            </p>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              <p className="text-xs text-muted-foreground">
+                Latest: <span className="font-medium text-foreground">{apkInfo.version}</span>
+              </p>
+              {apkInfo.publishedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Released: {formatReleaseDate(apkInfo.publishedAt)}
+                </p>
+              )}
+              {apkInfo.releaseUrl && (
+                <a
+                  href={apkInfo.releaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Release notes
+                </a>
+              )}
+            </div>
           )}
           {!apkInfo?.available && (
             <p className="text-xs text-muted-foreground">
-              No release build found yet. Trigger a GitHub Actions build first.
+              No release found. Visit{" "}
+              <a
+                href="https://github.com/merrillnelson-netizen/Keryx/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                GitHub Releases
+              </a>{" "}
+              to check for builds.
             </p>
           )}
           <p className="text-xs text-muted-foreground">
