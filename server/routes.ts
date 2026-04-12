@@ -2010,13 +2010,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return false;
       });
 
-      // For each matching conversation, fetch 50 most recent messages
-      const results = await Promise.all(
-        matchingConvs.slice(0, 10).map(async conv => ({
-          conversation: conv,
-          messages: await storage.getMessages(user.id, conv.id, 50, 0)
-        }))
-      );
+      // For each matching conversation, fetch recent messages (capped to 50 total across all convs)
+      const GLOBAL_MSG_CAP = 50;
+      let remaining = GLOBAL_MSG_CAP;
+      const results: Array<{ conversation: typeof matchingConvs[0]; messages: Awaited<ReturnType<typeof storage.getMessages>> }> = [];
+      for (const conv of matchingConvs.slice(0, 10)) {
+        if (remaining <= 0) break;
+        const msgs = await storage.getMessages(user.id, conv.id, remaining, 0);
+        results.push({ conversation: conv, messages: msgs });
+        remaining -= msgs.length;
+      }
 
       res.json({
         status: 'success',
