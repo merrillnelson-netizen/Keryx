@@ -3492,6 +3492,121 @@ Respond with JSON only.`
   });
 
   /**
+   * GET /api/ecosystem/stats - Aggregate life dashboard data
+   * Returns mood trend, topic frequency, memories/day, people, goals, financial, reminders, AI actions.
+   * Cached 5 minutes per user (in-memory keyed by userId+date).
+   */
+  const ecosystemCache = new Map<string, { data: any; expiresAt: number }>();
+
+  app.get("/api/ecosystem/stats", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const timezone = (typeof req.query.timezone === 'string' ? req.query.timezone : undefined)
+        || 'America/Denver';
+      const days = parseInt(req.query.days as string) || 30;
+      const forceRefresh = req.query.refresh === 'true';
+
+      const cacheKey = `${user.id}:${timezone}:${days}`;
+      if (!forceRefresh) {
+        const cached = ecosystemCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) {
+          return res.json({ ...cached.data, cached: true });
+        }
+      }
+
+      const userTier = user.subscriptionTier || 'free';
+      const hasLifeOS = userTier === 'life_os';
+
+      const [
+        moodTrend,
+        topicFrequency,
+        memoriesPerDay,
+        allPeople,
+        activeGoals,
+        pendingReminders,
+        pendingActions,
+        totalMemories,
+        financialResult,
+      ] = await Promise.allSettled([
+        storage.getMoodTrend(user.id, days, timezone),
+        storage.getTopicFrequency(user.id, days),
+        storage.getMemoriesPerDay(user.id, days, timezone),
+        storage.getPeople(user.id),
+        storage.getGoals(user.id, 'active'),
+        storage.getReminders(user.id, 'pending'),
+        storage.getPendingActions(user.id),
+        storage.getLogEntriesCount(user.id),
+        hasLifeOS ? plaidService.getSpendingSummary(user.id, days) : Promise.resolve(null),
+      ]);
+
+      const mood = moodTrend.status === 'fulfilled' ? moodTrend.value : [];
+      const topics = topicFrequency.status === 'fulfilled' ? topicFrequency.value : [];
+      const memPerDay = memoriesPerDay.status === 'fulfilled' ? memoriesPerDay.value : [];
+      const people = (allPeople.status === 'fulfilled' ? allPeople.value : []).slice(0, 8);
+      const goals = activeGoals.status === 'fulfilled' ? activeGoals.value : [];
+      const reminders = pendingReminders.status === 'fulfilled' ? pendingReminders.value : [];
+      const actions = pendingActions.status === 'fulfilled' ? pendingActions.value : [];
+      const total = totalMemories.status === 'fulfilled' ? totalMemories.value : 0;
+      const financial = (financialResult.status === 'fulfilled' ? financialResult.value : null) as any;
+
+      // Compute KPIs
+      const last7 = memPerDay.slice(-7).reduce((s: number, d: { count: number }) => s + d.count, 0);
+      const prev7 = memPerDay.slice(-14, -7).reduce((s: number, d: { count: number }) => s + d.count, 0);
+      const velocityDelta = prev7 > 0 ? Math.round(((last7 - prev7) / prev7) * 100) : null;
+
+      const recentMoodAvg = mood.slice(-7).length > 0
+        ? Math.round(mood.slice(-7).reduce((s: number, d: { avgScore: number }) => s + d.avgScore, 0) / mood.slice(-7).length)
+        : null;
+
+      const payload = {
+        period: { days, timezone },
+        systemHealth: {
+          totalMemories: total,
+          activeReminders: reminders.length,
+          pendingActions: actions.length,
+        },
+        memoryPulse: {
+          perDay: memPerDay,
+          total7Days: last7,
+          velocityDeltaPct: velocityDelta,
+        },
+        moodTrend: {
+          trend: mood,
+          recentAvg: recentMoodAvg,
+        },
+        topicDistribution: topics.slice(0, 8),
+        relationshipHealth: people.map((p: any) => ({
+          name: p.name,
+          mentionCount: p.mentionCount || 0,
+          closenessScore: p.closenessScore || 0,
+        })),
+        goalProgress: goals.map((g: any) => ({
+          id: g.id,
+          title: g.title,
+          status: g.status,
+          progress: g.progress || 0,
+          milestones: Array.isArray(g.milestones) ? g.milestones : [],
+          aiSummary: g.aiSummary || null,
+        })),
+        financial: financial ? {
+          connected: true,
+          totalSpending: financial.totalSpending,
+          totalIncome: financial.totalIncome,
+          transactionCount: financial.transactionCount,
+          categoryBreakdown: financial.categoryBreakdown,
+        } : { connected: false },
+        generatedAt: new Date().toISOString(),
+        cached: false,
+      };
+
+      ecosystemCache.set(cacheKey, { data: payload, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return res.json(payload);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch ecosystem stats", error);
+    }
+  });
+
+  /**
    * POST /api/backfill - Start background re-analysis of memories
    * 
    * Re-processes all memories to extract mood, moodScore, detectedPeople,

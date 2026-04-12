@@ -34,6 +34,7 @@ import Messages from "@/pages/messages";
 import ShareImport from "@/pages/share-import";
 import Billing from "@/pages/billing";
 import FounderDashboard from "@/pages/founder";
+import Ecosystem from "@/pages/ecosystem";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -192,6 +193,9 @@ function Router() {
       </Route>
       <Route path="/founder">
         {() => <ProtectedRoute component={FounderDashboard} />}
+      </Route>
+      <Route path="/ecosystem">
+        {() => <ProtectedRoute component={Ecosystem} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

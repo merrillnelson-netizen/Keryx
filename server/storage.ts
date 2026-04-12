@@ -86,6 +86,9 @@ export interface IStorage {
   // Mood analytics (user-scoped)
   getMoodStats(userId: string, days?: number): Promise<{ mood: string; count: number; avgScore: number }[]>;
   getEntriesByMood(userId: string, mood: string): Promise<LogEntry[]>;
+  getMoodTrend(userId: string, days?: number, userTimezone?: string): Promise<{ date: string; avgScore: number; count: number }[]>;
+  getTopicFrequency(userId: string, days?: number): Promise<{ topic: string; count: number }[]>;
+  getMemoriesPerDay(userId: string, days?: number, userTimezone?: string): Promise<{ date: string; count: number }[]>;
   
   // Time capsule - memories from this day in previous years
   getOnThisDayMemories(userId: string, userTimezone?: string): Promise<LogEntry[]>;
@@ -1294,6 +1297,36 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch topic frequency:', error);
       throw new Error('Database error while fetching topic frequency');
+    }
+  }
+
+  /**
+   * Get per-day memory count for area chart visualization
+   */
+  async getMemoriesPerDay(userId: string, days = 30, userTimezone?: string): Promise<{ date: string; count: number }[]> {
+    try {
+      const tz = userTimezone || 'America/Denver';
+      const tzLiteral = sql.raw(`'${tz.replace(/'/g, "''")}'`);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const result = await db
+        .select({
+          date: sql<string>`(date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral}))::date::text`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(logEntries)
+        .where(and(
+          eq(logEntries.userId, userId),
+          gte(logEntries.timestamp, startDate)
+        ))
+        .groupBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral})`)
+        .orderBy(sql`date_trunc('day', ${logEntries.timestamp} AT TIME ZONE 'UTC' AT TIME ZONE ${tzLiteral})`);
+
+      return result.map(r => ({ date: r.date, count: r.count }));
+    } catch (error) {
+      console.error('Failed to fetch memories per day:', error);
+      throw new Error('Database error while fetching memories per day');
     }
   }
 
