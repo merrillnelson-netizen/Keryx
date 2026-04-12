@@ -897,6 +897,7 @@ export interface EmailContext {
  */
 export interface FinancialSummary {
   totalSpending: number;
+  totalIncome?: number;
   transactionCount: number;
   categoryBreakdown: Array<{ category: string; amount: number }>;
   topMerchants: Array<{ merchant: string; amount: number }>;
@@ -1023,7 +1024,9 @@ export async function generateMorningBriefing(
         .map(c => `${c.category}: $${c.amount.toFixed(2)}`).join(', ');
       const topSpending = financialSummary.topMerchants.slice(0, 3)
         .map(m => `${m.merchant}: $${m.amount.toFixed(2)}`).join(', ');
-      financialContext = `\n\nFINANCIAL SUMMARY (last 7 days):\n- Total spending: $${financialSummary.totalSpending.toFixed(2)}\n- Transactions: ${financialSummary.transactionCount}\n- Top categories: ${topCategories}\n- Top merchants: ${topSpending}`;
+      const incomeNote = financialSummary.totalIncome && financialSummary.totalIncome > 0
+        ? `\n- Total income/deposits: $${financialSummary.totalIncome.toFixed(2)}` : '';
+      financialContext = `\n\nFINANCIAL SUMMARY (last 7 days, Plaid sign convention: positive=debit/expense, negative=credit/income):\n- Total spending (debits): $${financialSummary.totalSpending.toFixed(2)}${incomeNote}\n- Transactions: ${financialSummary.transactionCount}\n- Top spend categories: ${topCategories}\n- Top merchants: ${topSpending}`;
     }
 
     // Format location context if available
@@ -1374,10 +1377,14 @@ export async function answerFinancialQuery(
       };
     }
 
-    // Calculate summary stats
+    // Calculate summary stats — Plaid sign convention: positive = debit/expense, negative = credit/income/deposit
     const totalSpent = transactions
       .filter(t => t.amount > 0)
       .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalReceived = transactions
+      .filter(t => t.amount < 0)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     
     const categoryTotals: Record<string, number> = {};
     for (const t of transactions) {
@@ -1390,11 +1397,13 @@ export async function answerFinancialQuery(
       .slice(0, 5)
       .map(([cat]) => cat);
 
-    // Format transaction context
+    // Format transaction context with explicit direction labels so GPT never confuses credits with debits
     const transactionSummary = transactions.length > 0 
-      ? transactions.slice(0, 50).map(t => 
-          `${t.date.toISOString().split('T')[0]} | $${t.amount.toFixed(2)} | ${t.merchantName || t.name} | ${t.primaryCategory || 'uncategorized'}`
-        ).join('\n')
+      ? transactions.slice(0, 50).map(t => {
+          const direction = t.amount > 0 ? 'DEBIT (expense)' : 'CREDIT (income/deposit)';
+          const displayAmount = Math.abs(t.amount).toFixed(2);
+          return `${t.date.toISOString().split('T')[0]} | ${direction} $${displayAmount} | ${t.merchantName || t.name} | ${t.primaryCategory || 'uncategorized'}`;
+        }).join('\n')
       : 'No transactions';
 
     const accountSummary = accounts.length > 0
@@ -1402,6 +1411,8 @@ export async function answerFinancialQuery(
           `${a.name} (${a.type}): Balance $${(a.currentBalance || 0).toFixed(2)}${a.availableBalance !== a.currentBalance ? ` (Available: $${(a.availableBalance || 0).toFixed(2)})` : ''}`
         ).join('\n')
       : 'No accounts';
+
+    const incomeNote = totalReceived > 0 ? `, $${totalReceived.toFixed(2)} received (credits/income)` : '';
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -1412,19 +1423,22 @@ export async function answerFinancialQuery(
 
 You are reviewing the user's financial data like a senior consultant reviewing an expense report. Data first, tone second. Lead with the numbers, then the observation.
 
+CRITICAL — SIGN CONVENTION: Plaid uses positive amounts for outflows (debits/expenses) and negative amounts for inflows (credits/income/deposits). Each transaction row is already labeled DEBIT or CREDIT — use those labels, never guess direction from the amount sign.
+
 Available data:
-- Transactions from the last 30 days
+- Transactions from the last 30 days (each labeled DEBIT or CREDIT)
 - Connected account balances
 
 Rules:
 - Answer with the actual data. "You spent $X at Y" not "It looks like there may have been some spending..."
+- Never label a CREDIT transaction as a charge, expense, or spending.
 - Keep answers concise (2-4 sentences) unless the question needs more.
 - If something isn't in the data, say so directly — what you can see, what you can't.
 - Do NOT soften spending observations. Facts are facts. Apply WEIGHTED WIN AUDITOR if small spending concerns are overshadowing the full picture.`
         },
         {
           role: "user",
-          content: `ACCOUNTS:\n${accountSummary}\n\nRECENT TRANSACTIONS (last 30 days, ${transactions.length} total, $${totalSpent.toFixed(2)} spent):\n${transactionSummary}\n\nUSER QUESTION: ${query}`
+          content: `ACCOUNTS:\n${accountSummary}\n\nRECENT TRANSACTIONS (last 30 days, ${transactions.length} total — $${totalSpent.toFixed(2)} spent${incomeNote}):\n${transactionSummary}\n\nUSER QUESTION: ${query}`
         },
       ],
     });
@@ -1582,7 +1596,9 @@ export async function generatePersonalNewsFeed(
         .map(c => `${c.category}: $${c.amount.toFixed(2)}`).join(', ');
       const topMerchants = financialSummary.topMerchants.slice(0, 5)
         .map(m => `${m.merchant}: $${m.amount.toFixed(2)}`).join(', ');
-      financialContext = `\n\nFINANCIAL ACTIVITY (last 7 days):\n- Total spending: $${financialSummary.totalSpending.toFixed(2)}\n- Transactions: ${financialSummary.transactionCount}\n- Categories: ${topCategories}\n- Merchants: ${topMerchants}`;
+      const incomeNote = financialSummary.totalIncome && financialSummary.totalIncome > 0
+        ? `\n- Total income/deposits: $${financialSummary.totalIncome.toFixed(2)}` : '';
+      financialContext = `\n\nFINANCIAL ACTIVITY (last 7 days, Plaid sign convention: positive=debit/expense, negative=credit/income):\n- Total spending (debits): $${financialSummary.totalSpending.toFixed(2)}${incomeNote}\n- Transactions: ${financialSummary.transactionCount}\n- Spend categories: ${topCategories}\n- Merchants: ${topMerchants}`;
     }
 
     // Format people context if available (user's relationship details)

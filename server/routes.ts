@@ -2708,13 +2708,14 @@ Respond with JSON only.`
         return { emails: [], source: null };
       };
       
-      const fetchFinancial = async (): Promise<{ totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
+      const fetchFinancial = async (): Promise<{ totalSpending: number; totalIncome?: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
         if (!shouldFetchFinancial) return undefined;
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
           if (rawSummary && rawSummary.transactionCount > 0) {
             return {
               totalSpending: rawSummary.totalSpending,
+              totalIncome: rawSummary.totalIncome,
               transactionCount: rawSummary.transactionCount,
               categoryBreakdown: rawSummary.categoryBreakdown,
               topMerchants: rawSummary.topMerchants
@@ -2994,13 +2995,14 @@ Respond with JSON only.`
         return [];
       };
       
-      const fetchFinancial = async (): Promise<{ totalSpending: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
+      const fetchFinancial = async (): Promise<{ totalSpending: number; totalIncome?: number; transactionCount: number; categoryBreakdown: Array<{ category: string; amount: number }>; topMerchants: Array<{ merchant: string; amount: number }> } | undefined> => {
         if (!shouldFetchFinancial) return undefined;
         try {
           const rawSummary = await plaidService.getSpendingSummary(user.id, 7);
           if (rawSummary && rawSummary.transactionCount > 0) {
             return {
               totalSpending: rawSummary.totalSpending,
+              totalIncome: rawSummary.totalIncome,
               transactionCount: rawSummary.transactionCount,
               categoryBreakdown: rawSummary.categoryBreakdown,
               topMerchants: rawSummary.topMerchants

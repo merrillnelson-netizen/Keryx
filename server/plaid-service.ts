@@ -334,9 +334,14 @@ export async function getTransactionCategories(userId: string): Promise<string[]
 export async function getSpendingSummary(userId: string, days: number = 7) {
   const transactions = await getRecentTransactions(userId, days, 500);
   
+  // Plaid sign convention: positive = outflow (debit/expense), negative = inflow (credit/income/deposit)
   const totalSpending = transactions
     .filter(t => t.amount > 0)
     .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalIncome = transactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
   
   const categoryBreakdown: Record<string, number> = {};
   for (const t of transactions) {
@@ -355,6 +360,7 @@ export async function getSpendingSummary(userId: string, days: number = 7) {
   
   return {
     totalSpending: Math.round(totalSpending * 100) / 100,
+    totalIncome: Math.round(totalIncome * 100) / 100,
     transactionCount: transactions.length,
     categoryBreakdown: Object.entries(categoryBreakdown)
       .sort((a, b) => b[1] - a[1])
@@ -425,14 +431,15 @@ export async function detectFinancialAlerts(
     return alerts;
   }
 
-  // Detect large transactions (over $500)
-  const largeTransactions = newTransactions.filter(t => Math.abs(t.amount) > 500);
+  // Plaid sign convention: positive = outflow (debit/expense), negative = inflow (credit/income/deposit)
+  // Only alert on outflows (positive amounts) — never flag deposits/credits as "large charges"
+  const largeTransactions = newTransactions.filter(t => t.amount > 500);
   for (const txn of largeTransactions.slice(0, 2)) {
     const merchant = txn.merchantName || txn.name;
     alerts.push({
       type: 'large_transaction',
       title: 'Large Transaction Detected',
-      description: `$${Math.abs(txn.amount).toFixed(2)} charge at ${merchant}`,
+      description: `$${txn.amount.toFixed(2)} charge at ${merchant}`,
       amount: txn.amount,
       merchant,
       date: txn.date
@@ -440,8 +447,10 @@ export async function detectFinancialAlerts(
   }
 
   // Detect potential subscription changes (recurring merchant with different amount)
+  // Only check outflows (positive amounts) — subscriptions are always debits
   const subscriptionKeywords = ['subscription', 'monthly', 'recurring', 'streaming', 'membership'];
   const potentialSubscriptions = newTransactions.filter(t => {
+    if (t.amount <= 0) return false; // Skip credits/income
     const name = (t.merchantName || t.name).toLowerCase();
     return subscriptionKeywords.some(kw => name.includes(kw)) ||
            ['netflix', 'spotify', 'amazon prime', 'hulu', 'disney', 'youtube', 'apple', 'google'].some(s => name.includes(s));
