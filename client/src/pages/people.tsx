@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -101,6 +101,8 @@ export default function People() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  const [personDialogTab, setPersonDialogTab] = useState<"memories" | "messages">("memories");
+
   const { data: mentions = [], isLoading: mentionsLoading } = useQuery<LogEntry[]>({
     queryKey: ["/api/people", selectedPerson?.name, "mentions"],
     queryFn: async () => {
@@ -116,8 +118,43 @@ export default function People() {
       return json.data || [];
     },
     enabled: !!selectedPerson,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
+
+  interface PersonMessage {
+    id: string;
+    body: string | null;
+    senderName: string | null;
+    direction: string;
+    timestamp: string;
+    conversationId: string;
+    mood: string | null;
+  }
+  interface PersonConversationResult {
+    conversation: { id: string; contactName: string | null; contactAddress: string; platform: string };
+    messages: PersonMessage[];
+  }
+
+  const { data: personMessages, isLoading: personMessagesLoading } = useQuery<{ status: string; data: PersonConversationResult[] }>({
+    queryKey: ["/api/people", selectedPerson?.id, "messages"],
+    queryFn: async () => {
+      if (!selectedPerson?.id) throw new Error("No person selected");
+      const response = await fetch(`/api/people/${selectedPerson.id}/messages`, { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
+      return response.json();
+    },
+    enabled: !!selectedPerson && personDialogTab === "messages",
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
+  const allPersonMessages: PersonMessage[] = (personMessages?.data ?? []).flatMap(r => r.messages)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const totalPersonMessageCount = allPersonMessages.length;
 
   const updatePersonMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: { name?: string; relationship?: string; notes?: string; priority?: number } }) => {
@@ -1104,60 +1141,158 @@ export default function People() {
         </div>
       )}
 
-      {/* Memories Popup Dialog */}
-      <Dialog open={!!selectedPerson} onOpenChange={() => setSelectedPerson(null)}>
-        <DialogContent className="glass-card-strong border-white/20 max-w-lg max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+      {/* Person Detail Dialog — Memories + Messages tabs */}
+      <Dialog open={!!selectedPerson} onOpenChange={(open) => { if (!open) { setSelectedPerson(null); setPersonDialogTab("memories"); } }}>
+        <DialogContent className="glass-card-strong border-white/20 max-w-lg max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-3 border-b border-white/10 flex-shrink-0">
+            <DialogTitle className="flex items-center gap-3 pr-6">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
                 <User className="w-5 h-5 text-white" />
               </div>
-              <div>
-                <span className="text-lg">{selectedPerson?.name}</span>
-                {selectedPerson?.relationship && (
-                  <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary border-primary/30 text-xs">
-                    {selectedPerson.relationship}
-                  </Badge>
-                )}
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-lg truncate">{selectedPerson?.name}</span>
+                  {selectedPerson?.relationship && (
+                    <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 text-xs flex-shrink-0">
+                      {selectedPerson.relationship}
+                    </Badge>
+                  )}
+                </div>
               </div>
             </DialogTitle>
-            <DialogDescription>
-              {mentions.length} {mentions.length === 1 ? 'memory' : 'memories'} mentioning this person
+            <DialogDescription className="sr-only">
+              Memories and messages for {selectedPerson?.name}
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto mt-4 pr-2 -mr-2">
-            {mentionsLoading ? (
-              <div className="flex items-center justify-center h-32">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : !mentions.length ? (
-              <p className="text-muted-foreground text-center py-8">No memories found</p>
-            ) : (
-              <div className="space-y-3">
-                {mentions.map((entry: LogEntry) => (
-                  <div 
-                    key={entry.id} 
-                    className="glass-card p-3 rounded-lg border border-white/10"
-                    data-testid={`mention-${entry.id}`}
-                  >
-                    <p className="text-foreground text-sm">{entry.memoryText}</p>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <Badge variant="outline" className="text-xs border-white/20">
-                        {new Date(entry.timestamp!).toLocaleDateString()}
-                      </Badge>
-                      <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
-                        {entry.topicTag}
-                      </Badge>
-                      {entry.mood && (
-                        <Badge variant="outline" className="text-xs border-white/20">
-                          {entry.mood}
-                        </Badge>
-                      )}
-                    </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-white/10 flex-shrink-0">
+            <button
+              onClick={() => setPersonDialogTab("memories")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+                personDialogTab === "memories"
+                  ? "border-b-2 border-primary text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <BookOpen className="w-4 h-4" />
+              Memories
+              {mentions.length > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{mentions.length}</Badge>
+              )}
+            </button>
+            <button
+              onClick={() => setPersonDialogTab("messages")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors",
+                personDialogTab === "messages"
+                  ? "border-b-2 border-primary text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <MessageCircle className="w-4 h-4" />
+              Messages
+              {personDialogTab === "messages" && totalPersonMessageCount > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{totalPersonMessageCount}</Badge>
+              )}
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* Memories Tab */}
+            {personDialogTab === "memories" && (
+              <>
+                {mentionsLoading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   </div>
-                ))}
-              </div>
+                ) : !mentions.length ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                    <p className="font-medium">No memories found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {mentions.map((entry: LogEntry) => (
+                      <div
+                        key={entry.id}
+                        className="glass-card p-3 rounded-lg border border-white/10"
+                        data-testid={`mention-${entry.id}`}
+                      >
+                        <p className="text-foreground text-sm">{entry.memoryText}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <Badge variant="outline" className="text-xs border-white/20">
+                            {new Date(entry.timestamp!).toLocaleDateString()}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs bg-primary/20 text-primary border-primary/30">
+                            {entry.topicTag}
+                          </Badge>
+                          {entry.mood && (
+                            <Badge variant="outline" className="text-xs border-white/20">
+                              {entry.mood}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Messages Tab */}
+            {personDialogTab === "messages" && (
+              <>
+                {personMessagesLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : allPersonMessages.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <MessageCircle className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                    <p className="font-medium">No messages found</p>
+                    <p className="text-xs mt-1">Messages are matched by name or phone number</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {allPersonMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={cn(
+                          "flex",
+                          msg.direction === "sent" ? "justify-end" : "justify-start"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[85%] rounded-xl px-3 py-2",
+                            msg.direction === "sent"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted"
+                          )}
+                        >
+                          {msg.direction !== "sent" && msg.senderName && (
+                            <p className="text-[10px] font-medium mb-0.5 text-muted-foreground">
+                              {msg.senderName}
+                            </p>
+                          )}
+                          <p className="text-sm">{msg.body || "(no content)"}</p>
+                          <p className={cn(
+                            "text-[10px] mt-1",
+                            msg.direction === "sent" ? "text-primary-foreground/60" : "text-muted-foreground"
+                          )}>
+                            {new Date(msg.timestamp).toLocaleString([], {
+                              month: "short", day: "numeric",
+                              hour: "2-digit", minute: "2-digit"
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </DialogContent>

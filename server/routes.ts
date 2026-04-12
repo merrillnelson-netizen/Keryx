@@ -2052,6 +2052,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   /**
+   * GET /api/people/:id/messages - Get conversations & recent messages linked to a person
+   * Matches by contactName (case-insensitive, name/aliases) or contactAddress (phone number)
+   * Requires authentication
+   */
+  app.get("/api/people/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const person = await storage.getPersonById(user.id, req.params.id);
+      if (!person) {
+        return sendErrorResponse(res, 404, "Person not found");
+      }
+
+      // Build name variants for matching (name + all aliases, lowercased)
+      const nameVariants = [person.name, ...(person.aliases || [])].map(n => n.toLowerCase().trim()).filter(Boolean);
+
+      // Normalize phone number to digits only for loose matching
+      const personPhoneDigits = person.phoneNumber ? person.phoneNumber.replace(/\D/g, '') : null;
+
+      // Fetch all conversations to filter in memory (max 1000 — sufficient for any user)
+      const allConversations = await storage.getMessageConversations(user.id, 1000, 0);
+
+      const matchingConvs = allConversations.filter(conv => {
+        // Match by phone number if available
+        if (personPhoneDigits && personPhoneDigits.length >= 7) {
+          const addrDigits = conv.contactAddress.replace(/\D/g, '');
+          if (addrDigits.endsWith(personPhoneDigits) || personPhoneDigits.endsWith(addrDigits)) return true;
+        }
+        // Match by contactName (case-insensitive, partial match on any name variant)
+        if (conv.contactName) {
+          const cn = conv.contactName.toLowerCase().trim();
+          if (nameVariants.some(v => cn === v || cn.includes(v) || v.includes(cn))) return true;
+        }
+        return false;
+      });
+
+      // For each matching conversation, fetch 50 most recent messages
+      const results = await Promise.all(
+        matchingConvs.slice(0, 10).map(async conv => ({
+          conversation: conv,
+          messages: await storage.getMessages(user.id, conv.id, 50, 0)
+        }))
+      );
+
+      res.json({
+        status: 'success',
+        data: results,
+        conversationCount: results.length,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch person messages", error);
+    }
+  });
+
+  /**
    * PATCH /api/people/:id - Update a person's details
    * Requires authentication
    */
