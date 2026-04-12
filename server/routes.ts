@@ -1286,9 +1286,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Remove internal fields that shouldn't be updated via this endpoint
       const { 
-        telegramVerificationExpires, 
-        telegramVerificationCode,
-        telegramChatId,
         createdAt,
         updatedAt,
         id,

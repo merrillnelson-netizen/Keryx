@@ -66,19 +66,6 @@ const capabilities: CapabilityCategory[] = [
     ]
   },
   {
-    id: "telegram",
-    name: "Telegram",
-    icon: MessageSquare,
-    color: "text-purple-500",
-    description: "Record memories on-the-go and receive proactive notifications",
-    examples: [
-      { phrase: "Send voice notes to Keryx via Telegram", description: "Record memories hands-free from your phone" },
-      { phrase: "Get morning briefings via Telegram", description: "Receive your daily summary as a message" },
-      { phrase: "Quick text notes while commuting", description: "Log thoughts without opening the app" },
-      { phrase: "Receive pattern alerts on Telegram", description: "Get notified about important trends in your data" },
-    ]
-  },
-  {
     id: "memory",
     name: "Memory & Search",
     icon: Brain,
@@ -358,7 +345,6 @@ export function KeryxCapabilitiesModal() {
                     <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", 
                       cat.id === "calendar" && "bg-blue-500/20",
                       cat.id === "email" && "bg-green-500/20",
-                      cat.id === "telegram" && "bg-purple-500/20",
                       cat.id === "memory" && "bg-amber-500/20",
                       cat.id === "finance" && "bg-emerald-500/20",
                       cat.id === "ideas" && "bg-yellow-500/20",

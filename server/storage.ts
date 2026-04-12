@@ -68,8 +68,6 @@ export interface IStorage {
   // Settings (user-scoped)
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
-  findSettingsByTelegramChatId(chatId: string): Promise<Settings | undefined>;
-  findSettingsByTelegramVerificationCode(code: string): Promise<Settings | undefined>;
 
   // People tracking (user-scoped)
   getPeople(userId: string): Promise<Person[]>;
@@ -789,34 +787,6 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to update settings:', error);
       throw new Error('Database error while updating settings');
-    }
-  }
-
-  async findSettingsByTelegramChatId(chatId: string): Promise<Settings | undefined> {
-    try {
-      const [result] = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.telegramChatId, chatId))
-        .limit(1);
-      return result || undefined;
-    } catch (error) {
-      console.error('Failed to find settings by Telegram chat ID:', error);
-      throw new Error('Database error while finding settings by Telegram chat ID');
-    }
-  }
-
-  async findSettingsByTelegramVerificationCode(code: string): Promise<Settings | undefined> {
-    try {
-      const [result] = await db
-        .select()
-        .from(settings)
-        .where(eq(settings.telegramVerificationCode, code))
-        .limit(1);
-      return result || undefined;
-    } catch (error) {
-      console.error('Failed to find settings by Telegram verification code:', error);
-      throw new Error('Database error while finding settings by verification code');
     }
   }
 
