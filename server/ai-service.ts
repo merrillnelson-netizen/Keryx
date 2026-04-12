@@ -1400,7 +1400,7 @@ export async function answerFinancialQuery(
     // Format transaction context with explicit direction labels so GPT never confuses credits with debits
     const transactionSummary = transactions.length > 0 
       ? transactions.slice(0, 50).map(t => {
-          const direction = t.amount > 0 ? 'DEBIT (expense)' : 'CREDIT (income/deposit)';
+          const direction = t.amount > 0 ? 'DEBIT (expense)' : t.amount < 0 ? 'CREDIT (income/deposit)' : 'ADJUSTMENT ($0)';
           const displayAmount = Math.abs(t.amount).toFixed(2);
           return `${t.date.toISOString().split('T')[0]} | ${direction} $${displayAmount} | ${t.merchantName || t.name} | ${t.primaryCategory || 'uncategorized'}`;
         }).join('\n')
