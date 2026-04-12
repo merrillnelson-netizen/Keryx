@@ -6669,7 +6669,8 @@ Respond with JSON only.`
       const ghInfo = await getLatestGithubApk();
       res.json({
         available: ghInfo.available,
-        url: ghInfo.available ? "/api/android-bridge/apk" : null,
+        // url points directly to GitHub asset when available; kept for backwards-compat
+        url: ghInfo.downloadUrl ?? (ghInfo.available ? "/api/android-bridge/apk" : null),
         releaseUrl: ghInfo.releaseUrl ?? `https://github.com/${GITHUB_REPO}/releases`,
         version: ghInfo.version,
         publishedAt: ghInfo.publishedAt,
