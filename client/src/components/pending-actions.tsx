@@ -96,6 +96,7 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
       calendar: 'bg-purple-500/20 text-purple-500',
       email: 'bg-red-500/20 text-red-500',
       reminder: 'bg-amber-500/20 text-amber-500',
+      people: 'bg-sky-500/20 text-sky-500',
     };
     return colors[category] || 'bg-muted text-muted-foreground';
   };

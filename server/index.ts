@@ -11,6 +11,7 @@ import { processMessageBatch } from "./message-ai-service";
 import { sendPushToAllUserDevices } from "./push-service";
 import { handleWebhookEvent } from "./stripe-service";
 import { getStripeSync } from "./stripe-client";
+import { startVelocityScheduler } from "./velocity-service";
 
 /**
  * Validate required environment variables on startup
@@ -207,6 +208,11 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // ─── Velocity Decay Scheduler ────────────────────────────────────────────
+    log('[velocity] Starting velocity decay scheduler (runs now + every 24h)');
+    startVelocityScheduler();
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ─── Reminder Daemon ─────────────────────────────────────────────────────
     log('[reminder-daemon] Started — polling every 60s');

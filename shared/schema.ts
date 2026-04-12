@@ -203,6 +203,9 @@ export const people = pgTable("people", {
   source: text("source").default("memory").notNull(),
   firstMentioned: timestamp("first_mentioned").defaultNow().notNull(),
   lastMentioned: timestamp("last_mentioned").defaultNow().notNull(),
+  recentMentionCount: integer("recent_mention_count").default(0),
+  velocityTier: text("velocity_tier").default("acquaintance"),
+  previousVelocityTier: text("previous_velocity_tier"),
 }, (table) => ({
   userIdIdx: index("people_user_id_idx").on(table.userId),
   uniqueUserPerson: uniqueIndex("people_user_name_idx").on(table.userId, table.name),

@@ -7,7 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle, Activity } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import {
@@ -439,6 +440,32 @@ export default function People() {
     return { label: info.label, color: info.bgClass };
   };
 
+  const getVelocityTierInfo = (tier: string | null | undefined) => {
+    switch (tier) {
+      case "high":
+        return {
+          label: "High",
+          className: "bg-green-500/15 text-green-400 border-green-500/30",
+          tooltip: "Active — 5+ mentions in the last 30 days",
+          dotClass: "bg-green-400 animate-pulse",
+        };
+      case "medium":
+        return {
+          label: "Medium",
+          className: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+          tooltip: "Moderate — 1–4 mentions in the last 30 days",
+          dotClass: "bg-amber-400",
+        };
+      default:
+        return {
+          label: "Acquaintance",
+          className: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+          tooltip: "Acquaintance — no mentions in the last 30 days",
+          dotClass: "bg-slate-400",
+        };
+    }
+  };
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -781,6 +808,7 @@ export default function People() {
                     {mergeMode && <TableHead className="w-[50px] text-foreground font-semibold">Select</TableHead>}
                     <TableHead className="w-[200px] text-foreground font-semibold">Name</TableHead>
                     <TableHead className="w-[80px] text-foreground font-semibold">Priority</TableHead>
+                    <TableHead className="w-[90px] text-foreground font-semibold">Activity</TableHead>
                     <TableHead className="w-[120px] text-foreground font-semibold">Relationship</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Mentions</TableHead>
                     <TableHead className="w-[100px] text-foreground font-semibold">Source</TableHead>
@@ -850,6 +878,27 @@ export default function People() {
                         <Badge variant="outline" className={cn("text-xs", getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).color)}>
                           {getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).label}
                         </Badge>
+                      </TableCell>
+                      <TableCell data-testid={`velocity-cell-${person.id}`}>
+                        {(() => {
+                          const vt = getVelocityTierInfo(person.velocityTier);
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className={cn("text-xs gap-1 cursor-default", vt.className)}>
+                                    <span className={cn("w-1.5 h-1.5 rounded-full inline-block", vt.dotClass)} />
+                                    {vt.label}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs max-w-xs">
+                                  <p><strong>Activity tier:</strong> {vt.tooltip}</p>
+                                  <p className="text-muted-foreground mt-1">Advisory only — does not change priority.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell data-testid={`relationship-cell-${person.id}`}>
                         {person.relationship ? (
@@ -1046,6 +1095,25 @@ export default function People() {
                     <Badge variant="outline" className={cn("text-xs", getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).color)}>
                       {getPriorityLabelInfo(person.priority || DEFAULT_PRIORITY_VALUE).label}
                     </Badge>
+                    {(() => {
+                      const vt = getVelocityTierInfo(person.velocityTier);
+                      return (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className={cn("text-xs gap-1 cursor-default", vt.className)}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full inline-block", vt.dotClass)} />
+                                {vt.label}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-xs">
+                              <p><strong>Activity tier:</strong> {vt.tooltip}</p>
+                              <p className="text-muted-foreground mt-1">This shows recent contact frequency — it doesn't change your priority setting.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      );
+                    })()}
                     {(() => {
                       const src = getSourceInfo(person.source || 'memory');
                       const Icon = src.icon;

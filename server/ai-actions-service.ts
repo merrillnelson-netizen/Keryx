@@ -310,6 +310,11 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
       case AI_ACTION_TYPES.REMINDER_CREATE:
         result = await executeReminderCreate(action);
         break;
+      case 'person_decay_audit':
+        // Decay audit actions are advisory — approving is an acknowledgment, not an execution.
+        // The user has seen the prompt and chosen to dismiss it without lowering priority.
+        result = { success: true, resultData: { acknowledged: true } };
+        break;
       default:
         // Provide helpful error messages for not-yet-implemented actions
         const notImplementedActions: Record<string, string> = {
