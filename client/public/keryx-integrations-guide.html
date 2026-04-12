@@ -45,7 +45,6 @@
 <li><a href="#outlook-calendar">Outlook Calendar</a></li>
 <li><a href="#gmail">Gmail</a></li>
 <li><a href="#outlook-mail">Outlook Mail</a></li>
-<li><a href="#telegram">Telegram Bot</a></li>
 <li><a href="#plaid">Plaid (Financial Data)</a></li>
 <li><a href="#tavily">Tavily AI Search</a></li>
 <li><a href="#location">Location Services</a></li>
@@ -297,53 +296,7 @@
 </div>
 </div>
 
-<!-- ====== 6. TELEGRAM ====== -->
-<div class="section" id="telegram">
-<h2>6. Telegram Bot</h2>
-
-<div class="detail">
-<p><span class="detail-label">Where:</span> Settings page (account linking), external Telegram app, morning briefings delivery.</p>
-</div>
-
-<div class="detail">
-<p><span class="detail-label">Why:</span> Lets you record memories from anywhere without opening Keryx. Send a text message or voice note to the Telegram bot, and it becomes a full memory with AI processing. Also delivers morning briefings and notifications directly to Telegram.</p>
-</div>
-
-<div class="detail">
-<p><span class="detail-label">When it activates:</span></p>
-<ul>
-<li>When you send a text message to the Keryx bot: Saved as a memory with full AI processing</li>
-<li>When you send a voice note: Transcribed via OpenAI Whisper, then processed as a memory</li>
-<li>Morning briefings: Optionally delivered to your Telegram chat</li>
-<li>Pattern alerts and notifications: Sent to Telegram when push notifications aren't available</li>
-<li>Account linking: Connect your Telegram account to Keryx via a one-time code</li>
-</ul>
-</div>
-
-<div class="detail">
-<p><span class="detail-label">How it works:</span></p>
-<ul>
-<li>Uses Telegram Bot API with webhook-based message receiving</li>
-<li>Webhook URL receives updates at <code>/api/telegram/webhook</code></li>
-<li>HMAC-SHA256 signature validation protects the webhook endpoint</li>
-<li>Voice notes: Downloads the audio file, sends to OpenAI Whisper for transcription</li>
-<li>Account linking: User starts bot, gets a 6-digit code, enters it in Keryx settings</li>
-<li>HTML formatting for rich message display in Telegram</li>
-</ul>
-</div>
-
-<div class="detail">
-<p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/telegram-service.ts</p>
-</div>
-
-<div class="detail">
-<span class="tag green">Active</span>
-<span class="tag">Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET</span>
-</div>
-</div>
-
-<!-- ====== 7. PLAID ====== -->
+<!-- ====== 6. PLAID ====== -->
 <div class="section" id="plaid">
 <h2>7. Plaid (Financial Data)</h2>
 
@@ -512,7 +465,6 @@
 <li>Subscriptions stored per-device in <code>pushSubscriptions</code> table</li>
 <li>Supports action buttons in notifications (approve/deny for AI actions)</li>
 <li>Failed subscriptions automatically cleaned up (removes expired/invalid subscriptions)</li>
-<li>Falls back to Telegram notifications when push isn't available</li>
 </ul>
 </div>
 
@@ -558,7 +510,6 @@
 <li>Shared <code>useVoiceInput</code> hook eliminates code duplication across pages</li>
 <li>Proper TypeScript types via custom <code>speech.ts</code> type definitions</li>
 <li>No server-side processing needed for browser speech (happens locally)</li>
-<li>Telegram voice notes use OpenAI Whisper for server-side transcription (different path)</li>
 </ul>
 </div>
 
@@ -913,7 +864,7 @@
 <h2>19. Authentication</h2>
 
 <div class="detail">
-<p><span class="detail-label">Where:</span> Login/signup pages, every API route (session validation), Telegram account linking.</p>
+<p><span class="detail-label">Where:</span> Login/signup pages, every API route (session validation).</p>
 </div>
 
 <div class="detail">
@@ -925,7 +876,6 @@
 <ul>
 <li>On every API request: Session cookie validated via Passport.js middleware</li>
 <li>On login/signup: Password hashed with bcrypt, session created</li>
-<li>Telegram linking: Validates ownership before connecting accounts</li>
 <li>Companion app: Session-based authentication for API calls</li>
 </ul>
 </div>
@@ -1060,16 +1010,6 @@
 <td style="padding: 8px;">Auto-managed</td>
 </tr>
 <tr style="border-bottom: 1px solid #eee;">
-<td style="padding: 8px;"><code>TELEGRAM_BOT_TOKEN</code></td>
-<td style="padding: 8px;">Telegram Bot</td>
-<td style="padding: 8px;">Secret</td>
-</tr>
-<tr style="border-bottom: 1px solid #eee;">
-<td style="padding: 8px;"><code>TELEGRAM_WEBHOOK_SECRET</code></td>
-<td style="padding: 8px;">Telegram webhook validation</td>
-<td style="padding: 8px;">Secret</td>
-</tr>
-<tr style="border-bottom: 1px solid #eee;">
 <td style="padding: 8px;"><code>PLAID_CLIENT_ID</code></td>
 <td style="padding: 8px;">Plaid financial integration</td>
 <td style="padding: 8px;">Secret</td>
@@ -1132,7 +1072,6 @@
 <li><strong>Morning Briefings</strong> &rarr; requires OpenAI; enriched by Calendar, Email, Plaid, Goals, Reminders, Messages</li>
 <li><strong>Financial Queries</strong> &rarr; requires OpenAI + Plaid</li>
 <li><strong>Memory Auto-Linking</strong> &rarr; requires Calendar connected</li>
-<li><strong>Telegram Voice Notes</strong> &rarr; requires Telegram + OpenAI (Whisper transcription)</li>
 <li><strong>Personal Insights</strong> &rarr; requires OpenAI; enriched by all data sources</li>
 <li><strong>Chrome Extension Relay</strong> &rarr; requires a Relay API key (generated in Settings); data appears alongside SMS archive imports in Messages page</li>
 </ul>

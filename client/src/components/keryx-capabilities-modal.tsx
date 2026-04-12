@@ -189,7 +189,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Summarize my calendar and emails for the week", description: "Cross-integration overview of your schedule and messages" },
       { phrase: "After my meeting with Lisa, remind me to send the proposal", description: "Intelligent follow-up scheduling based on events" },
       { phrase: "Track my energy levels after each meeting today", description: "Automatic memory prompts tied to calendar events" },
-      { phrase: "Send me a Telegram summary of tomorrow's schedule", description: "Proactive calendar digest via messaging" },
+      { phrase: "Send me a summary of tomorrow's schedule via email", description: "Proactive calendar digest delivered to your inbox" },
       { phrase: "Find all memories about the client and draft a prep email", description: "Research and compose in one command" },
       { phrase: "How much did I spend after each meeting this week?", description: "Cross-reference spending with calendar events" },
     ]

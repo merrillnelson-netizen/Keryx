@@ -681,12 +681,6 @@ export default function LandingPage() {
                 gradient: "from-blue-500 to-cyan-500"
               },
               {
-                icon: MessageSquare,
-                title: "Telegram",
-                description: "Send text or voice messages to your personal Keryx bot. Memories captured instantly.",
-                gradient: "from-sky-500 to-blue-600"
-              },
-              {
                 icon: Smartphone,
                 title: "Meta Glasses",
                 description: "Companion app for Meta smart glasses with geolocation capture and hands-free logging.",
