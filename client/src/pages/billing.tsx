@@ -40,7 +40,6 @@ const TIER_FEATURES = {
     { label: "Goals & reminders", included: false },
     { label: "Calendar & email", included: false },
     { label: "People manager", included: false },
-    { label: "Telegram integration", included: false },
     { label: "Ideas workspace", included: false },
   ],
   pro: [
@@ -54,7 +53,6 @@ const TIER_FEATURES = {
     { label: "Goals & reminders", included: true },
     { label: "Calendar & email", included: true },
     { label: "People manager + AI search", included: true },
-    { label: "Telegram integration", included: true },
     { label: "Ideas workspace", included: true },
     { label: "Financial (Plaid)", included: false },
     { label: "Contextual Discoveries", included: false },

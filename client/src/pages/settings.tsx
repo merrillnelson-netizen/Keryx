@@ -21,7 +21,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { RelayApiCard } from "@/components/settings/relay-api-card";
-import { TelegramCard } from "@/components/settings/telegram-card";
 import { PushNotificationCard } from "@/components/settings/push-notification-card";
 import { PlaidCard } from "@/components/settings/plaid-card";
 import { SmsImportSection } from "@/components/settings/sms-import-section";
@@ -1155,9 +1154,6 @@ export default function SettingsPage() {
           </Card>
 
           <SmsImportSection />
-
-          <TelegramCard />
-
 
           <PwaInstallPrompt variant="settings" />
 

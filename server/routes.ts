@@ -13,7 +13,6 @@ import { isCalendarConnected, isGoogleCalendarConnected, getTodaysEvents, getUpc
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { isGmailConnected, getGmailCapabilities, getRecentEmails } from "./gmail-service";
 import { isOutlookMailConnected, getOutlookRecentEmails } from "./outlook-mail-service";
-import { isTelegramConfigured, handleTelegramWebhook, generateVerificationCode, sendTelegramMessage, setWebhook, sendBriefingToTelegram, sendAlertToTelegram, type TelegramUpdate } from "./telegram-service";
 import { buildLocationContext, formatLocationContextForAI, parseGoogleTakeoutFile, convertToInsertLocation, clusterLocations, detectFrequentPlaces, reverseGeocode } from "./location-service";
 import { getAvailableActionTypes, approveAction, rejectAction, processUserInputForActions } from "./ai-actions-service";
 import * as plaidService from "./plaid-service";
@@ -206,82 +205,6 @@ function sendErrorResponse(res: Response, statusCode: number, message: string, e
     timestamp: new Date().toISOString(),
     status: 'error'
   });
-}
-
-/**
- * Format briefing data for Telegram HTML message
- */
-function formatBriefingForTelegram(briefing: {
-  greeting?: string;
-  focusAreas?: string[];
-  reminders?: string[];
-  moodTrend?: string;
-  emailHighlights?: string[];
-  affirmation?: string;
-}): string {
-  let message = briefing.greeting ? `${briefing.greeting}\n\n` : '';
-  
-  const focusAreas = briefing.focusAreas || [];
-  if (focusAreas.length > 0) {
-    message += `<b>📌 Focus Areas</b>\n`;
-    focusAreas.forEach(area => {
-      message += `• ${area}\n`;
-    });
-    message += '\n';
-  }
-  
-  const reminders = briefing.reminders || [];
-  if (reminders.length > 0) {
-    message += `<b>⏰ Reminders</b>\n`;
-    reminders.forEach(reminder => {
-      message += `• ${reminder}\n`;
-    });
-    message += '\n';
-  }
-  
-  if (briefing.moodTrend) {
-    message += `<b>📊 Mood Trend</b>\n${briefing.moodTrend}\n\n`;
-  }
-  
-  const emailHighlights = briefing.emailHighlights || [];
-  if (emailHighlights.length > 0) {
-    message += `<b>📧 Email Highlights</b>\n`;
-    emailHighlights.forEach(highlight => {
-      message += `• ${highlight}\n`;
-    });
-    message += '\n';
-  }
-  
-  if (briefing.affirmation) {
-    message += `✨ ${briefing.affirmation}`;
-  }
-  
-  return message || 'Your daily briefing is ready!';
-}
-
-/**
- * Format alerts for Telegram HTML message
- */
-function formatAlertsForTelegram(alerts: Array<{
-  type: 'positive' | 'negative' | 'neutral' | 'insight';
-  title: string;
-  description: string;
-  actionSuggestion?: string;
-}>): string {
-  if (alerts.length === 0) return '';
-  
-  let message = '';
-  alerts.forEach(alert => {
-    const icon = alert.type === 'positive' ? '🟢' : alert.type === 'negative' ? '🔴' : alert.type === 'insight' ? '💡' : '⚪';
-    message += `${icon} <b>${alert.title}</b>\n`;
-    message += `${alert.description}\n`;
-    if (alert.actionSuggestion) {
-      message += `💭 ${alert.actionSuggestion}\n`;
-    }
-    message += '\n';
-  });
-  
-  return message;
 }
 
 /**
@@ -2711,7 +2634,6 @@ Respond with JSON only.`
               data: cached.data,
               memoriesAnalyzed: cached.memoriesCount,
               emailsAnalyzed: 0,
-              telegramSent: false,
               cached: true,
               generatedAt: cached.generatedAt.toISOString()
             });
@@ -2919,21 +2841,13 @@ Respond with JSON only.`
         generatedAt: new Date().toISOString()
       });
 
-      // Background: Send notifications
-      const sendToTelegram = req.query.sendToTelegram === 'true';
+      // Background: Send push notification if requested
       const sendPushNotif = req.query.sendPush === 'true';
       
-      if (sendToTelegram || sendPushNotif) {
+      if (sendPushNotif) {
         setImmediate(async () => {
           try {
-            // Telegram notification
-            if (sendToTelegram && userSettings?.telegramEnabled && userSettings?.telegramBriefingsEnabled && userSettings?.telegramChatId) {
-              const briefingText = formatBriefingForTelegram(briefing);
-              await sendBriefingToTelegram(user.id, briefingText);
-            }
-            
-            // Push notification
-            if (sendPushNotif && isPushConfigured()) {
+            if (isPushConfigured()) {
               const focusAreas = briefing.focusAreas?.slice(0, 2).join(' • ') || 'Your daily briefing is ready';
               await sendPushToAllUserDevices(user.id, {
                 type: 'briefing',
@@ -3467,7 +3381,6 @@ Respond with JSON only.`
               data: cached.data,
               memoriesAnalyzed: cached.memoriesCount,
               periodDays: days,
-              telegramSent: false,
               cached: true,
               timestamp: cached.generatedAt.toISOString()
             });
@@ -3538,11 +3451,8 @@ Respond with JSON only.`
       const memoriesHash = recentMemories.filter(m => m.id).map(m => m.id).join(',');
       await storage.setAiCache(user.id, 'alerts', cacheKey, alerts, memoriesHash, recentMemories.length, 30);
 
-      // Optionally send alerts to Telegram
-      const sendToTelegram = req.query.sendToTelegram === 'true';
-      let telegramSent = false;
       let pushSent = 0;
-      
+
       // Send notifications in background after response
       res.json({
         status: 'success',
@@ -3553,19 +3463,10 @@ Respond with JSON only.`
         timestamp: new Date().toISOString()
       });
 
-      // Background: Send notifications for alerts
-      if (sendToTelegram && alerts.length > 0) {
+      // Background: Push notification for most important alert
+      if (alerts.length > 0) {
         setImmediate(async () => {
           try {
-            const userSettings = await storage.getSettings(user.id);
-            
-            // Telegram notification
-            if (userSettings?.telegramEnabled && userSettings?.telegramAlertsEnabled && userSettings?.telegramChatId) {
-              const alertsText = formatAlertsForTelegram(alerts);
-              await sendAlertToTelegram(user.id, alertsText);
-            }
-            
-            // Push notification for most important alert
             if (isPushConfigured()) {
               const topAlert = alerts[0];
               if (topAlert) {
@@ -4060,211 +3961,6 @@ Respond with JSON only.`
     }
   });
 
-  // =========================================
-  // TELEGRAM INTEGRATION API ENDPOINTS
-  // =========================================
-
-  /**
-   * GET /api/telegram/status - Check Telegram connection status
-   */
-  app.get("/api/telegram/status", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const userSettings = await storage.getSettings(user.id);
-      
-      res.json({
-        status: 'success',
-        data: {
-          configured: isTelegramConfigured(),
-          connected: !!userSettings?.telegramChatId,
-          enabled: userSettings?.telegramEnabled ?? false,
-          briefingsEnabled: userSettings?.telegramBriefingsEnabled ?? true,
-          alertsEnabled: userSettings?.telegramAlertsEnabled ?? true,
-        },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to check Telegram status", error);
-    }
-  });
-
-  /**
-   * POST /api/telegram/connect - Generate verification code for Telegram connection
-   */
-  app.post("/api/telegram/connect", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      
-      if (!isTelegramConfigured()) {
-        return sendErrorResponse(res, 503, "Telegram is not configured on this server");
-      }
-      
-      const verificationCode = await generateVerificationCode();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      
-      await storage.updateSettings(user.id, {
-        telegramVerificationCode: verificationCode,
-        telegramVerificationExpires: expiresAt,
-      });
-      
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'KeryxMemoryBot';
-      
-      res.json({
-        status: 'success',
-        data: {
-          verificationCode,
-          expiresAt: expiresAt.toISOString(),
-          telegramLink: `https://t.me/${botUsername}?start=${verificationCode}`,
-          botUsername,
-        },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to generate verification code", error);
-    }
-  });
-
-  /**
-   * DELETE /api/telegram/disconnect - Disconnect Telegram account
-   */
-  app.delete("/api/telegram/disconnect", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      
-      await storage.updateSettings(user.id, {
-        telegramChatId: null,
-        telegramEnabled: false,
-        telegramVerificationCode: null,
-        telegramVerificationExpires: null,
-      });
-      
-      res.json({
-        status: 'success',
-        message: 'Telegram disconnected',
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to disconnect Telegram", error);
-    }
-  });
-
-  /**
-   * PUT /api/telegram/settings - Update Telegram notification settings
-   */
-  app.put("/api/telegram/settings", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const { enabled, briefingsEnabled, alertsEnabled } = req.body;
-      
-      const updates: Record<string, any> = {};
-      if (enabled !== undefined) updates.telegramEnabled = enabled;
-      if (briefingsEnabled !== undefined) updates.telegramBriefingsEnabled = briefingsEnabled;
-      if (alertsEnabled !== undefined) updates.telegramAlertsEnabled = alertsEnabled;
-      
-      const updatedSettings = await storage.updateSettings(user.id, updates);
-      
-      res.json({
-        status: 'success',
-        data: {
-          enabled: updatedSettings.telegramEnabled,
-          briefingsEnabled: updatedSettings.telegramBriefingsEnabled,
-          alertsEnabled: updatedSettings.telegramAlertsEnabled,
-        },
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to update Telegram settings", error);
-    }
-  });
-
-  /**
-   * POST /api/telegram/test - Send a test message to Telegram
-   */
-  app.post("/api/telegram/test", requireAuth, async (req, res) => {
-    try {
-      const user = req.user as User;
-      const userSettings = await storage.getSettings(user.id);
-      
-      if (!userSettings?.telegramChatId) {
-        return sendErrorResponse(res, 400, "Telegram is not connected");
-      }
-      
-      const success = await sendTelegramMessage(
-        userSettings.telegramChatId,
-        '🎉 <b>Test message from Keryx!</b>\n\nYour Telegram integration is working correctly.'
-      );
-      
-      if (!success) {
-        return sendErrorResponse(res, 500, "Failed to send test message");
-      }
-      
-      res.json({
-        status: 'success',
-        message: 'Test message sent',
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to send test message", error);
-    }
-  });
-
-  /**
-   * POST /api/telegram/webhook - Webhook endpoint for Telegram bot updates
-   * This is called by Telegram when the bot receives messages
-   * Validates X-Telegram-Bot-Api-Secret-Token header for security
-   */
-  app.post("/api/telegram/webhook", async (req, res) => {
-    try {
-      // Validate webhook secret if configured
-      const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-      if (webhookSecret) {
-        const providedSecret = req.headers['x-telegram-bot-api-secret-token'];
-        if (providedSecret !== webhookSecret) {
-          // Return 200 to prevent retry but log unauthorized attempt
-          console.warn('Unauthorized Telegram webhook attempt');
-          return res.status(200).json({ ok: false });
-        }
-      }
-
-      const update = req.body as TelegramUpdate;
-      const result = await handleTelegramWebhook(update);
-      
-      // Telegram requires 200 response within 60 seconds
-      res.status(200).json({ ok: true, result: result.response });
-    } catch (error) {
-      console.error('Telegram webhook error:', error);
-      // Still return 200 to prevent Telegram from retrying
-      res.status(200).json({ ok: false, error: 'Internal error' });
-    }
-  });
-
-  /**
-   * POST /api/telegram/setup-webhook - Set up the Telegram webhook (admin endpoint)
-   */
-  app.post("/api/telegram/setup-webhook", requireAuth, async (req, res) => {
-    try {
-      const { webhookUrl } = req.body;
-      
-      if (!webhookUrl) {
-        return sendErrorResponse(res, 400, "webhookUrl is required");
-      }
-      
-      const success = await setWebhook(webhookUrl);
-      
-      if (!success) {
-        return sendErrorResponse(res, 500, "Failed to set webhook");
-      }
-      
-      res.json({
-        status: 'success',
-        message: 'Webhook set successfully',
-        webhookUrl,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      sendErrorResponse(res, 500, "Failed to set webhook", error);
-    }
-  });
 
   // ============================================================================
   // Plaid / Financial Integration Routes
@@ -6905,40 +6601,85 @@ Respond with JSON only.`
     }
   });
 
+  const GITHUB_REPO = "merrillnelson-netizen/Keryx";
+
+  async function getLatestGithubApk(): Promise<{ available: boolean; downloadUrl: string | null; releaseUrl: string | null; version: string | null }> {
+    try {
+      const headers: Record<string, string> = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "Keryx-Server/1.0",
+      };
+      const token = process.env.GITHUB_TOKEN;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers });
+      if (!resp.ok) return { available: false, downloadUrl: null, releaseUrl: null, version: null };
+
+      const data = await resp.json() as { tag_name?: string; html_url?: string; assets?: Array<{ name: string; browser_download_url: string }> };
+      const apkAsset = data.assets?.find(a => a.name.endsWith(".apk"));
+      if (!apkAsset) return { available: false, downloadUrl: null, releaseUrl: data.html_url ?? null, version: data.tag_name ?? null };
+
+      return {
+        available: true,
+        downloadUrl: apkAsset.browser_download_url,
+        releaseUrl: data.html_url ?? null,
+        version: data.tag_name ?? null,
+      };
+    } catch {
+      return { available: false, downloadUrl: null, releaseUrl: null, version: null };
+    }
+  }
+
   /**
-   * GET /api/android-bridge/apk-info — check if a built APK is available for download
-   * Returns { available: boolean, url: string }
+   * GET /api/android-bridge/apk-info — check GitHub Releases for latest APK build
+   * Falls back to local disk build if present.
+   * Returns { available: boolean, url: string, releaseUrl: string, version: string }
    */
   app.get("/api/android-bridge/apk-info", requireAuth, async (req, res) => {
     try {
+      // Prefer local disk build (CI artifact deposited here), fall back to GitHub Release
       const { existsSync } = await import("fs");
       const { join } = await import("path");
       const apkPath = join(process.cwd(), "android-bridge", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-      const available = existsSync(apkPath);
+      if (existsSync(apkPath)) {
+        return res.json({ available: true, url: "/api/android-bridge/apk", releaseUrl: null, version: "local" });
+      }
+
+      const ghInfo = await getLatestGithubApk();
       res.json({
-        available,
-        url: available ? "/api/android-bridge/apk" : null,
+        available: ghInfo.available,
+        url: ghInfo.available ? "/api/android-bridge/apk" : null,
+        releaseUrl: ghInfo.releaseUrl ?? `https://github.com/${GITHUB_REPO}/releases`,
+        version: ghInfo.version,
+        githubDownloadUrl: ghInfo.downloadUrl,
       });
     } catch (error) {
-      res.json({ available: false, url: null });
+      res.json({ available: false, url: null, releaseUrl: `https://github.com/${GITHUB_REPO}/releases` });
     }
   });
 
   /**
-   * GET /api/android-bridge/apk — stream the debug APK for download
-   * Only available if a build exists on disk (produced by GitHub Actions or local build)
+   * GET /api/android-bridge/apk — redirect to GitHub Release APK or stream local build
    */
   app.get("/api/android-bridge/apk", requireAuth, async (req, res) => {
     try {
+      // Local build takes priority
       const { existsSync } = await import("fs");
       const { join } = await import("path");
       const apkPath = join(process.cwd(), "android-bridge", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-      if (!existsSync(apkPath)) {
-        return res.status(404).json({ message: "APK not built yet. See android-bridge/INSTALL.md for build instructions." });
+      if (existsSync(apkPath)) {
+        res.setHeader("Content-Disposition", "attachment; filename=KeryxBridge.apk");
+        res.setHeader("Content-Type", "application/vnd.android.package-archive");
+        return res.sendFile(apkPath);
       }
-      res.setHeader("Content-Disposition", "attachment; filename=KeryxBridge.apk");
-      res.setHeader("Content-Type", "application/vnd.android.package-archive");
-      res.sendFile(apkPath);
+
+      // Fall back to GitHub Release
+      const ghInfo = await getLatestGithubApk();
+      if (ghInfo.downloadUrl) {
+        return res.redirect(302, ghInfo.downloadUrl);
+      }
+
+      return res.status(404).json({ message: "No APK available. Please trigger a GitHub Actions build." });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to serve APK", error);
     }

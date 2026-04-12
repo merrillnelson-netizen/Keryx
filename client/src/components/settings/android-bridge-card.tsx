@@ -32,9 +32,9 @@ export function AndroidBridgeCard() {
   // Find most recent event from android-bridge
   const lastBridgeEvent = relayEvents.find(e => e.source === "android-bridge");
 
-  const { data: apkInfo } = useQuery<{ available: boolean; url: string }>({
+  const { data: apkInfo } = useQuery<{ available: boolean; url: string | null; releaseUrl: string | null; version: string | null; githubDownloadUrl?: string | null }>({
     queryKey: ["/api/android-bridge/apk-info"],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const copy = (text: string, label: string) => {
@@ -97,21 +97,34 @@ export function AndroidBridgeCard() {
                 <a href="/api/android-bridge/apk" download="KeryxBridge.apk">
                   <Download className="w-4 h-4 mr-2" />
                   Download APK
+                  {apkInfo.version && apkInfo.version !== "local" && (
+                    <span className="ml-1 text-[10px] opacity-70">({apkInfo.version})</span>
+                  )}
                 </a>
               </Button>
             ) : (
               <Button size="sm" variant="outline" asChild>
                 <a
-                  href="https://github.com/features/actions"
+                  href={apkInfo?.releaseUrl ?? "https://github.com/merrillnelson-netizen/Keryx/releases"}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   <ExternalLink className="w-4 h-4 mr-2" />
-                  Build via GitHub Actions
+                  GitHub Releases
                 </a>
               </Button>
             )}
           </div>
+          {apkInfo?.available && apkInfo.version && apkInfo.version !== "local" && (
+            <p className="text-xs text-muted-foreground">
+              Latest GitHub Release: {apkInfo.version}
+            </p>
+          )}
+          {!apkInfo?.available && (
+            <p className="text-xs text-muted-foreground">
+              No release build found yet. Trigger a GitHub Actions build first.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             After installing, open the app and paste the credentials below.
           </p>

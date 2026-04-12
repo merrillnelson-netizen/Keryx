@@ -108,12 +108,6 @@ export default function LandingPage() {
       description: "Connect bank accounts via Plaid for spending breakdowns, financial queries, and money-related pattern detection.",
       gradient: "from-emerald-500 to-green-600"
     },
-    {
-      icon: MessageSquare,
-      title: "Telegram Bot",
-      description: "Record memories via text or voice messages from Telegram. Get push notifications and alerts on the go.",
-      gradient: "from-sky-500 to-blue-600"
-    },
   ];
 
   const smartFeatures = [

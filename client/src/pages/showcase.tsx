@@ -130,7 +130,6 @@ export default function ShowcasePage() {
     { id: "financial", label: "Financial Insights" },
     { id: "actions", label: "AI Task Execution" },
     { id: "locations", label: "Location History" },
-    { id: "telegram", label: "Telegram Bot" },
     { id: "glasses", label: "Meta Glasses" },
     { id: "notifications", label: "Push Notifications" },
     { id: "timeline", label: "Timeline & History" },
@@ -296,7 +295,7 @@ export default function ShowcasePage() {
           icon={Mic}
           title="Voice-First Capture"
           subtitle="Speak naturally. Keryx does the rest."
-          description="No forms, no buttons, no friction. Just open Keryx and talk. Whether it's a fleeting thought, a meeting recap, or a grocery list — your voice is all you need. Keryx uses browser-native speech recognition for instant capture and OpenAI Whisper for Telegram voice notes."
+          description="No forms, no buttons, no friction. Just open Keryx and talk. Whether it's a fleeting thought, a meeting recap, or a grocery list — your voice is all you need. Keryx uses browser-native speech recognition for instant capture and OpenAI Whisper for accurate transcription."
           gradient="from-violet-500 to-purple-600"
         >
           <SampleCard
@@ -892,33 +891,6 @@ export default function ShowcasePage() {
           </div>
         </FeatureSection>
 
-        {/* TELEGRAM */}
-        <FeatureSection
-          id="telegram"
-          icon={MessageSquare}
-          title="Telegram Bot"
-          subtitle="Your pocket messenger for memories."
-          description="Link your Telegram account to your Keryx profile and send memories via text or voice messages from anywhere. Voice notes are processed with OpenAI Whisper for accurate transcription. Receive push notifications for briefings, alerts, and VIP mentions. Perfect for capturing thoughts on the go without opening the app."
-          gradient="from-sky-500 to-blue-600"
-        >
-          <div className="glass-card rounded-xl p-5 border border-white/10 space-y-3">
-            <h4 className="font-semibold text-foreground text-sm flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-sky-400" />
-              Telegram Interaction
-            </h4>
-            <div className="space-y-2.5">
-              <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20">
-                <p className="text-xs text-sky-400 font-medium mb-1">You sent (voice note):</p>
-                <p className="text-sm text-foreground italic">"Just left the client meeting. They loved the proposal. Contract signing next week. Feeling excited!"</p>
-              </div>
-              <div className="p-3 rounded-lg bg-white/5">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Keryx responds:</p>
-                <p className="text-sm text-muted-foreground">Logged! Topics: Work, Meeting. Mood: Excited. People: [client]. Importance: 8/10. Would you like me to add a calendar event for the contract signing?</p>
-              </div>
-            </div>
-          </div>
-        </FeatureSection>
-
         {/* META GLASSES */}
         <FeatureSection
           id="glasses"
@@ -1025,7 +997,7 @@ export default function ShowcasePage() {
           icon={Shield}
           title="Security & Privacy"
           subtitle="Your data. Your control. Always."
-          description="Keryx is built with enterprise-grade security. All routes require authentication, complete user data isolation prevents cross-user access, Telegram webhooks use HMAC validation, rate limiting prevents abuse, all inputs are validated with Zod schemas, and AI actions require user-defined approval policies. Your memories are yours — always."
+          description="Keryx is built with enterprise-grade security. All routes require authentication, complete user data isolation prevents cross-user access, rate limiting prevents abuse, all inputs are validated with Zod schemas, and AI actions require user-defined approval policies. Your memories are yours — always."
           gradient="from-green-500 to-emerald-600"
         >
           <div className="glass-card rounded-xl p-5 border border-white/10 space-y-3">
@@ -1036,7 +1008,7 @@ export default function ShowcasePage() {
                 { icon: CheckCircle, title: "Input Validation", desc: "Zod schemas validate every API request" },
                 { icon: Zap, title: "Rate Limiting", desc: "Per-user rate limiting on all AI routes" },
                 { icon: FileText, title: "Approval Policies", desc: "Control AI actions with configurable policies" },
-                { icon: Globe, title: "Webhook Security", desc: "HMAC-SHA256 for Telegram webhook validation" },
+                { icon: Globe, title: "Relay Webhook Security", desc: "HMAC-SHA256 validation for inbound relay requests" },
               ].map((item, i) => (
                 <div key={i} className="p-3 rounded-lg bg-white/5 space-y-1.5">
                   <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
