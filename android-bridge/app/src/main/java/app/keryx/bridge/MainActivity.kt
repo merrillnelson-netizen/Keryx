@@ -149,11 +149,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveConfig() {
-        val serverUrl = binding.editServerUrl.text.toString().trim().trimEnd('/')
+        var serverUrl = binding.editServerUrl.text.toString().trim().trimEnd('/')
         val apiKey = binding.editApiKey.text.toString().trim()
         if (serverUrl.isBlank() || apiKey.isBlank()) {
             Toast.makeText(this, "Please fill in Server URL and API Key", Toast.LENGTH_SHORT).show()
             return
+        }
+        // Strip the relay path if the user accidentally pastes the full endpoint URL
+        listOf("/api/relay/inbound", "/api/relay").forEach { suffix ->
+            if (serverUrl.endsWith(suffix)) serverUrl = serverUrl.removeSuffix(suffix).trimEnd('/')
         }
         prefs.serverUrl = serverUrl
         prefs.apiKey = apiKey
