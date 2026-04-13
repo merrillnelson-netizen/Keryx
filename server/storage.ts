@@ -473,6 +473,7 @@ export class DatabaseStorage implements IStorage {
           topicTag: logEntries.topicTag,
           mood: logEntries.mood,
           moodScore: logEntries.moodScore,
+          importance: logEntries.importance,
           detectedPeople: logEntries.detectedPeople,
           timestamp: logEntries.timestamp,
           geoPlaceName: logEntries.geoPlaceName,

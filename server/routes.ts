@@ -2596,8 +2596,17 @@ Respond with JSON only.`
       }
       const { question, days } = validation.data;
       
+      // Compute cutoff date for consistent scoping across all fetches
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+
       // Get recent memories for analysis (use light version - no embeddings needed)
-      const memories = await storage.getRecentLogEntriesLight(user.id, days, 100);
+      // Fetch goals and AI actions in parallel — all scoped to the same time window
+      const [memories, goals, recentAiActions] = await Promise.all([
+        storage.getRecentLogEntriesLight(user.id, days, 100),
+        storage.getGoals(user.id),
+        storage.getAiActions(user.id, undefined, 50, 0, cutoffDate),
+      ]);
       
       // No filtering needed - getRecentLogEntriesLight already filters by days
       const filteredMemories = memories;
@@ -2615,8 +2624,7 @@ Respond with JSON only.`
         });
       }
       
-      // Fetch active goals for context
-      const goals = await storage.getGoals(user.id);
+      // Build active goals context
       const activeGoals = goals
         .filter(g => g.status === 'active')
         .map(g => ({
@@ -2631,7 +2639,42 @@ Respond with JSON only.`
       const userSettings = req.userSettings;
       const userTimezone = userSettings?.userTimezone || 'America/Denver';
 
-      // Generate insights - filter and type-guard the light memories
+      // Build AI Actions context — counts by status + titles of recent ones
+      const actionsByStatus = recentAiActions.reduce<Record<string, number>>((acc, a) => {
+        acc[a.status] = (acc[a.status] ?? 0) + 1;
+        return acc;
+      }, {});
+      const aiActionsContext = {
+        counts: actionsByStatus,
+        recentCompleted: recentAiActions.filter(a => a.status === 'completed').slice(0, 5).map(a => a.title),
+        recentPending: recentAiActions.filter(a => a.status === 'pending').slice(0, 5).map(a => a.title),
+        recentRejected: recentAiActions.filter(a => a.status === 'rejected').slice(0, 5).map(a => a.title),
+      };
+
+      // Derive top people from detectedPeople arrays across memories
+      const peopleFreq = new Map<string, number>();
+      for (const m of filteredMemories) {
+        const people = (m.detectedPeople as string[] | null) ?? [];
+        for (const name of people) {
+          if (name) peopleFreq.set(name, (peopleFreq.get(name) ?? 0) + 1);
+        }
+      }
+      const topPeople = [...peopleFreq.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name, count]) => `${name} (${count} mentions)`);
+
+      // Derive top locations from geoPlaceName
+      const locationFreq = new Map<string, number>();
+      for (const m of filteredMemories) {
+        if (m.geoPlaceName) locationFreq.set(m.geoPlaceName, (locationFreq.get(m.geoPlaceName) ?? 0) + 1);
+      }
+      const topLocations = [...locationFreq.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([place, count]) => `${place} (${count} entries)`);
+
+      // Generate insights - filter and type-guard the light memories, now including importance
       const insights = await generateThematicInsights(
         filteredMemories
           .filter(m => m.memoryText && m.timestamp && m.topicTag)
@@ -2639,6 +2682,7 @@ Respond with JSON only.`
             memoryText: m.memoryText!,
             mood: m.mood || undefined,
             moodScore: m.moodScore || undefined,
+            importance: m.importance ?? undefined,
             timestamp: m.timestamp!,
             topicTag: m.topicTag!,
           })),
@@ -2646,7 +2690,10 @@ Respond with JSON only.`
         activeGoals.length > 0 ? activeGoals : undefined,
         userTimezone,
         userSettings?.sassLevel ?? 50,
-        userSettings?.professionalMode ?? false
+        userSettings?.professionalMode ?? false,
+        recentAiActions.length > 0 ? aiActionsContext : undefined,
+        topPeople.length > 0 ? topPeople : undefined,
+        topLocations.length > 0 ? topLocations : undefined,
       );
       
       res.json({

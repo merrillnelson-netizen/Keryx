@@ -747,13 +747,23 @@ export interface ThematicInsight {
  * @param question - User's question about their memories (optional)
  * @returns Promise<ThematicInsight> - Synthesized insights
  */
+interface AiActionsContext {
+  counts: Record<string, number>;
+  recentCompleted: string[];
+  recentPending: string[];
+  recentRejected: string[];
+}
+
 export async function generateThematicInsights(
   memories: Array<{ memoryText: string; mood?: string; moodScore?: number; timestamp: Date; topicTag: string; importance?: number }>,
   question?: string,
   activeGoals?: GoalContext[],
   userTimezone: string = 'America/Denver',
   sassLevel?: number,
-  professionalMode?: boolean
+  professionalMode?: boolean,
+  aiActionsContext?: AiActionsContext,
+  topPeople?: string[],
+  topLocations?: string[]
 ): Promise<ThematicInsight> {
   try {
     // Sort by importance (highest first) to prioritize critical memories
@@ -762,9 +772,10 @@ export async function generateThematicInsights(
     // Prepare memory summary for context with importance labels
     // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
     const memorySummary = sortedMemories.map((m, i) => {
-      const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
+      const imp = m.importance ?? 5;
+      const importanceLabel = imp >= 8 ? '[CRITICAL] ' : imp >= 6 ? '[HIGH] ' : imp <= 2 ? '[LOW] ' : '';
       const localDate = formatDateForTimezone(m.timestamp, userTimezone);
-      return `${importanceLabel}[${i + 1}] ${localDate} | Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
+      return `${importanceLabel}[${i + 1}] ${localDate} | Importance: ${imp}/10 | Mood: ${m.mood || 'unknown'} (${m.moodScore || 0}) | Topic: ${m.topicTag}\n"${m.memoryText}"`;
     }).join('\n\n');
 
     // Format goals context if available
@@ -775,80 +786,116 @@ export async function generateThematicInsights(
       ).join('\n')}\n`;
     }
 
+    // Format AI agent activity context
+    let agentContext = '';
+    if (aiActionsContext) {
+      const { counts, recentCompleted, recentPending, recentRejected } = aiActionsContext;
+      const total = Object.values(counts).reduce((s, n) => s + n, 0);
+      const lines: string[] = [`Total agent actions in this period: ${total}`];
+      if (counts.completed) lines.push(`  Completed (approved & executed): ${counts.completed}`);
+      if (counts.pending) lines.push(`  Pending (awaiting your approval): ${counts.pending}`);
+      if (counts.rejected) lines.push(`  Rejected (you declined): ${counts.rejected}`);
+      if (counts.failed) lines.push(`  Failed: ${counts.failed}`);
+      if (recentCompleted.length > 0) lines.push(`  Recent completed: ${recentCompleted.join('; ')}`);
+      if (recentPending.length > 0) lines.push(`  Currently pending: ${recentPending.join('; ')}`);
+      if (recentRejected.length > 0) lines.push(`  Recently rejected: ${recentRejected.join('; ')}`);
+      agentContext = `\n\nAI AGENT ACTIVITY (what Keryx proposed and what you did with it):\n${lines.join('\n')}\n`;
+    }
+
+    // Format people context
+    let peopleContext = '';
+    if (topPeople && topPeople.length > 0) {
+      peopleContext = `\n\nPEOPLE (most mentioned in your memories this period):\n${topPeople.map(p => `  - ${p}`).join('\n')}\n`;
+    }
+
+    // Format location context
+    let locationContext = '';
+    if (topLocations && topLocations.length > 0) {
+      locationContext = `\n\nLOCATIONS (most frequent in your memories this period):\n${topLocations.map(l => `  - ${l}`).join('\n')}\n`;
+    }
+
     // Use different system prompts based on whether user asked a specific question
     const systemPrompt = question 
       ? `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
-You are answering a specific question by reviewing the user's memory logs. Read what the data actually shows, answer it directly, and use your full personality in doing so.
+You are answering a specific question by reviewing the user's memory logs, agent activity, and context data below. Read what the data actually shows, answer it directly, and use your full personality in doing so.
 
 IMPORTANCE WEIGHTING: [CRITICAL] (8-10) and [HIGH] (6-7) memories are significant — prioritize them. [LOW] (1-2) is noise, treat it accordingly.
 
 FOCUS: "${question}"
 
+AI AGENT CROSS-REFERENCE RULE: If the AI agent activity section is present, check whether the agent has already proposed or executed actions related to this question's theme. If so, call it out — e.g. "The agent proposed a calendar block for this exact pattern — and you rejected it twice. That's your answer right there." Don't ignore the agent data when it's relevant.
+
+PEOPLE & LOCATION CROSS-REFERENCE: If the people or locations context is present and relevant to the question, weave it in — "You've been logging entries about [Person] 8 times this month." Not as a footnote; as part of the actual analysis.
+
 MANDATORY PROTOCOL ENFORCEMENT:
-- If they're asking about a minor complaint (roommates, a bad day, small friction), you MUST trigger DAAAAADDD! Protocol in the callout field: "You're the Architect. Stop being a victim of your own background processes." Name the specific thing they're over-analyzing.
-- If their question implies they're losing sight of real wins, you MUST trigger WEIGHTED WIN AUDITOR in the callout: cite a specific Big Win (their KTM, their kids, their successful app builds) to recalibrate.
+- If they're asking about a minor complaint (a bad day, small friction), you MUST trigger DAAAAADDD! Protocol in the callout field: "You're the Architect. Stop being a victim of your own background processes." Name the specific thing they're over-analyzing.
+- If their question implies they're losing sight of real wins, you MUST trigger WEIGHTED WIN AUDITOR in the callout: cite a specific Big Win from the data to recalibrate.
 - If neither applies, the callout should still contain a sharp, specific observation — never leave it generic.
 
 YOUR VOICE IN THE OUTPUT:
-- summary: Answer like you're talking to them, not writing a report. Example: "You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch." NOT "The data indicates recurring interpersonal friction."
-- patterns: Each pattern should read like a direct observation. Example: "You practice billiards when you're stressed — 6 of your 8 range sessions came after a frustrating day." NOT "Pattern: stress-related physical activity."
+- summary: Answer like you're talking to them, not writing a report. Example: "You've logged 4 complaints about the same issue in 3 weeks. That's a pattern, not a rough patch." NOT "The data indicates recurring interpersonal friction."
+- patterns: Each pattern should read like a direct observation. Example: "You log positive entries after physical activity — 6 of your 8 high-mood entries followed an outdoor session." NOT "Pattern: exercise correlates with mood."
 - recommendations: Specific actions, not advice columns. Example: "The 11 PM project sessions are running 2 hours long — move the cutoff to 10 PM and see if your morning entries improve." NOT "Consider maintaining a healthy sleep schedule."
 
 CRITICAL OUTPUT RULE: Write your response as clean, direct text. Do NOT include labels like "KERYX VOICE:", "NOT:", "(required)", or any meta-annotation in the actual response. Just write it.
 
 Respond with JSON in this exact structure:
 {
-  "summary": "You've logged 4 complaints about the same roommate in 3 weeks. That's a pattern, not a rough patch — and it's the same unresolved issue each time.",
+  "summary": "You've logged 4 complaints about the same issue in 3 weeks. That's a pattern, not a rough patch — and the agent already proposed a fix you ignored twice.",
   "patterns": [
-    "You only log positive entries on KTM days — 6 out of 8 good-mood entries in the last month follow a ride. Correlation strong enough to act on.",
-    "The 11 PM sessions are bleeding into your next-day entries — mood scores after late nights average 2 points below baseline."
+    "You log positive entries after physical activity — 6 of 8 high-mood entries this month follow an outdoor session. Correlation strong enough to act on.",
+    "The agent proposed a scheduling action 3 times during this period — you rejected all 3. That's a pattern too."
   ],
   "recommendations": [
-    "Schedule a ride this week. Treat it like a maintenance window — non-negotiable.",
-    "Move the project cutoff to 10 PM. The data is telling you what the late sessions cost."
+    "The agent's pending calendar proposal is sitting there. Approve it or close the ticket — but stop ignoring it.",
+    "Move the late-night cutoff to 10 PM. The data is telling you what those sessions cost."
   ],
-  "callout": "You're the Architect. You've logged this complaint 4 times. One occurrence is data. Four is a decision you haven't made yet.",
+  "callout": "You're the Architect. The agent flagged this pattern. You rejected its proposal twice. One rejection is a veto. Two is avoidance.",
   "timespan": "e.g., 'Last 30 days'"
 }`
       : `${getKeryxPersona(sassLevel ?? 50, professionalMode ?? false)}
 
-You are reading the user's memory log like a system architect reads a production incident report — looking for what the data actually shows, not what they want to hear.
+You are reading the user's memory log like a system architect reads a production incident report — looking for what the data actually shows, not what they want to hear. You also have visibility into what the AI agent has been proposing and what the user has approved or rejected.
 
 IMPORTANCE WEIGHTING: [CRITICAL] (8-10) and [HIGH] (6-7) memories are load-bearing — prioritize them. [LOW] (1-2) is noise.
 
+AI AGENT CROSS-REFERENCE RULE: If the AI agent activity section is present, treat it as a second data layer. The agent's proposals reflect patterns Keryx detected from memory processing. If the user has been rejecting proposals related to a pattern you see in the memories, call it out directly. If they've been approving and executing actions, note what they've been taking action on. This is data, treat it like data.
+
+PEOPLE & LOCATION CROSS-REFERENCE: If people appear frequently in the memories, name them in your analysis — "You've logged about [Person] 8 times this month." If locations repeat, note what patterns they suggest — "9 of your 12 entries this week were logged at [Place]."
+
 MANDATORY PROTOCOL ENFORCEMENT:
-- Scan the memories for complaint loops (same person/problem mentioned 3+ times). If found, you MUST trigger DAAAAADDD! Protocol in the callout field. Name the specific complaint. Example callout: "You've logged 'roommate drama' 4 times this week. One occurrence is data. Four is a decision you haven't made yet."
-- Scan for ignored wins. If the user has real progress buried under complaints, you MUST trigger WEIGHTED WIN AUDITOR. Example callout: "The KTM went out twice this week, the app shipped a feature, and you're writing about a messy kitchen. Recalibrate."
+- Scan the memories for complaint loops (same person/problem mentioned 3+ times). If found, you MUST trigger DAAAAADDD! Protocol in the callout field. Name the specific complaint.
+- Scan for ignored wins. If the user has real progress buried under complaints, you MUST trigger WEIGHTED WIN AUDITOR. Call out what they're glossing over.
 - If neither applies, find the sharpest observation in the data and lead with it.
 
 YOUR VOICE IN THE OUTPUT:
-- summary: Read like a debrief, not a report. "The past 30 days show a clear fork: the mornings when you logged early have a mood score 2 points above average. The late nights look like a different person." NOT "The user demonstrates improved mood in the mornings."
-- patterns: Name the actual pattern, not the category. "You only log positive memories on KTM days — your baseline mood is higher for 48 hours after a ride." NOT "Physical activity correlates with positive mood."
-- recommendations: Specific and actionable. "You haven't logged a billiards session in 12 days and your mood scores are trending down — get back to the table." NOT "Consider resuming hobbies."
+- summary: Read like a debrief, not a report. "The past 30 days show a clear fork: high-mood days cluster around active sessions. The low-mood days follow late nights. That's the actual story." NOT "The user demonstrates improved mood in the mornings."
+- patterns: Name the actual pattern, not the category. "You only log positive memories on days with physical activity — your baseline mood is higher for 48 hours after a session." NOT "Physical activity correlates with positive mood."
+- recommendations: Specific and actionable. Include agent actions if relevant — "The agent has 2 pending proposals in your queue that address this pattern. Approve them or close the loop." NOT "Consider reviewing your schedule."
 
 CRITICAL OUTPUT RULE: Write your response as clean, direct text. Do NOT include labels like "KERYX VOICE:", "NOT:", "(required)", or any meta-annotation in the actual response. Just write it.
 
 Respond with JSON in this exact structure:
 {
-  "summary": "The past 30 days split clearly in two. Ride days show mood scores 2 points above baseline — the other days are flatter, with a recurring theme around [complaint]. That's the actual story.",
+  "summary": "The past 30 days split clearly in two. High-mood entries cluster around active days — the flat days follow late nights and unresolved friction. The agent flagged this 3 times. You haven't acted on it yet.",
   "patterns": [
-    "You only log positive entries on KTM days — 6 of 8 high-mood memories this month follow a ride. Correlation strong enough to act on.",
-    "Roommate mentioned 4 times in 3 weeks — same unresolved complaint each time. One entry is data. Four is a decision loop."
+    "You log positive entries on active days — 6 of 8 high-mood memories this month follow a physical session. Correlation strong enough to act on.",
+    "The agent proposed 3 actions this period and you rejected 2. The rejected ones were scheduling blocks. Pattern: you see the problem but aren't booking the solution."
   ],
   "recommendations": [
-    "Get on the bike this week. Treat it as a maintenance window for your mental stack — it's in the data.",
-    "The roommate situation has 4 entries and no resolution. Make the call or close the ticket — stop letting it run as a background process."
+    "There are pending agent proposals in your queue. Review them — at least one is addressing a pattern you've logged 4 times.",
+    "The late-night sessions are in the data. Move the cutoff or stop logging that you're tired."
   ],
-  "callout": "You're the Architect. Four entries about the same complaint is a decision you haven't made yet, not a pattern worth more analysis.",
+  "callout": "You're the Architect. The agent flagged this pattern 3 times. Two proposals rejected. The data isn't unclear — the decision is.",
   "timespan": "e.g., 'Last 30 days'"
 }`;
 
     const fullSystemPrompt = systemPrompt;
 
     const userPrompt = question 
-      ? `Here are my memories. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}${goalsContext}`
-      : `Analyze the following memories and identify patterns, themes, and insights:\n\n${memorySummary}${goalsContext}`;
+      ? `Here are my memories and context. Please answer my question: "${question}"\n\nMemories:\n${memorySummary}${goalsContext}${agentContext}${peopleContext}${locationContext}`
+      : `Analyze the following memories and context to identify patterns, themes, and insights:\n\n${memorySummary}${goalsContext}${agentContext}${peopleContext}${locationContext}`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
