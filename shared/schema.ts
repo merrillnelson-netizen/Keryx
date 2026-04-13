@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, json, vector, index, uniqueIndex, real, foreignKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, boolean, jsonb, json, vector, index, uniqueIndex, real, foreignKey, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -287,7 +287,7 @@ export const aiActions = pgTable("ai_actions", {
   rollbackData: jsonb("rollback_data"), // Data needed to undo this action
   rolledBackAt: timestamp("rolled_back_at"),
   // Action chaining — linked parent action for sequential workflows
-  parentActionId: varchar("parent_action_id"), // FK to ai_actions.id (self-referential, nullable)
+  parentActionId: varchar("parent_action_id").references((): AnyPgColumn => aiActions.id, { onDelete: 'set null' }), // Self-referential FK, nullable
   chainDepth: integer("chain_depth").default(0), // 0 = root, max 3 hops
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),

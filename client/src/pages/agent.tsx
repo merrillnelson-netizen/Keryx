@@ -260,8 +260,8 @@ function ActionCard({ action, onMutated, isChild }: { action: AiAction; onMutate
   const catCfg = CATEGORY_CONFIG[action.actionCategory];
   const anyMutating = approveMutation.isPending || rejectMutation.isPending || rollbackMutation.isPending;
 
-  const chainDepth = (action as any).chainDepth ?? 0;
-  const parentActionId = (action as any).parentActionId ?? null;
+  const chainDepth = action.chainDepth ?? 0;
+  const parentActionId = action.parentActionId ?? null;
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${statusCfg.bg} ${isChild ? 'border-l-2 border-l-violet-500/50' : ''}`}>
@@ -1142,45 +1142,38 @@ export default function AgentPage() {
                     : `${filteredActions.length} action${filteredActions.length !== 1 ? "s" : ""}`}
                   {categoryFilter !== "all" ? ` in ${CATEGORY_CONFIG[categoryFilter]?.label || categoryFilter}` : ""}
                 </p>
-                {/* Build nested tree: root actions first, children indented below their parent */}
+                {/* Build nested tree: root actions first, descendants indented recursively */}
                 {(() => {
                   const childrenByParent = new Map<string, AiAction[]>();
                   const rootActions: AiAction[] = [];
+                  const allIds = new Set(filteredActions.map(a => a.id));
+
                   for (const a of filteredActions) {
-                    const parentId = (a as any).parentActionId;
-                    if (parentId) {
+                    const parentId = a.parentActionId;
+                    // Treat as root if no parent, or parent not in the current page (orphan)
+                    if (!parentId || !allIds.has(parentId)) {
+                      rootActions.push(a);
+                    } else {
                       const arr = childrenByParent.get(parentId) || [];
                       arr.push(a);
                       childrenByParent.set(parentId, arr);
-                    } else {
-                      rootActions.push(a);
                     }
                   }
-                  const items: JSX.Element[] = [];
-                  for (const action of rootActions) {
-                    items.push(
-                      <ActionCard key={action.id} action={action} onMutated={handleMutated} />
-                    );
+
+                  // Recursive render: renders a node + all its descendants
+                  function renderNode(action: AiAction, depth: number): JSX.Element[] {
                     const children = childrenByParent.get(action.id) || [];
-                    for (const child of children) {
-                      items.push(
-                        <div key={child.id} className="pl-4 border-l border-violet-500/20 ml-2">
-                          <ActionCard action={child} onMutated={handleMutated} isChild />
-                        </div>
-                      );
-                    }
+                    const isChild = depth > 0 || !!action.parentActionId;
+                    const indentStyle = depth > 0 ? 'pl-4 border-l border-violet-500/20 ml-2' : '';
+                    return [
+                      <div key={action.id} className={indentStyle}>
+                        <ActionCard action={action} onMutated={handleMutated} isChild={isChild} />
+                      </div>,
+                      ...children.flatMap(child => renderNode(child, depth + 1)),
+                    ];
                   }
-                  // Orphan children (parent not in current page) shown ungrouped at end
-                  const renderedIds = new Set(rootActions.map(a => a.id));
-                  for (const a of filteredActions) {
-                    const parentId = (a as any).parentActionId;
-                    if (parentId && !renderedIds.has((a as any).parentActionId)) {
-                      items.push(
-                        <ActionCard key={a.id} action={a} onMutated={handleMutated} isChild />
-                      );
-                    }
-                  }
-                  return items;
+
+                  return rootActions.flatMap(action => renderNode(action, 0));
                 })()}
                 {hasMore && (
                   <Button
