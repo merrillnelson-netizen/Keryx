@@ -14,6 +14,7 @@
 
 import OpenAI from "openai";
 import { storage } from "./storage";
+import type { Discovery } from "./contextual-discoveries-service";
 import { isPushConfigured, sendPushToAllUserDevices } from "./push-service";
 import { 
   AI_ACTION_TYPES, 
@@ -857,15 +858,24 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
       };
     });
 
-    // Persist as cached discoveries under the standard 'discoveries' cache key
-    // so results appear immediately in the Discoveries UI (/api/discoveries reads this key)
+    // Merge into existing discoveries cache (don't clobber; prepend agent results)
+    const existingCache = await storage.getAiCache(action.userId, 'discoveries', 'discoveries');
+    const existingDiscoveries: Discovery[] = Array.isArray(
+      (existingCache?.data as Record<string, unknown>)?.discoveries
+    ) ? ((existingCache!.data as Record<string, unknown>).discoveries as Discovery[]) : [];
+
+    const mergedDiscoveries = [
+      ...discoveryItems,
+      ...existingDiscoveries.filter(d => !discoveryItems.some(nd => nd.url === d.url)),
+    ].slice(0, 20); // cap at 20 total discoveries
+
     await storage.setAiCache(action.userId, 'discoveries', 'discoveries', {
-      discoveries: discoveryItems,
-      insights: [],
+      discoveries: mergedDiscoveries,
+      insights: (existingCache?.data as Record<string, unknown>)?.insights ?? [],
       generatedAt: new Date().toISOString(),
       source: 'agent_web_search',
       query: payload.query,
-    }, `agent_${action.id}`, 0, 60 * 24 * 7); // 7-day TTL
+    }, `agent_${action.id}`, mergedDiscoveries.length, 60 * 24 * 7); // 7-day TTL
 
     return {
       success: true,
@@ -1264,7 +1274,7 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
   provider?: string;
 }[]> {
   // Check integration and data presence in parallel
-  const [googleCalendar, outlookCalendar, gmail, outlookMail, people, goals, relayDests] = await Promise.all([
+  const [googleCalendar, outlookCalendar, gmail, outlookMail, people, goals, relayDests, userSettings] = await Promise.all([
     isGoogleCalendarConnected(userId),
     isOutlookConnected(userId),
     isGmailConnected(userId),
@@ -1272,12 +1282,13 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
     userId ? storage.getPeople(userId).catch(() => []) : Promise.resolve([]),
     userId ? storage.getGoals(userId).catch(() => []) : Promise.resolve([]),
     userId ? storage.getRelayDestinations(userId).catch(() => []) : Promise.resolve([]),
+    userId ? storage.getSettings(userId).catch(() => null) : Promise.resolve(null),
   ]);
 
   const hasPeople = Array.isArray(people) && people.length > 0;
   const hasGoals = Array.isArray(goals) && goals.length > 0;
-  // Financial alert available when Plaid is configured (PLAID_CLIENT_ID present)
-  const hasFinancialIntegration = !!process.env.PLAID_CLIENT_ID;
+  // Financial alert requires both the env config AND the user's per-user Plaid toggle enabled
+  const hasFinancialIntegration = !!process.env.PLAID_CLIENT_ID && (userSettings?.plaidEnabled ?? false);
   const hasRelayDestination = Array.isArray(relayDests) && relayDests.some((d) => d.enabled);
 
   return [
