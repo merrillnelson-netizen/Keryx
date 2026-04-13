@@ -181,7 +181,7 @@ function getSourceLabel(sourceType: string): string {
 
 // ─── ActionCard ───────────────────────────────────────────────────────────────
 
-function ActionCard({ action }: { action: AiAction }) {
+function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -192,10 +192,10 @@ function ActionCard({ action }: { action: AiAction }) {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       toast({ title: "Action executed", description: data.message || "Completed successfully." });
+      onMutated?.();
     },
     onError: (err: Error) => {
       toast({ title: "Execution failed", description: err.message, variant: "destructive" });
@@ -208,10 +208,10 @@ function ActionCard({ action }: { action: AiAction }) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       toast({ title: "Action rejected", description: "The proposed action was declined." });
+      onMutated?.();
     },
     onError: () => {
       toast({ title: "Failed", description: "Could not reject the action.", variant: "destructive" });
@@ -223,10 +223,10 @@ function ActionCard({ action }: { action: AiAction }) {
       const res = await apiRequest("POST", `/api/actions/${action.id}/rollback`);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
-      toast({ title: "Action rolled back" });
+      toast({ title: "Action rolled back", description: data.message });
+      onMutated?.();
     },
     onError: (err: Error) => {
       toast({ title: "Rollback failed", description: err.message, variant: "destructive" });
@@ -836,7 +836,7 @@ export default function AgentPage() {
   const [mainTab, setMainTab] = useState<"actions" | "rules">("actions");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [timeFilter, setTimeFilter] = useState<string>("7d");
+  const [timeFilter, setTimeFilter] = useState<string>("all");
   const [offset, setOffset] = useState(0);
   const [accumulated, setAccumulated] = useState<AiAction[]>([]);
   const filtersRef = useRef({ statusFilter, timeFilter });
@@ -888,6 +888,12 @@ export default function AgentPage() {
   const categories = Array.from(new Set(accumulated.map(a => a.actionCategory))).sort();
   const hasMore = actionsData?.hasMore ?? false;
   const total = actionsData?.total ?? 0;
+
+  // After any approve/reject/rollback, reload from page 0 for consistency
+  const handleMutated = () => {
+    setOffset(0);
+    setAccumulated([]);
+  };
 
   return (
     <AppLayout>
@@ -1097,7 +1103,7 @@ export default function AgentPage() {
                   {categoryFilter !== "all" ? ` in ${CATEGORY_CONFIG[categoryFilter]?.label || categoryFilter}` : ""}
                 </p>
                 {filteredActions.map(action => (
-                  <ActionCard key={action.id} action={action} />
+                  <ActionCard key={action.id} action={action} onMutated={handleMutated} />
                 ))}
                 {hasMore && (
                   <Button
