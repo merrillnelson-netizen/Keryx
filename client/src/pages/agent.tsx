@@ -767,7 +767,7 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
               <SelectItem value="negative">Negative</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">AI-derived from mood score when memory is logged</p>
+          <p className="text-xs text-muted-foreground">Sourced from AI mood label (e.g. stressed→negative, happy→positive)</p>
         </div>
       </div>
 
