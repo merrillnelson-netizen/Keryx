@@ -105,14 +105,17 @@ export async function extractSearchableInsights(
   userTimezone: string = 'America/Denver'
 ): Promise<InsightContext[]> {
   const insights: InsightContext[] = [];
-  const now = new Date();
+  // Use a single shared reference time for all window calculations in this call.
+  // The temporal context provides the user-local anchor for "now".
+  const temporalCtx = buildTemporalContext(userTimezone);
+  const now = new Date(); // UTC reference for comparisons against UTC timestamps
   const sevenDaysFromNow = new Date(now.getTime() + TRIP_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - MEMORY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
   // 1. LOCATION AWARENESS: If user is visiting a new location, show local discoveries
   if (locationContext?.isAway && locationContext.currentCity) {
     const cityName = locationContext.currentCity.split(',')[0].trim();
-    const { year: currentYear, month: currentMonth } = buildTemporalContext(userTimezone);
+    const { year: currentYear, month: currentMonth } = temporalCtx;
     
     insights.push({
       type: 'location',

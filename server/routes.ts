@@ -2,7 +2,7 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -2926,7 +2926,7 @@ Respond with JSON only.`
           const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
           await fireTrigger(user.id, AUTOMATION_TRIGGERS.BRIEFING_GENERATED, {
             userId: user.id,
-            briefingSummary: (briefing as any)?.summary || '',
+            briefingSummary: briefing?.summary || '',
           });
         } catch (err) {
           // Non-fatal
@@ -2939,12 +2939,12 @@ Respond with JSON only.`
           if (recentMemories.length >= 5) {
             const { detectPatternAlerts } = await import('./ai-service');
             const { createInsightSurfaceActions } = await import('./proactive-service');
-            const briefingTz = (req.userSettings as any)?.userTimezone || 'America/Denver';
+            const briefingTz = req.userSettings?.userTimezone || 'America/Denver';
             const alerts = await detectPatternAlerts(
               briefingMemories,
               briefingTz,
-              (req.userSettings as any)?.sassLevel,
-              (req.userSettings as any)?.professionalMode
+              req.userSettings?.sassLevel ?? undefined,
+              req.userSettings?.professionalMode ?? undefined
             );
             if (alerts.length > 0) {
               await createInsightSurfaceActions(user.id, alerts);
@@ -6891,15 +6891,9 @@ Respond with JSON only.`
   app.put("/api/relay/destinations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const schema = z.object({
-        label: z.string().min(1).max(100).optional(),
-        url: z.string().url().optional(),
-        apiKey: z.string().optional().nullable(),
-        payloadTypeFilter: z.array(z.enum(['sms', 'command', 'event'])).optional().nullable(),
-        enabled: z.boolean().optional(),
-      });
-      const data = schema.parse(req.body);
-      const updated = await storage.updateRelayDestination(req.params.id, user.id, data as any);
+      // Reuse the canonical insert schema (partial) to ensure field types match InsertRelayDestination
+      const data = insertRelayDestinationSchema.partial().omit({ userId: true }).parse(req.body);
+      const updated = await storage.updateRelayDestination(req.params.id, user.id, data);
       if (!updated) return res.status(404).json({ error: 'Destination not found' });
       res.json(updated);
     } catch (error) {
@@ -7090,7 +7084,7 @@ Respond with JSON only.`
     try {
       const user = req.user as User;
       const data = automationRuleBodySchema.parse(req.body);
-      const rule = await storage.createAutomationRule({ userId: user.id, ...data } as any);
+      const rule = await storage.createAutomationRule({ userId: user.id, ...data });
       res.status(201).json(rule);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to create automation rule", error);
@@ -7114,7 +7108,7 @@ Respond with JSON only.`
     try {
       const user = req.user as User;
       const data = automationRuleBodySchema.partial().parse(req.body);
-      const rule = await storage.updateAutomationRule(req.params.id, user.id, data as any);
+      const rule = await storage.updateAutomationRule(req.params.id, user.id, data);
       if (!rule) return res.status(404).json({ error: 'Rule not found' });
       res.json(rule);
     } catch (error) {

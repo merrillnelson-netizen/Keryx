@@ -225,7 +225,7 @@ export interface IStorage {
   getAutomationRule(id: string, userId: string): Promise<AutomationRule | undefined>;
   getEnabledRulesByTrigger(userId: string, triggerType: string): Promise<AutomationRule[]>;
   createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
-  updateAutomationRule(id: string, userId: string, data: Partial<AutomationRule>): Promise<AutomationRule>;
+  updateAutomationRule(id: string, userId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
   deleteAutomationRule(id: string, userId: string): Promise<void>;
   recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void>;
   countRuleRunsToday(id: string, userId: string): Promise<number>;
@@ -2860,7 +2860,7 @@ export class DatabaseStorage implements IStorage {
     return rule;
   }
 
-  async updateAutomationRule(id: string, userId: string, data: Partial<AutomationRule>): Promise<AutomationRule> {
+  async updateAutomationRule(id: string, userId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule> {
     const [rule] = await db.update(automationRules)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)))

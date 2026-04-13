@@ -1272,6 +1272,8 @@ export const insertAutomationRuleSchema = createInsertSchema(automationRules).om
   lastRunAt: true,
   lastRunResult: true,
   lastRunError: true,
+  todayRunDate: true,
+  todayRunCount: true,
   createdAt: true,
   updatedAt: true,
 });
