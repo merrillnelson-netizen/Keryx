@@ -18,7 +18,8 @@ import {
   Compass,
   Target,
   Bell,
-  Smartphone
+  Smartphone,
+  LayoutDashboard
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -199,13 +200,28 @@ const capabilities: CapabilityCategory[] = [
     name: "Messages",
     icon: Smartphone,
     color: "text-violet-500",
-    description: "Browse and search your SMS/text history — imported archives and live relay via Chrome Extension",
+    description: "Browse and search your SMS/text history — imported archives or live relay via Android Bridge or Chrome Extension",
     examples: [
       { phrase: "Show my recent messages from Mom", description: "Browse texts from a specific contact in the chat bubble view" },
       { phrase: "What did Jake and I talk about last week?", description: "Search imported or relayed conversation history by person and date" },
       { phrase: "Import my SMS backup from Android", description: "Upload an SMS archive (NDJSON/ZIP) from the SMS Import / Export app (F-Droid)" },
+      { phrase: "Set up the Android Bridge app for live relay", description: "Install the companion APK so all Google Messages relay automatically — no browser needed" },
       { phrase: "Set up the Chrome Extension to relay live messages", description: "Install the extension so new Google Messages for Web texts sync automatically" },
       { phrase: "Delete relayed messages from a conversation", description: "Use the trash icon in any conversation to remove relay-sourced messages" },
+    ]
+  },
+  {
+    id: "ecosystem",
+    name: "Ecosystem",
+    icon: LayoutDashboard,
+    color: "text-sky-500",
+    description: "Your life at a glance — a unified dashboard of mood, topics, goals, relationships, and spending",
+    examples: [
+      { phrase: "Show me my life dashboard", description: "Opens the Ecosystem view with charts across all your data sources" },
+      { phrase: "What topics have I been thinking about most?", description: "See your top memory topics visualized as a bar chart" },
+      { phrase: "How has my mood trended this month?", description: "Area chart showing mood over time with AI caption" },
+      { phrase: "Which relationships need attention?", description: "See people ranked by velocity score and interaction frequency" },
+      { phrase: "How active have I been logging memories?", description: "Memories-per-day trend with AI-generated pattern caption" },
     ]
   }
 ];
@@ -231,6 +247,8 @@ const hintExamples = [
   "Remind me in 2 hours to take a break",
   "Show my recent messages from Mom",
   "Import my SMS backup from Android",
+  "Show me my life dashboard",
+  "Which relationships need attention?",
 ];
 
 export function useRotatingHints() {
@@ -318,7 +336,7 @@ export function KeryxCapabilitiesModal() {
 
         <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 sm:px-6 pt-4 shrink-0">
-            <TabsList className="w-full h-auto grid grid-cols-3 sm:grid-cols-4 bg-white/5 p-1 rounded-xl gap-1">
+            <TabsList className="w-full h-auto grid grid-cols-4 sm:grid-cols-5 bg-white/5 p-1 rounded-xl gap-1">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
                 return (
@@ -354,7 +372,8 @@ export function KeryxCapabilitiesModal() {
                       cat.id === "insights" && "bg-cyan-500/20",
                       cat.id === "discoveries" && "bg-teal-500/20",
                       cat.id === "power" && "bg-rose-500/20",
-                      cat.id === "messages" && "bg-violet-500/20"
+                      cat.id === "messages" && "bg-violet-500/20",
+                      cat.id === "ecosystem" && "bg-sky-500/20"
                     )}>
                       <Icon className={cn("w-6 h-6", cat.color)} />
                     </div>
@@ -405,10 +424,24 @@ export function KeryxCapabilitiesModal() {
                       <div className="flex items-start gap-3">
                         <Smartphone className="w-5 h-5 text-violet-500 mt-0.5" />
                         <div>
-                          <p className="text-sm font-medium text-foreground">Two ways to get messages in</p>
+                          <p className="text-sm font-medium text-foreground">Three ways to get messages in</p>
                           <p className="text-sm text-muted-foreground">
                             <strong>Archive import:</strong> Export from the "SMS Import / Export" Android app (F-Droid) and upload the NDJSON/ZIP file in Settings → Integrations.<br />
-                            <strong>Live relay:</strong> Install the Chrome Extension so new texts from Google Messages for Web sync automatically as you send and receive them — no manual exports needed.
+                            <strong>Android Bridge:</strong> Install the companion APK (download from Settings) for native real-time relay — works in the background without needing a browser open.<br />
+                            <strong>Chrome Extension:</strong> Install the extension so new texts from Google Messages for Web sync automatically while your browser is open.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {cat.id === "ecosystem" && (
+                    <div className="glass-card p-4 rounded-xl bg-sky-500/10 border border-sky-500/20">
+                      <div className="flex items-start gap-3">
+                        <LayoutDashboard className="w-5 h-5 text-sky-500 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Pro feature</p>
+                          <p className="text-sm text-muted-foreground">
+                            The Ecosystem Dashboard aggregates data from all your connected sources — memories, calendar, email, finances, goals, reminders, and people — into a single life-at-a-glance view with AI-generated captions for each section.
                           </p>
                         </div>
                       </div>

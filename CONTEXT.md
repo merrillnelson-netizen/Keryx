@@ -82,7 +82,6 @@ keryx/
 │   ├── gmail-service.ts         # Gmail integration
 │   ├── outlook-mail-service.ts  # Outlook Mail integration
 │   ├── plaid-service.ts         # Plaid financial integration
-│   ├── telegram-service.ts      # Telegram bot integration
 │   ├── push-service.ts          # Web push notifications
 │   ├── location-service.ts      # Location processing, Google Timeline import
 │   ├── contextual-discoveries-service.ts # Tavily AI search
@@ -312,7 +311,6 @@ server/routes.ts (CENTRAL HUB)
 ├── gmail-service.ts (Gmail)
 ├── outlook-mail-service.ts (Outlook Mail)
 ├── plaid-service.ts (financial data)
-├── telegram-service.ts (bot webhook)
 ├── push-service.ts (web push)
 ├── location-service.ts (location processing)
 ├── contextual-discoveries-service.ts (Tavily)
@@ -399,7 +397,6 @@ client/src/components/voice-activation.tsx
 | File | Risk | Before Changing |
 |------|------|-----------------|
 | **server/plaid-service.ts** | Changes affect financial features in briefings/insights | Update settings.tsx toggles if adding/removing features. |
-| **server/telegram-service.ts** | Webhook format changes break mobile notifications | Test with actual Telegram messages. |
 | **server/contextual-discoveries-service.ts** | Changes affect dashboard discoveries | Ensure Tavily API compatibility. |
 
 ### Tight Coupling Pairs
@@ -437,12 +434,11 @@ These files MUST be updated together:
 | Service | Server File | Environment Variables | Features |
 |---------|-------------|----------------------|----------|
 | **OpenAI** | ai-service.ts | `OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_API_KEY` | Metadata extraction, embeddings, briefings, insights |
-| **Google Calendar** | calendar-service.ts | Replit Integration | Event read/write, linking |
-| **Outlook Calendar** | outlook-calendar-service.ts | Replit Integration | Event read/write |
-| **Gmail** | gmail-service.ts | Replit Integration | Email read for insights |
-| **Outlook Mail** | outlook-mail-service.ts | Replit Integration | Email read for insights |
+| **Google Calendar** | calendar-service.ts | Self-managed OAuth (GOOGLE_CLIENT_ID/SECRET) | Event read/write, linking |
+| **Outlook Calendar** | outlook-calendar-service.ts | Self-managed OAuth (MICROSOFT_CLIENT_ID/SECRET) | Event read/write |
+| **Gmail** | gmail-service.ts | Self-managed OAuth (GOOGLE_CLIENT_ID/SECRET) | Email read for insights, send |
+| **Outlook Mail** | outlook-mail-service.ts | Self-managed OAuth (MICROSOFT_CLIENT_ID/SECRET) | Email read for insights, send |
 | **Plaid** | plaid-service.ts | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` | Financial data for insights |
-| **Telegram** | telegram-service.ts | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` | Voice notes, notifications |
 | **Tavily** | contextual-discoveries-service.ts | `TAVILY_API_KEY` | Contextual web search |
 | **PostgreSQL (Neon)** | db.ts | `DATABASE_URL` | All data storage |
 

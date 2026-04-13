@@ -661,14 +661,6 @@ export class DatabaseStorage implements IStorage {
         .orderBy(sql`${logEntries.embeddingVector} <=> ${vectorString}::vector`)
         .limit(limit);
 
-      // Log similarity scores for diagnostics
-      if (result.length > 0) {
-        const scores = result.map((r: any) => `${Math.round((r.similarity ?? 0) * 100)}%`).join(', ');
-        console.log(`[search] Top ${result.length} similarity scores: ${scores}`);
-      } else {
-        console.log(`[search] No results found with embeddings for user ${userId}`);
-      }
-
       return result as Array<Partial<LogEntry> & { similarity: number }>;
     } catch (error) {
       console.error('Failed to search memories:', error);

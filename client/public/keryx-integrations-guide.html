@@ -35,7 +35,7 @@
 <body>
 
 <h1>Keryx Integration Guide</h1>
-<p class="subtitle">Complete Where / Why / When / How Reference<br>Last updated: April 7, 2026</p>
+<p class="subtitle">Complete Where / Why / When / How Reference<br>Last updated: April 13, 2026</p>
 
 <nav class="toc">
 <h2>Table of Contents</h2>
@@ -59,6 +59,8 @@
 <li><a href="#database">Database (Neon PostgreSQL)</a></li>
 <li><a href="#auth">Authentication</a></li>
 <li><a href="#chrome-extension">Chrome Extension / Live SMS Relay</a></li>
+<li><a href="#android-bridge">Android Bridge</a></li>
+<li><a href="#ecosystem">Ecosystem Dashboard</a></li>
 </ol>
 </nav>
 
@@ -145,24 +147,26 @@
 <div class="detail">
 <p><span class="detail-label">How it works:</span></p>
 <ul>
-<li>Connected via Replit's Google Calendar connector (OAuth managed by Replit)</li>
+<li>Self-managed OAuth 2.0 — user authenticates via Google OAuth flow in Settings; tokens stored securely in database</li>
+<li>Tokens automatically refreshed using <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code></li>
 <li>Uses Google Calendar API v3 via <code>googleapis</code> library</li>
-<li>Tokens cached for 30 seconds to ensure freshness</li>
+<li>Access tokens cached for 30 seconds, refreshed 5 minutes before expiry</li>
 <li>Searches events within +/- 2 hours of memory timestamp for auto-linking</li>
 <li>Handles both all-day events and timed events correctly across timezones</li>
 <li>Connection status checked dynamically; gracefully degrades when disconnected</li>
+<li><strong>Required:</strong> Google Calendar API must be enabled in your Google Cloud Console project</li>
 </ul>
 </div>
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/calendar-service.ts</p>
+<p class="file-ref">server/calendar-service.ts, server/oauth-token-manager.ts</p>
 </div>
 
 <div class="detail">
 <span class="tag green">Active</span>
-<span class="tag">Replit Connector</span>
-<span class="tag">OAuth</span>
+<span class="tag">Self-managed OAuth</span>
+<span class="tag">Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET</span>
 </div>
 </div>
 
@@ -190,22 +194,23 @@
 <div class="detail">
 <p><span class="detail-label">How it works:</span></p>
 <ul>
-<li>Connected via Replit's Outlook connector (OAuth managed by Replit)</li>
+<li>Self-managed OAuth 2.0 — user authenticates via Microsoft OAuth flow in Settings; tokens stored securely in database</li>
+<li>Tokens automatically refreshed using <code>MICROSOFT_CLIENT_ID</code> and <code>MICROSOFT_CLIENT_SECRET</code></li>
 <li>Uses Microsoft Graph API via <code>@microsoft/microsoft-graph-client</code></li>
-<li>Token management similar to Google Calendar with automatic refresh</li>
+<li>Access tokens cached for 30 seconds, refreshed 5 minutes before expiry</li>
 <li>Unified calendar interface: both providers share the same internal API shape</li>
 </ul>
 </div>
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/outlook-calendar-service.ts</p>
+<p class="file-ref">server/outlook-calendar-service.ts, server/oauth-token-manager.ts</p>
 </div>
 
 <div class="detail">
 <span class="tag green">Active</span>
-<span class="tag">Replit Connector</span>
-<span class="tag">OAuth</span>
+<span class="tag">Self-managed OAuth</span>
+<span class="tag">Secrets: MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET</span>
 </div>
 </div>
 
@@ -234,7 +239,7 @@
 <div class="detail">
 <p><span class="detail-label">How it works:</span></p>
 <ul>
-<li>Connected via Replit's Google Mail connector (OAuth managed by Replit)</li>
+<li>Self-managed OAuth 2.0 — shares the Google token from the same OAuth flow as Google Calendar</li>
 <li>Uses Gmail API v1 via <code>googleapis</code> library</li>
 <li>Capabilities check: Verifies what permissions are available (read, send)</li>
 <li>Email sending constructs proper MIME messages with headers</li>
@@ -244,13 +249,13 @@
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/gmail-service.ts</p>
+<p class="file-ref">server/gmail-service.ts, server/oauth-token-manager.ts</p>
 </div>
 
 <div class="detail">
 <span class="tag green">Active</span>
-<span class="tag">Replit Connector</span>
-<span class="tag">OAuth</span>
+<span class="tag">Self-managed OAuth</span>
+<span class="tag">Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET</span>
 </div>
 </div>
 
@@ -277,7 +282,7 @@
 <div class="detail">
 <p><span class="detail-label">How it works:</span></p>
 <ul>
-<li>Connected via Replit's Outlook connector (shared with Outlook Calendar)</li>
+<li>Self-managed OAuth 2.0 — shares the Microsoft token from the same OAuth flow as Outlook Calendar</li>
 <li>Uses Microsoft Graph API via <code>@microsoft/microsoft-graph-client</code></li>
 <li>Sends emails via the /me/sendMail Graph endpoint</li>
 <li>Falls back gracefully when not connected</li>
@@ -286,19 +291,19 @@
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/outlook-mail-service.ts</p>
+<p class="file-ref">server/outlook-mail-service.ts, server/oauth-token-manager.ts</p>
 </div>
 
 <div class="detail">
 <span class="tag green">Active</span>
-<span class="tag">Replit Connector</span>
-<span class="tag">OAuth</span>
+<span class="tag">Self-managed OAuth</span>
+<span class="tag">Secrets: MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET</span>
 </div>
 </div>
 
 <!-- ====== 6. PLAID ====== -->
 <div class="section" id="plaid">
-<h2>7. Plaid (Financial Data)</h2>
+<h2>6. Plaid (Financial Data)</h2>
 
 <div class="detail">
 <p><span class="detail-label">Where:</span> Settings page (bank connection), search page (financial queries), morning briefings, personal insights, contextual discoveries.</p>
@@ -845,6 +850,8 @@
 <li><code>goals</code>, <code>reminders</code> - Tracking systems</li>
 <li><code>messageConversations</code>, <code>messages</code>, <code>messageImports</code> - SMS data</li>
 <li><code>plaidItems</code>, <code>financialAccounts</code>, <code>financialTransactions</code> - Financial data</li>
+<li><code>oauthTokens</code>, <code>oauthNonces</code> - Self-managed OAuth 2.0 token storage (Google + Microsoft)</li>
+<li><code>relayEvents</code>, <code>relayDestinations</code> - Universal Relay API fan-out routing and event log</li>
 </ul>
 </div>
 
@@ -989,6 +996,104 @@
 </div>
 </div>
 
+<!-- ====== 20. ANDROID BRIDGE ====== -->
+<div class="section" id="android-bridge">
+<h2>20. Android Bridge</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> A native Android app (APK downloadable from Settings) that runs as a background service. Pairs with Keryx via Relay API key.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Unlike the Chrome Extension (which requires a browser open), the Android Bridge runs as a native background service and captures Google Messages in real time without any browser involvement. It also captures outgoing SMS/MMS via the Android content provider, giving you a more complete message history.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>Automatically on device boot (BootReceiver restarts the service)</li>
+<li>NotificationListenerService captures all incoming messages (SMS, MMS, RCS)</li>
+<li>SMS ContentObserver foreground service captures sent SMS/MMS via Android content provider</li>
+<li>Messages are debounced (2.5s buffer) and sent via OkHttp relay client to <code>POST /api/relay/inbound</code></li>
+<li>Retries automatically with exponential backoff via WorkManager (6 attempts) when offline</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Native Kotlin app targeting Android 8+ (minSdk 26)</li>
+<li>Credentials stored securely in EncryptedSharedPreferences</li>
+<li>Phone numbers normalized to E.164 format via libphonenumber</li>
+<li>Room database for offline retry queue</li>
+<li>WorkManager gated on <code>NetworkType.CONNECTED</code> for reliable delivery</li>
+<li>APK served from Settings page — built via GitHub Actions and linked to the latest GitHub Release</li>
+<li>Last-seen status displayed in Settings card for connection monitoring</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">android-bridge/ (Kotlin project), client/src/components/settings/android-bridge-card.tsx, server/routes.ts (GET /api/android-bridge/apk-info)</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Android 8+ (APK)</span>
+<span class="tag">Requires: Relay API key from Settings</span>
+<span class="tag">No external service</span>
+</div>
+</div>
+
+<!-- ====== 21. ECOSYSTEM DASHBOARD ====== -->
+<div class="section" id="ecosystem">
+<h2>21. Ecosystem Dashboard</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Accessible from the Dashboard as "Ecosystem View" card. Navigates to <code>/ecosystem</code> route.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Aggregates data from all connected sources — memories, calendar, email, finances, goals, reminders, people, and AI actions — into a single life-at-a-glance dashboard with interactive charts and AI-generated captions. Answers "how is my life going?" at a glance.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>When you navigate to the Ecosystem page (Pro tier required)</li>
+<li>Fans out to 10 data sources in parallel via <code>Promise.allSettled</code></li>
+<li>Results cached per-user for 5 minutes to avoid redundant AI calls</li>
+<li>AI generates a contextual caption for each section using GPT</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Backend: <code>GET /api/ecosystem/stats</code> — Pro-tier gated endpoint</li>
+<li>Mood trend: Area chart with sentiment bands (excellent / good / neutral / challenging)</li>
+<li>Topic frequency: Horizontal bar chart of top memory topics (last 30 days)</li>
+<li>Activity: Memories-per-day line chart with daily labels</li>
+<li>Relationship velocity: Bar chart of people ranked by velocity tier</li>
+<li>Finance: Spending by category (Life OS tier only, requires Plaid)</li>
+<li>Goals, reminders, actions: Summary counts with completion rates</li>
+<li>AI captions via <code>generateEcosystemCaptions()</code> — one sentence per section</li>
+<li>Charts built with Recharts (AreaChart, BarChart, LineChart)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">client/src/pages/ecosystem.tsx, server/routes.ts (GET /api/ecosystem/stats), server/ai-service.ts (generateEcosystemCaptions)</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag orange">Pro tier required</span>
+<span class="tag">Requires: OpenAI</span>
+</div>
+</div>
+
 <hr class="divider" style="margin: 32px 0;">
 
 <div class="section">
@@ -1074,12 +1179,14 @@
 <li><strong>Memory Auto-Linking</strong> &rarr; requires Calendar connected</li>
 <li><strong>Personal Insights</strong> &rarr; requires OpenAI; enriched by all data sources</li>
 <li><strong>Chrome Extension Relay</strong> &rarr; requires a Relay API key (generated in Settings); data appears alongside SMS archive imports in Messages page</li>
+<li><strong>Android Bridge</strong> &rarr; requires a Relay API key (generated in Settings); same data path as Chrome Extension, but runs natively without a browser</li>
+<li><strong>Ecosystem Dashboard</strong> &rarr; requires Pro tier + OpenAI; enriched by Calendar, Plaid (Life OS), People, Goals, Reminders, Actions</li>
 </ul>
 </div>
 
 <footer>
 <p>Keryx - Kinetic Enterprise & Resource Yielding X-system</p>
-<p>Generated April 7, 2026</p>
+<p>Generated April 13, 2026</p>
 </footer>
 
 </body>
