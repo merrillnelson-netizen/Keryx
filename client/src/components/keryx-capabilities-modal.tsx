@@ -190,12 +190,12 @@ const capabilities: CapabilityCategory[] = [
     color: "text-violet-500",
     description: "Autonomous AI actions, automation rules, and multi-step task chaining",
     examples: [
-      { phrase: "Schedule a call with Dr. Chen on Thursday at 10am and draft a confirmation email", description: "Keryx creates the calendar event, then automatically detects and proposes a follow-up email draft via action chaining" },
-      { phrase: "Note that Marcus mentioned he prefers morning meetings", description: "Adds a note directly to Marcus's contact record via a people.note action" },
-      { phrase: "Search for the best productivity frameworks for remote teams", description: "Executes a live web search via Tavily and returns a summary with sources" },
-      { phrase: "Log that I completed my first week of workouts", description: "Explicitly creates a new memory entry and can update your fitness goal's progress in the same turn" },
-      { phrase: "Alert me if I'm spending too much on dining out this month", description: "Creates a financial.alert action surfacing your dining spending pattern from Plaid data" },
-      { phrase: "Show me my pending agent actions", description: "Navigates to the Agent dashboard where you can approve, reject, or review all proposed and completed actions" },
+      { phrase: "Cancel my dentist appointment on Thursday", description: "Detects a calendar.delete intent — Keryx looks up the event and proposes deleting it from your Google Calendar or Outlook" },
+      { phrase: "When my mood drops below 4, send me a motivational push notification", description: "Creates an automation rule: trigger = mood.dropped, action = send notification — fires automatically in the background whenever the condition is met" },
+      { phrase: "Schedule a call with Dr. Chen on Thursday at 10am and send a confirmation email", description: "Creates the calendar event, then action chaining detects the natural follow-up and proposes the email draft — one approve click per step" },
+      { phrase: "Note that Marcus mentioned he prefers morning meetings", description: "Adds a note directly to Marcus's contact record via a people.note action — no manual profile editing needed" },
+      { phrase: "Search for the best productivity frameworks for remote teams", description: "Executes a live web search via Tavily and returns a summary with sources directly in the Agent dashboard" },
+      { phrase: "Show me my pending agent actions", description: "Navigates to the Agent dashboard where you can approve, reject, or review all proposed and completed actions, including chained children" },
     ]
   },
   {

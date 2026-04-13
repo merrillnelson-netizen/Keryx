@@ -1259,12 +1259,13 @@ npm run ios</pre>
 </div>
 
 <div class="detail">
-<p><span class="detail-label">Chainable action types (only these can spawn children):</span></p>
+<p><span class="detail-label">Chainable action types — both parent and child must be one of these three:</span></p>
 <ul>
 <li><code>calendar.create</code> — may chain to an invite email (<code>email.send</code>) or contact note (<code>people.note</code>)</li>
-<li><code>email.send</code> — may chain to a reminder for follow-up or a contact note</li>
-<li><code>people.note</code> — may chain to a goal update or reminder</li>
+<li><code>email.send</code> — may chain to a contact note (<code>people.note</code>) or a related email follow-up</li>
+<li><code>people.note</code> — may chain to a calendar event (<code>calendar.create</code>) or follow-up email (<code>email.send</code>)</li>
 </ul>
+<p>The server enforces a hard whitelist: child action types must also be one of the three chainable types above. Proposals for <code>reminder.create</code>, <code>goal.update</code>, or any other type are rejected at the server level.</p>
 </div>
 
 <div class="detail">

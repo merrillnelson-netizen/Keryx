@@ -341,12 +341,13 @@
 </div>
 
 <div class="detail">
-<p><span class="detail-label">Chainable action types (only these can spawn children):</span></p>
+<p><span class="detail-label">Chainable action types — both parent and child actions must be one of:</span></p>
 <ul>
-<li><code>calendar.create</code> — may spawn an invite email (<code>email.send</code>) or a contact note (<code>people.note</code>)</li>
-<li><code>email.send</code> — may spawn a follow-up reminder (<code>reminder.create</code>) or a contact note (<code>people.note</code>)</li>
-<li><code>people.note</code> — may spawn a goal update (<code>goal.update</code>) or a reminder (<code>reminder.create</code>)</li>
+<li><code>calendar.create</code> — may chain to an invite email (<code>email.send</code>) or a contact note (<code>people.note</code>)</li>
+<li><code>email.send</code> — may chain to a contact note (<code>people.note</code>) or another email follow-up</li>
+<li><code>people.note</code> — may chain to a related calendar event (<code>calendar.create</code>) or a follow-up email (<code>email.send</code>)</li>
 </ul>
+<p><strong>Important:</strong> The server enforces a hard whitelist — child actions <em>must</em> be one of the three chainable types above. GPT cannot propose a child action of type <code>reminder.create</code>, <code>goal.update</code>, or any other type; those would be rejected at the server level.</p>
 </div>
 
 <div class="detail">
