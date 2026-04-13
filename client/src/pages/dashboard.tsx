@@ -301,7 +301,7 @@ function FoundingMemberBanner() {
 }
 
 export default function Dashboard() {
-  // Custom queryFn to preserve full response with metadata
+  const [, navigate] = useLocation();
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   
   const { data: briefingData, isLoading: briefingLoading, isFetching: briefingFetching, refetch: refetchBriefing } = useQuery<BriefingResponse>({
