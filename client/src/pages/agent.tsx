@@ -675,7 +675,12 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs text-amber-400">When (Trigger) *</Label>
-          <Select value={triggerType} onValueChange={setTriggerType}>
+          <Select value={triggerType} onValueChange={(v) => {
+            setTriggerType(v);
+            // daily.schedule should default to once/day to prevent unintended repeated fires
+            if (v === AUTOMATION_TRIGGERS.DAILY_SCHEDULE) setMaxRunsPerDay("1");
+            else if (maxRunsPerDay === "1") setMaxRunsPerDay("3");
+          }}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder="Choose trigger…" />
             </SelectTrigger>

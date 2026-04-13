@@ -241,11 +241,11 @@ app.use((req, res, next) => {
     // ─── Daily Schedule Automation Trigger ───────────────────────────────────
     // Fire the daily.schedule trigger every hour so rules can match any configured local hour.
     // Only targets users who have at least one enabled daily.schedule rule (efficient at scale).
-    // The automation engine's per-day run limit (default 3) prevents unintended duplicate fires.
-    setInterval(async () => {
+    // Per-rule maxRunsPerDay is enforced in the engine (defaults to 3; daily.schedule rules
+    // should be created with maxRunsPerDay=1 for strict once-per-day semantics).
+    const runDailyScheduleCycle = async () => {
       try {
         const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
-        // Only query users who have at least one enabled daily.schedule rule
         const activeUsers = await pool.query(
           `SELECT DISTINCT ar.user_id, s.user_timezone
            FROM automation_rules ar
@@ -277,7 +277,11 @@ app.use((req, res, next) => {
       } catch (err) {
         console.error('[daily-schedule-trigger] Cycle error:', err instanceof Error ? err.message : err);
       }
-    }, 60 * 60 * 1000); // every hour
+    };
+    // Run one cycle immediately at boot (catches configured hours if server restarted mid-day)
+    setImmediate(runDailyScheduleCycle);
+    // Then run every hour on a recurring schedule
+    setInterval(runDailyScheduleCycle, 60 * 60 * 1000);
     // ─────────────────────────────────────────────────────────────────────────
 
     // ─── Reminder Daemon ─────────────────────────────────────────────────────
