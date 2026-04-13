@@ -215,7 +215,15 @@ function ActionCard({ action, onMutated, isChild }: { action: AiAction; onMutate
       onMutated?.();
     },
     onError: (err: Error) => {
-      toast({ title: "Execution failed", description: err.message, variant: "destructive" });
+      // Refresh the list so stale "pending" state doesn't stay visible after a failed attempt
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
+      onMutated?.();
+      // Parse clean message from raw JSON error if present
+      let msg = err.message;
+      try { msg = JSON.parse(msg).message ?? msg; } catch { /* use raw */ }
+      toast({ title: "Execution failed", description: msg, variant: "destructive" });
     },
   });
 
@@ -231,8 +239,15 @@ function ActionCard({ action, onMutated, isChild }: { action: AiAction; onMutate
       toast({ title: "Action rejected", description: "The proposed action was declined." });
       onMutated?.();
     },
-    onError: () => {
-      toast({ title: "Failed", description: "Could not reject the action.", variant: "destructive" });
+    onError: (err: Error) => {
+      // Refresh so the list shows actual status instead of stale pending
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
+      onMutated?.();
+      let msg = err.message;
+      try { msg = JSON.parse(msg).message ?? msg; } catch { /* use raw */ }
+      toast({ title: "Could not reject action", description: msg, variant: "destructive" });
     },
   });
 
