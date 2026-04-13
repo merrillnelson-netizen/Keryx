@@ -2600,12 +2600,23 @@ Respond with JSON only.`
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
 
-      // Get recent memories for analysis (use light version - no embeddings needed)
-      // Fetch goals and AI actions in parallel — all scoped to the same time window
-      const [memories, goals, recentAiActions] = await Promise.all([
+      // Fetch everything in parallel — memories, goals, exact status counts, and title samples
+      // Use dedicated count queries for accuracy regardless of action volume.
+      const [
+        memories,
+        goals,
+        completedCount, pendingCount, rejectedCount, failedCount,
+        completedTitles, pendingTitles, rejectedTitles,
+      ] = await Promise.all([
         storage.getRecentLogEntriesLight(user.id, days, 100),
         storage.getGoals(user.id),
-        storage.getAiActions(user.id, undefined, 50, 0, cutoffDate),
+        storage.getAiActionsCount(user.id, ['completed'], cutoffDate),
+        storage.getAiActionsCount(user.id, ['pending'], cutoffDate),
+        storage.getAiActionsCount(user.id, ['rejected'], cutoffDate),
+        storage.getAiActionsCount(user.id, ['failed'], cutoffDate),
+        storage.getAiActions(user.id, ['completed'], 5, 0, cutoffDate),
+        storage.getAiActions(user.id, ['pending'], 5, 0, cutoffDate),
+        storage.getAiActions(user.id, ['rejected'], 5, 0, cutoffDate),
       ]);
       
       // No filtering needed - getRecentLogEntriesLight already filters by days
@@ -2639,16 +2650,18 @@ Respond with JSON only.`
       const userSettings = req.userSettings;
       const userTimezone = userSettings?.userTimezone || 'America/Denver';
 
-      // Build AI Actions context — counts by status + titles of recent ones
-      const actionsByStatus = recentAiActions.reduce<Record<string, number>>((acc, a) => {
-        acc[a.status] = (acc[a.status] ?? 0) + 1;
-        return acc;
-      }, {});
+      // Build AI Actions context — exact counts from dedicated queries + capped title samples
+      const totalAiActions = completedCount + pendingCount + rejectedCount + failedCount;
       const aiActionsContext = {
-        counts: actionsByStatus,
-        recentCompleted: recentAiActions.filter(a => a.status === 'completed').slice(0, 5).map(a => a.title),
-        recentPending: recentAiActions.filter(a => a.status === 'pending').slice(0, 5).map(a => a.title),
-        recentRejected: recentAiActions.filter(a => a.status === 'rejected').slice(0, 5).map(a => a.title),
+        counts: {
+          ...(completedCount > 0 && { completed: completedCount }),
+          ...(pendingCount > 0 && { pending: pendingCount }),
+          ...(rejectedCount > 0 && { rejected: rejectedCount }),
+          ...(failedCount > 0 && { failed: failedCount }),
+        },
+        recentCompleted: completedTitles.map(a => a.title),
+        recentPending: pendingTitles.map(a => a.title),
+        recentRejected: rejectedTitles.map(a => a.title),
       };
 
       // Derive top people from detectedPeople arrays across memories
@@ -2691,7 +2704,7 @@ Respond with JSON only.`
         userTimezone,
         userSettings?.sassLevel ?? 50,
         userSettings?.professionalMode ?? false,
-        recentAiActions.length > 0 ? aiActionsContext : undefined,
+        totalAiActions > 0 ? aiActionsContext : undefined,
         topPeople.length > 0 ? topPeople : undefined,
         topLocations.length > 0 ? topLocations : undefined,
       );
