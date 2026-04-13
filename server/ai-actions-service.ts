@@ -1152,6 +1152,14 @@ async function executeGoalUpdate(action: AiAction): Promise<ActionExecutionResul
   }
   const payload = validation.data;
 
+  // newProgress is required to actually execute an update
+  if (payload.newProgress === undefined || payload.newProgress === null) {
+    return {
+      success: false,
+      errorMessage: `No progress value specified for "${payload.goalTitle}". This action was proposed as a check-in reminder — reject it and manually update your goal progress in the Goals page.`,
+    };
+  }
+
   try {
     let goalId = payload.goalId;
 

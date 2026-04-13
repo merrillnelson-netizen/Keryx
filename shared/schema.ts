@@ -648,7 +648,7 @@ export const financialAlertPayloadSchema = z.object({
 export const goalUpdatePayloadSchema = z.object({
   goalId: z.string().optional(),   // ID of the goal to update (optional; fallback is fuzzy title match)
   goalTitle: z.string(),           // Title of the goal (for display / fuzzy matching)
-  newProgress: z.number().int().min(0).max(100), // New progress percent (0-100)
+  newProgress: z.number().int().min(0).max(100).optional(), // New progress percent (0-100); required to execute
   currentProgress: z.number().int().min(0).max(100).optional(), // Previous progress
   progressNote: z.string().optional(), // Optional note about the progress update
 });

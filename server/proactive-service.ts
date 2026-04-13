@@ -146,28 +146,30 @@ async function generateGoalUpdateProposals(
     for (const goal of staleGoals.slice(0, 2)) {
       if (created.count >= MAX_PROACTIVE_PER_RUN) break;
 
-      const sourceId = `goal_update_${goal.id}`;
+      const sourceId = `goal_checkin_${goal.id}`;
       const hasDupe = await hasDuplicateRecentAction(
         userId,
-        AI_ACTION_TYPES.GOAL_UPDATE,
+        AI_ACTION_TYPES.INSIGHT_SURFACE,
         sourceId
       );
       if (hasDupe) continue;
 
       await storage.createAiAction({
         userId,
-        actionType: AI_ACTION_TYPES.GOAL_UPDATE,
+        actionType: AI_ACTION_TYPES.INSIGHT_SURFACE,
         actionCategory: AI_ACTION_CATEGORIES.GOALS,
         sourceType: "memory",
         sourceId,
         sourceText: null,
-        title: `Update progress on "${goal.title}"`,
-        description: `Your goal "${goal.title}" is at ${goal.progressPercent}% and hasn't been updated in ${GOAL_STALE_DAYS}+ days. Review if your recent activities show progress.`,
+        title: `Goal check-in: "${goal.title}"`,
+        description: `Your goal "${goal.title}" is at ${goal.progressPercent}% and hasn't been updated in ${GOAL_STALE_DAYS}+ days. Visit the Goals page to log your current progress, or mention your progress in a memory (e.g. "mark my ${goal.title} goal at 70%").`,
         payload: {
           goalId: goal.id,
           goalTitle: goal.title,
           currentProgress: goal.progressPercent,
           targetDate: goal.targetDate,
+          summary: `"${goal.title}" is stale at ${goal.progressPercent}%. Update your progress in the Goals page.`,
+          content: `Your goal "${goal.title}" hasn't been updated recently. Log a memory mentioning your progress, or go to the Goals page to update it directly.`,
         },
         status: AI_ACTION_STATUSES.PENDING,
         aiReasoning: `Goal "${goal.title}" (${goal.progressPercent}% complete) has not been updated since ${buildTemporalContext(userTimezone, staleThreshold).localDate}. A progress check-in keeps momentum.`,
