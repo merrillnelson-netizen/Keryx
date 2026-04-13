@@ -4348,8 +4348,10 @@ Respond with JSON only.`
       // the depth limit is properly enforced across the async approval boundary.
       if (pendingAction) {
         const storedPayload = pendingAction.payload as Record<string, unknown> | null ?? {};
-        const recoveredDepth = typeof storedPayload._automationChainDepth === 'number'
-          ? storedPayload._automationChainDepth
+        const rawDepth = storedPayload._automationChainDepth;
+        // Validate: must be a non-negative finite integer bounded by MAX_CHAIN_DEPTH
+        const recoveredDepth = (typeof rawDepth === 'number' && Number.isFinite(rawDepth) && rawDepth >= 0 && rawDepth <= 10)
+          ? Math.floor(rawDepth)
           : 0;
         import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
           fireTrigger(user.id, AUTOMATION_TRIGGERS.ACTION_COMPLETED, {
