@@ -217,9 +217,11 @@ app.use((req, res, next) => {
 
     // ─── Proactive Analysis Scheduler ────────────────────────────────────────
     // Run proactive analysis once per day for all users who have recently been active.
+    // Also fires the daily.schedule automation trigger every hour.
     setInterval(async () => {
       try {
         const { runProactiveAnalysis } = await import('./proactive-service');
+        const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
         const activeUsers = await pool.query(
           `SELECT DISTINCT le.user_id, s.user_timezone
            FROM log_entries le
@@ -232,6 +234,17 @@ app.use((req, res, next) => {
           } catch (e) {
             console.error(`[proactive-scheduler] Failed for user ${row.user_id?.slice(0, 8)}:`, e instanceof Error ? e.message : e);
           }
+          // Fire daily.schedule automation trigger for this user (non-blocking)
+          setImmediate(async () => {
+            try {
+              const tz = row.user_timezone || 'America/Denver';
+              const localHour = new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
+              await fireTrigger(row.user_id, AUTOMATION_TRIGGERS.DAILY_SCHEDULE, {
+                userId: row.user_id,
+                localHour: parseInt(localHour, 10),
+              });
+            } catch { /* non-fatal */ }
+          });
         }
       } catch (err) {
         console.error('[proactive-scheduler] Cycle error:', err instanceof Error ? err.message : err);
@@ -266,6 +279,18 @@ app.use((req, res, next) => {
                 { action: 'done', title: 'Done ✓' },
                 { action: 'snooze', title: 'Snooze 30m' },
               ],
+            });
+
+            // Fire automation rules for reminder.due trigger (non-blocking)
+            setImmediate(async () => {
+              try {
+                const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
+                await fireTrigger(reminder.userId, AUTOMATION_TRIGGERS.REMINDER_DUE, {
+                  userId: reminder.userId,
+                  reminderId: reminder.id,
+                  reminderContent: reminder.content,
+                });
+              } catch { /* automation error is non-fatal */ }
             });
           } catch (err) {
             console.error(`[reminder-daemon] Failed to fire reminder ${reminder.id}:`, err);
