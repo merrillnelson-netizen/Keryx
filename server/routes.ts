@@ -7072,22 +7072,21 @@ Respond with JSON only.`
     }
   });
 
-  /** POST /api/relay/destinations/:id/test-outbound — send a test ping to a single outbound destination */
+  /** POST /api/relay/destinations/:id/test-outbound — send a test ping to a single specific outbound destination */
   app.post("/api/relay/destinations/:id/test-outbound", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const dest = (await storage.getRelayDestinations(user.id)).find(d => d.id === req.params.id);
-      if (!dest) return res.status(404).json({ error: 'Destination not found' });
-      if (!dest.outboundEnabled) return res.status(400).json({ error: 'Outbound relay is not enabled for this destination' });
-      const { dispatchOutbound } = await import('./relay-outbound-service');
-      const results = await dispatchOutbound(user.id, 'test_ping', {
+      const { dispatchOutboundToDestination } = await import('./relay-outbound-service');
+      const result = await dispatchOutboundToDestination(user.id, req.params.id, 'test_ping', {
         title: 'Keryx Outbound Test',
         summary: 'This is a test ping from your Keryx relay settings.',
-        destinationLabel: dest.label,
+        destinationId: req.params.id,
       });
-      const result = results[0];
-      if (!result || !result.ok) {
-        return res.status(502).json({ error: result?.error || 'Test ping failed', result });
+      if (!result.ok) {
+        return res.status(result.status === 404 ? 404 : result.status === 400 ? 400 : 502).json({
+          error: result.error || 'Test ping failed',
+          result,
+        });
       }
       res.json({ ok: true, result });
     } catch (error) {

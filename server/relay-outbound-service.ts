@@ -9,7 +9,7 @@
  * - Serializes payload as JSON (default) or plain text based on `outboundFormat`.
  * - POSTs with `X-API-Key` header if the destination has an apiKey configured.
  * - 2-attempt retry on transient failure (network error or 5xx), with a 1-second delay.
- * - Logs every dispatch attempt to `relay_events` with `direction = 'outbound'`.
+ * - Logs EVERY attempt to `relay_events` with `direction = 'outbound'` (one row per attempt).
  */
 
 import { storage } from "./storage";
@@ -49,7 +49,6 @@ function serializePayload(
   format: string
 ): string {
   if (format === "text") {
-    // Produce a compact human-readable string
     const parts: string[] = [`[Keryx/${eventType}]`];
     if (typeof payload.summary === "string") parts.push(payload.summary);
     else if (typeof payload.title === "string") parts.push(payload.title);
@@ -57,7 +56,6 @@ function serializePayload(
     else if (typeof payload.message === "string") parts.push(payload.message);
     return parts.join(" ");
   }
-  // Default: JSON
   return JSON.stringify({
     keryx_event: eventType,
     timestamp: new Date().toISOString(),
@@ -67,7 +65,7 @@ function serializePayload(
 
 /**
  * Attempt a single POST to a destination URL.
- * Returns true if the HTTP response is 2xx.
+ * Returns { ok, status, error }.
  */
 async function postToDestination(
   dest: RelayDestination,
@@ -100,6 +98,97 @@ async function postToDestination(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/**
+ * Log a single attempt to relay_events with direction='outbound'.
+ * Non-throwing; warnings are logged to console only.
+ */
+async function logAttempt(
+  userId: string,
+  eventType: OutboundEventType,
+  dest: RelayDestination,
+  attempt: number,
+  result: { ok: boolean; status: number; error?: string },
+  payloadPreview: string
+): Promise<void> {
+  try {
+    await storage.createRelayEvent({
+      userId,
+      direction: "outbound",
+      type: eventType,
+      source: "keryx_agent",
+      payload: {
+        eventType,
+        destinationLabel: dest.label,
+        destinationUrl: dest.url,
+        attempt,
+        ok: result.ok,
+        status: result.status,
+        error: result.error,
+        payloadPreview: payloadPreview.slice(0, 500),
+      } as Record<string, unknown>,
+      routedTo: [dest.label],
+    });
+  } catch (logErr) {
+    console.warn(
+      "[relay-outbound] Failed to log attempt:",
+      logErr instanceof Error ? logErr.message : logErr
+    );
+  }
+}
+
+/**
+ * Dispatch an outbound event to a single specific destination.
+ * Used by the test-outbound endpoint to target exactly one destination.
+ *
+ * @returns DispatchResult for that one destination (always non-throwing).
+ */
+export async function dispatchOutboundToDestination(
+  userId: string,
+  destinationId: string,
+  eventType: OutboundEventType,
+  payload: Record<string, unknown>
+): Promise<DispatchResult> {
+  let dest: RelayDestination | undefined;
+  try {
+    const all = await storage.getRelayDestinations(userId);
+    dest = all.find((d) => d.id === destinationId);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[relay-outbound] Failed to load destinations:", errMsg);
+    return { destinationLabel: destinationId, ok: false, status: 0, error: errMsg, attempt: 0 };
+  }
+
+  if (!dest) {
+    return { destinationLabel: destinationId, ok: false, status: 404, error: "Destination not found", attempt: 0 };
+  }
+  if (!dest.outboundEnabled) {
+    return { destinationLabel: dest.label, ok: false, status: 400, error: "Outbound relay is not enabled for this destination", attempt: 0 };
+  }
+
+  const isJson = (dest.outboundFormat ?? "json") !== "text";
+  const body = serializePayload(eventType, payload, dest.outboundFormat ?? "json");
+  let lastResult: { ok: boolean; status: number; error?: string } = { ok: false, status: 0, error: "Not attempted" };
+  let attempt = 0;
+
+  for (attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    lastResult = await postToDestination(dest, body, isJson);
+    // Log every individual attempt
+    setImmediate(() => logAttempt(userId, eventType, dest!, attempt, lastResult, body));
+    if (lastResult.ok) break;
+    const isTransient = lastResult.status === 0 || lastResult.status >= 500;
+    if (!isTransient || attempt >= MAX_RETRIES) break;
+    await sleep(1000);
+  }
+
+  return {
+    destinationLabel: dest.label,
+    ok: lastResult.ok,
+    status: lastResult.status,
+    error: lastResult.error,
+    attempt,
+  };
 }
 
 /**
@@ -147,8 +236,11 @@ export async function dispatchOutbound(
 
       for (attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         lastResult = await postToDestination(dest, body, isJson);
+        // Log EVERY attempt (per requirement) — non-blocking
+        const capturedAttempt = attempt;
+        const capturedResult = { ...lastResult };
+        setImmediate(() => logAttempt(userId, eventType, dest, capturedAttempt, capturedResult, body));
         if (lastResult.ok) break;
-        // Retry on network error or 5xx server error — not on 4xx
         const isTransient = lastResult.status === 0 || lastResult.status >= 500;
         if (!isTransient || attempt >= MAX_RETRIES) break;
         await sleep(1000);
@@ -160,32 +252,6 @@ export async function dispatchOutbound(
         status: lastResult.status,
         error: lastResult.error,
         attempt,
-      });
-
-      // Log to relay_events regardless of outcome
-      setImmediate(async () => {
-        try {
-          await storage.createRelayEvent({
-            userId,
-            direction: "outbound",
-            type: eventType,
-            source: "keryx_agent",
-            payload: {
-              eventType,
-              destinationLabel: dest.label,
-              destinationUrl: dest.url,
-              ok: lastResult.ok,
-              status: lastResult.status,
-              attempt,
-              error: lastResult.error,
-              payloadPreview: body.slice(0, 500),
-              ...payload,
-            } as Record<string, unknown>,
-            routedTo: [dest.label],
-          });
-        } catch (logErr) {
-          console.warn("[relay-outbound] Failed to log event:", logErr instanceof Error ? logErr.message : logErr);
-        }
       });
     })
   );
@@ -264,10 +330,12 @@ export async function dispatchBriefingSummary(
 export async function dispatchFinancialAlert(
   userId: string,
   alertTitle: string,
-  alertDetails: string
+  alertDetails: string,
+  alertType?: string
 ): Promise<DispatchResult[]> {
   return dispatchOutbound(userId, "financial_alert", {
     title: alertTitle,
     summary: alertDetails,
+    alertType,
   });
 }

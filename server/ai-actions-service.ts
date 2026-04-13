@@ -1000,7 +1000,8 @@ async function executeGoalUpdate(action: AiAction): Promise<ActionExecutionResul
 }
 
 /**
- * Execute financial.alert action — sends a push notification for the financial alert.
+ * Execute financial.alert action — sends a push notification for the financial alert
+ * and dispatches an outbound relay event to all configured outbound destinations.
  */
 async function executeFinancialAlert(action: AiAction): Promise<ActionExecutionResult> {
   const rawPayload = action.payload as Record<string, unknown>;
@@ -1020,6 +1021,16 @@ async function executeFinancialAlert(action: AiAction): Promise<ActionExecutionR
         requireInteraction: false,
       });
     }
+
+    // Dispatch outbound relay for financial alerts (non-blocking)
+    setImmediate(async () => {
+      try {
+        const { dispatchFinancialAlert } = await import('./relay-outbound-service');
+        await dispatchFinancialAlert(action.userId, payload.title, payload.details, payload.alertType);
+      } catch (relayErr) {
+        console.warn('[ai-actions] Financial alert outbound relay failed:', relayErr instanceof Error ? relayErr.message : relayErr);
+      }
+    });
 
     return {
       success: true,
