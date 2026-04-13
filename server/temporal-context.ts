@@ -109,9 +109,10 @@ export function buildTemporalContext(tz: string = DEFAULT_TZ, referenceDate?: Da
   const criticalRules = `CRITICAL DATE RULES:
 - Today's date is ${localDate} (${dayOfWeek}), ${localTime} ${tz} (${utcOffset}).
 - The current year is ${year}. The current month is ${month}.
-- NEVER use 2023, 2024, or any year other than ${year} when constructing dates.
-- All dates you generate must be on or after ${localDate}; do not produce past dates.
+- Do NOT produce dates in past years (i.e. earlier than ${year}); dates in ${year + 1} or later are valid for future events.
+- All dates you generate must be on or after ${localDate} unless the user explicitly refers to a historical event.
 - When the user says "tomorrow", compute the day after ${localDate}.
+- When the user says "next year", use ${year + 1}.
 - When the user says "next [weekday]", compute the next occurrence of that day after ${localDate}.
 - Treat all relative time references ("in 30 minutes", "this afternoon") as relative to ${localTime} in ${tz}.`;
 

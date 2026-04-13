@@ -145,7 +145,13 @@ export async function extractSearchableInsights(
 
   for (const event of imminentTrips) {
     const eventDate = new Date(event.start?.dateTime || event.start?.date || '');
-    const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    // Compute daysUntil relative to the user's local calendar day (not UTC midnight)
+    // to avoid off-by-one errors near day boundaries in non-UTC timezones.
+    const localTodayStr = temporalCtx.localDate; // YYYY-MM-DD in user's tz
+    const localToday = new Date(`${localTodayStr}T00:00:00Z`); // treat as UTC midnight of local day
+    const eventLocalStr = eventDate.toLocaleDateString('en-CA', { timeZone: userTimezone }); // YYYY-MM-DD
+    const eventLocalMidnight = new Date(`${eventLocalStr}T00:00:00Z`);
+    const daysUntil = Math.ceil((eventLocalMidnight.getTime() - localToday.getTime()) / (24 * 60 * 60 * 1000));
     
     insights.push({
       type: 'calendar',
