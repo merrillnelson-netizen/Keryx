@@ -627,14 +627,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Fire automation triggers for memory.logged (and keyword.detected, person.mentioned, mood.*)
           import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
             const moodScore = extracted.moodScore ?? undefined;
+            // Derive aiSentiment from the AI's mood label (primary source — intent-aware)
+            // Fallback to moodScore on -100..100 scale if mood label is unrecognized
+            const POSITIVE_MOODS = new Set(['happy', 'excited', 'hopeful', 'grateful', 'peaceful', 'proud', 'motivated', 'nostalgic']);
+            const NEGATIVE_MOODS = new Set(['sad', 'anxious', 'frustrated', 'stressed', 'angry', 'confused']);
+            const moodLabel = (extracted.mood || 'neutral').toLowerCase();
             const aiSentiment: 'positive' | 'neutral' | 'negative' =
-              moodScore !== undefined
-                ? moodScore >= 7 ? 'positive' : moodScore <= 3 ? 'negative' : 'neutral'
+              POSITIVE_MOODS.has(moodLabel) ? 'positive'
+              : NEGATIVE_MOODS.has(moodLabel) ? 'negative'
+              : moodScore !== undefined
+                ? moodScore > 20 ? 'positive' : moodScore < -20 ? 'negative' : 'neutral'
                 : 'neutral';
-            const aiMoodLabel =
-              moodScore !== undefined
-                ? moodScore >= 9 ? 'great' : moodScore >= 7 ? 'good' : moodScore >= 5 ? 'neutral' : moodScore >= 3 ? 'low' : 'bad'
-                : undefined;
+            // aiMoodLabel: the raw AI-assigned mood string (e.g. "stressed", "happy")
+            const aiMoodLabel = extracted.mood || undefined;
             const aiTopics = extracted.topicTag ? [extracted.topicTag] : [];
             const aiPeople = extracted.detectedPeople || [];
             const ctx = {

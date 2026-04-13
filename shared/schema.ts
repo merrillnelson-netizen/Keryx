@@ -1362,6 +1362,7 @@ export const automationConditionsSchema = z.object({
   // AI-extracted topic tag (preferred alias for topic in memory.logged rules)
   aiTopic: z.string().optional(),
   // AI-derived sentiment label: positive | neutral | negative
+  // Sourced from AI mood label (happy/stressed/etc.) with moodScore -100..100 fallback
   aiSentiment: z.enum(['positive', 'neutral', 'negative']).optional(),
   // Goal progress thresholds (0-100)
   progressAbove: z.number().int().min(0).max(100).optional(),

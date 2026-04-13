@@ -454,8 +454,9 @@
 <li><code>moodBelow: 4</code> — only fire if mood score &lt; 4</li>
 <li><code>moodAbove: 8</code> — only fire if mood score &gt; 8</li>
 <li><code>keyword: "stress"</code> — word-boundary match: "stress" catches "stressed", "stressful" but NOT "distress"</li>
-<li><code>aiSentiment: "negative"</code> — AI-derived sentiment label: <code>positive</code>, <code>neutral</code>, or <code>negative</code> (mapped from mood score; more intent-aware than moodBelow)</li>
-<li><code>topic: "Health"</code> — only fire if the AI assigns this topic tag to the memory</li>
+<li><code>aiSentiment: "negative"</code> — AI-derived sentiment: <code>positive</code>, <code>neutral</code>, or <code>negative</code>. Sourced from the AI mood label (e.g. "stressed" → negative, "happy" → positive) with numeric fallback. More intent-aware than a raw <code>moodBelow</code> threshold.</li>
+<li><code>aiTopic: "Health"</code> — preferred alias: matches the AI-assigned topic tag (same data as <code>topic</code>, explicit name for rules using memory.logged trigger)</li>
+<li><code>topic: "Health"</code> — legacy alias for <code>aiTopic</code>; supported for backward compat</li>
 <li><code>personName: "Sarah"</code> — only fire if Sarah is mentioned</li>
 <li><code>progressAbove: 75</code> — only fire for goal updates above 75%</li>
 <li><code>progressBelow: 20</code> — only fire for goal updates below 20%</li>

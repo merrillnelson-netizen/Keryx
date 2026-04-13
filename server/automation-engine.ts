@@ -22,14 +22,14 @@ export interface TriggerContext {
   timestamp?: Date;
   // memory.logged — raw fields
   memoryContent?: string;
-  moodScore?: number;        // 1-10
+  moodScore?: number;        // -100..100 scale (AI-assigned)
   topics?: string[];
   peopleNames?: string[];
-  // memory.logged — AI-derived enriched fields
-  aiTopics?: string[];       // AI-extracted topic tags (same as topics, explicit alias for conditions)
-  aiPeople?: string[];       // AI-detected people (same as peopleNames, explicit alias)
-  aiMoodLabel?: string;      // Human label derived from moodScore: 'great'|'good'|'neutral'|'low'|'bad'
-  aiSentiment?: 'positive' | 'neutral' | 'negative'; // Coarse sentiment derived from moodScore
+  // memory.logged — AI-derived enriched fields (sourced from AI extraction, not thresholds)
+  aiTopics?: string[];       // AI-extracted topic tags (alias for topics; for aiTopic condition)
+  aiPeople?: string[];       // AI-detected people (alias for peopleNames; for future conditions)
+  aiMoodLabel?: string;      // Raw AI mood label: 'happy'|'stressed'|'anxious'|'excited'|'neutral'|…
+  aiSentiment?: 'positive' | 'neutral' | 'negative'; // Derived from mood label, then moodScore fallback
   // keyword.detected
   keyword?: string;
   // person.mentioned
