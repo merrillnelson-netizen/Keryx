@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,26 +5,22 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Glasses, Copy, ExternalLink, Circle, Mic, MapPin, Bluetooth } from "lucide-react";
 
-interface RelayEvent {
-  id: string;
-  type: string;
-  source: string;
-  createdAt: string;
+interface CompanionStatus {
+  lastSeenAt: string | null;
 }
 
 export function CompanionAppCard() {
   const { toast } = useToast();
-  const [showUser, setShowUser] = useState(false);
+
+  const { data: statusData } = useQuery<CompanionStatus>({
+    queryKey: ["/api/companion/status"],
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 
   const { data: relayKeyData } = useQuery<{ apiKey: string; endpoint: string }>({
     queryKey: ["/api/relay/key"],
     staleTime: Infinity,
-  });
-
-  const { data: relayEvents = [] } = useQuery<RelayEvent[]>({
-    queryKey: ["/api/relay/events"],
-    staleTime: 30_000,
-    refetchInterval: 60_000,
   });
 
   const copy = (text: string, label: string) => {
@@ -38,10 +33,9 @@ export function CompanionAppCard() {
     ? new URL(relayKeyData.endpoint).origin
     : window.location.origin;
 
-  const lastCompanionEvent = relayEvents.find(e => e.source === "companion-app" || e.source === "glasses");
-
-  const companionOnline = !!lastCompanionEvent &&
-    (Date.now() - new Date(lastCompanionEvent.createdAt).getTime()) < 30 * 60 * 1000;
+  const lastSeenAt = statusData?.lastSeenAt ?? null;
+  const companionOnline = !!lastSeenAt &&
+    (Date.now() - new Date(lastSeenAt).getTime()) < 30 * 60 * 1000;
 
   const formatLastSeen = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -60,7 +54,7 @@ export function CompanionAppCard() {
         <CardTitle className="flex items-center gap-2">
           <Glasses className="w-5 h-5 text-sky-500" />
           Meta Glasses Companion App
-          {lastCompanionEvent ? (
+          {lastSeenAt ? (
             <Badge
               variant="outline"
               className={companionOnline
@@ -68,12 +62,12 @@ export function CompanionAppCard() {
                 : "border-yellow-500 text-yellow-400 text-xs"}
             >
               <Circle className={`w-2 h-2 mr-1 ${companionOnline ? "fill-green-400" : "fill-yellow-400"}`} />
-              {companionOnline ? "Online" : `Last seen ${formatLastSeen(lastCompanionEvent.createdAt)}`}
+              {companionOnline ? "Online" : `Last seen ${formatLastSeen(lastSeenAt)}`}
             </Badge>
           ) : (
             <Badge variant="outline" className="border-muted-foreground text-muted-foreground text-xs">
               <Circle className="w-2 h-2 mr-1" />
-              Not connected
+              Never connected
             </Badge>
           )}
           <Badge variant="outline" className="border-sky-500 text-sky-400 text-xs ml-auto">
@@ -101,57 +95,73 @@ export function CompanionAppCard() {
           </div>
         </div>
 
-        {/* Step 1 — Clone & build */}
+        {/* Step 1 — Get source */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 1 — Get the Source</p>
           <p className="text-xs text-muted-foreground">
-            The companion app lives in <code className="bg-muted/40 px-1 rounded">companion-app/</code> inside your Keryx project.
-            It's a React Native app — clone the repo and build it with Expo or the React Native CLI.
+            The companion app lives in <code className="bg-muted/40 px-1 rounded">companion-app/</code> inside the Keryx GitHub repo.
+            Clone it, then install dependencies:
           </p>
+          <pre className="text-xs bg-muted/30 rounded-lg px-3 py-2 overflow-x-auto text-muted-foreground">
+{`git clone https://github.com/merrillnelson-netizen/Keryx.git
+cd Keryx/companion-app
+npm install
+cd ios && pod install && cd ..   # iOS only`}
+          </pre>
           <Button size="sm" variant="outline" asChild>
             <a
               href="https://github.com/merrillnelson-netizen/Keryx/tree/main/companion-app"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <ExternalLink className="w-4 h-4 mr-2" />
+              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
               View companion-app/ on GitHub
             </a>
           </Button>
         </div>
 
-        {/* Step 2 — Server URL */}
+        {/* Step 2 — Create .env */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 2 — Configure Server URL</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 2 — Create .env</p>
           <p className="text-xs text-muted-foreground">
-            In <code className="bg-muted/40 px-1 rounded">companion-app/src/services/api.ts</code>, the production URL is already set to:
+            Create <code className="bg-muted/40 px-1 rounded">companion-app/.env</code> with:
           </p>
-          <div className="bg-muted/30 rounded-lg p-3">
-            <div className="flex items-center gap-2">
-              <code className="text-xs bg-background/50 px-2 py-1 rounded flex-1 truncate text-sky-400">
-                {serverUrl}
-              </code>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 shrink-0"
-                onClick={() => copy(serverUrl, "Server URL")}
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </Button>
-            </div>
+          <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+            <pre className="text-xs text-muted-foreground overflow-x-auto">{`PICOVOICE_ACCESS_KEY=<your_key>
+KERYX_API_URL=${serverUrl}`}</pre>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={() => copy(
+                `PICOVOICE_ACCESS_KEY=<your_key>\nKERYX_API_URL=${serverUrl}`,
+                ".env contents"
+              )}
+            >
+              <Copy className="w-3 h-3 mr-1.5" /> Copy .env
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Server URL to paste: <code className="bg-muted/40 px-1 rounded text-sky-400">{serverUrl}</code>{" "}
+            <button
+              className="text-primary hover:underline text-xs"
+              onClick={() => copy(serverUrl, "Server URL")}
+            >
+              copy
+            </button>
+          </p>
         </div>
 
         {/* Step 3 — Picovoice */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 3 — Wake Word (Picovoice)</p>
-          <p className="text-xs text-muted-foreground">
-            Wake word detection requires a <strong>Picovoice access key</strong> and a custom{" "}
-            <code className="bg-muted/40 px-1 rounded">hey-keryx.ppn</code> model file trained
-            for the phrase "Hey Keryx".
-          </p>
-          <div className="flex flex-wrap gap-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 3 — Get Picovoice Key & Wake Word</p>
+          <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+            <li>Sign up at <a href="https://console.picovoice.ai/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">console.picovoice.ai</a> and copy your <strong>Access Key</strong></li>
+            <li>Go to <a href="https://console.picovoice.ai/ppn" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Porcupine Wake Word trainer</a> and create a model for <strong>"Hey Keryx"</strong></li>
+            <li>Download the <code className="bg-muted/40 px-1 rounded">.ppn</code> file for Android/iOS</li>
+            <li>Copy it to <code className="bg-muted/40 px-1 rounded">companion-app/assets/hey-keryx.ppn</code></li>
+          </ol>
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="outline" asChild>
               <a href="https://console.picovoice.ai/" target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
@@ -165,26 +175,37 @@ export function CompanionAppCard() {
               </a>
             </Button>
           </div>
+        </div>
+
+        {/* Step 4 — Build & run */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 4 — Build & Install on Phone</p>
+          <pre className="text-xs bg-muted/30 rounded-lg px-3 py-2 overflow-x-auto text-muted-foreground">
+{`# Android
+npm run android
+
+# iOS (requires Mac + Xcode)
+npm run ios`}
+          </pre>
           <p className="text-xs text-muted-foreground">
-            Place your <code className="bg-muted/40 px-1 rounded">.ppn</code> file in{" "}
-            <code className="bg-muted/40 px-1 rounded">companion-app/assets/</code> and set{" "}
-            <code className="bg-muted/40 px-1 rounded">PICOVOICE_ACCESS_KEY</code> in the app's environment config.
+            Connect your Meta glasses via Bluetooth before launching. The app will route audio through the glasses automatically.
           </p>
         </div>
 
-        {/* Step 4 — Login */}
+        {/* Step 5 — Log in */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 4 — Log In</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 5 — Log In</p>
           <p className="text-xs text-muted-foreground">
-            Open the companion app and log in with your Keryx username and password.
-            The app uses session-based authentication — the same credentials you use on the web.
+            Open the companion app, tap <strong>Log In</strong>, and enter your Keryx username and password.
+            Once connected, say <strong>"Hey Keryx"</strong> to start recording a memory.
+            The status dot above will turn green after your first successful recording.
           </p>
         </div>
 
         {/* Last activity */}
-        {lastCompanionEvent && (
+        {lastSeenAt && (
           <div className="text-xs text-muted-foreground pt-1 border-t border-white/10">
-            Last companion activity: {formatLastSeen(lastCompanionEvent.createdAt)}
+            Last companion activity: {formatLastSeen(lastSeenAt)}
           </div>
         )}
       </CardContent>

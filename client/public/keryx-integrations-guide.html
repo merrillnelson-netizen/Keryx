@@ -715,20 +715,21 @@
 <h2>16. Meta Glasses Companion App</h2>
 
 <div class="detail">
-<p><span class="detail-label">Where:</span> Separate React Native app in <code>/companion-app/</code>, communicates with Keryx backend via API.</p>
+<p><span class="detail-label">Where:</span> Separate React Native app in <code>companion-app/</code> inside the Keryx repo. Communicates with the Keryx backend via session-authenticated API calls.</p>
 </div>
 
 <div class="detail">
-<p><span class="detail-label">Why:</span> Designed for Oakley Meta glasses integration. Record memories hands-free while wearing your glasses. Captures GPS location, device context, and supports wake word activation so you can say "Hey Keryx" to start recording.</p>
+<p><span class="detail-label">Why:</span> Designed for Oakley Meta HSTN glasses. Record memories hands-free while wearing your glasses — no phone needed. Captures GPS location and Bluetooth audio context, and wakes up automatically when you say "Hey Keryx" via Picovoice Porcupine.</p>
 </div>
 
 <div class="detail">
 <p><span class="detail-label">When it activates:</span></p>
 <ul>
-<li>When using the companion app on your phone (paired with Meta glasses)</li>
-<li>Wake word detection: "Hey Keryx" starts recording via Picovoice Porcupine SDK</li>
-<li>Records speech, captures location, sends to Keryx backend</li>
-<li>Also supports querying memories by voice</li>
+<li>Always listening (in background) for the "Hey Keryx" wake word via Porcupine SDK</li>
+<li>On wake word: starts recording speech through Meta glasses Bluetooth SCO audio</li>
+<li>On recording complete: captures GPS coordinates and sends the full context to <code>POST /api/companion/action</code></li>
+<li>Voice queries: say "Hey Keryx, what did I log about the gym last week?" to search memories by voice</li>
+<li>Status in Settings: the companion card polls <code>GET /api/companion/status</code> and shows a green dot after your first successful recording</li>
 </ul>
 </div>
 
@@ -736,38 +737,66 @@
 <p><span class="detail-label">How it works:</span></p>
 <ul>
 <li>MCP Protocol 2025-01 compliant payloads for structured communication</li>
-<li>Unified action endpoint: <code>POST /api/companion/action</code></li>
-<li>Actions: "record" (save memory) and "query" (search memories)</li>
-<li>Geolocation capture enriches memories with location data</li>
-<li>Bluetooth service for Meta glasses connectivity</li>
-<li>Speech service for voice recognition on the companion device</li>
-<li>Location service for continuous GPS tracking</li>
+<li>Unified action endpoint: <code>POST /api/companion/action</code> (Life OS tier required)</li>
+<li>Actions: <code>record</code> (save memory) and <code>query</code> (search memories)</li>
+<li>Geolocation service: continuous GPS capture enriches every memory with coordinates</li>
+<li>Bluetooth service: pairs with Meta glasses for SCO audio capture</li>
+<li>Wake word service: Picovoice Porcupine SDK with custom <code>hey-keryx.ppn</code> model</li>
+<li>Session authentication: same credentials as the web app — no separate API key needed</li>
+<li>Connection tracking: backend records last-seen timestamp in memory on every successful action</li>
 </ul>
 </div>
 
 <div class="detail">
-<h3>Setup steps</h3>
+<h3>Setup — step by step</h3>
+
+<p><strong>Step 1: Clone and install</strong></p>
+<pre style="background:#f0f0f5;padding:10px;border-radius:6px;font-size:0.82em;overflow-x:auto">git clone https://github.com/merrillnelson-netizen/Keryx.git
+cd Keryx/companion-app
+npm install
+
+# iOS only (requires macOS + Xcode)
+cd ios &amp;&amp; pod install &amp;&amp; cd ..</pre>
+
+<p style="margin-top:12px"><strong>Step 2: Create <code>companion-app/.env</code></strong></p>
+<pre style="background:#f0f0f5;padding:10px;border-radius:6px;font-size:0.82em;overflow-x:auto">PICOVOICE_ACCESS_KEY=&lt;your_picovoice_key&gt;
+KERYX_API_URL=https://nelson.replit.app</pre>
+<p>The <code>KERYX_API_URL</code> is already baked into <code>companion-app/src/services/api.ts</code> as the default, so this variable only needs to be set if you want to point at a local dev server instead.</p>
+
+<p style="margin-top:12px"><strong>Step 3: Get Picovoice key + wake word model</strong></p>
 <ol>
-<li>Clone the Keryx repo and open the <code>companion-app/</code> directory</li>
-<li>Install dependencies: <code>npm install</code> (or <code>yarn</code>) inside <code>companion-app/</code></li>
-<li>The production URL in <code>companion-app/src/services/api.ts</code> is already set to <code>https://nelson.replit.app</code> — no changes needed for production builds</li>
-<li>Obtain a <strong>Picovoice access key</strong> from <a href="https://console.picovoice.ai/" target="_blank">console.picovoice.ai</a> and train a custom wake word model for "Hey Keryx" at <a href="https://console.picovoice.ai/ppn" target="_blank">console.picovoice.ai/ppn</a></li>
-<li>Place the <code>.ppn</code> wake word model file in <code>companion-app/assets/</code> and add your Picovoice access key to the app's environment config</li>
-<li>Build and install via Expo (<code>npx expo run:android</code>) or React Native CLI</li>
-<li>Open the companion app, tap <strong>Log In</strong>, and enter your Keryx username and password</li>
-<li>Pair your Meta glasses via Bluetooth — the app will route audio through the glasses automatically</li>
-<li>Say <strong>"Hey Keryx"</strong> to start recording a memory</li>
+<li>Sign up at <a href="https://console.picovoice.ai/" target="_blank">console.picovoice.ai</a> and copy your free <strong>Access Key</strong></li>
+<li>Go to the <a href="https://console.picovoice.ai/ppn" target="_blank">Porcupine Wake Word trainer</a></li>
+<li>Create a model for the phrase <strong>"Hey Keryx"</strong> — download the <code>.ppn</code> file for Android or iOS</li>
+<li>Copy it to <code>companion-app/assets/hey-keryx.ppn</code></li>
+<li>Paste your Access Key into the <code>.env</code> file above</li>
+</ol>
+
+<p style="margin-top:12px"><strong>Step 4: Build and install on device</strong></p>
+<pre style="background:#f0f0f5;padding:10px;border-radius:6px;font-size:0.82em;overflow-x:auto"># Android (phone connected via USB or emulator running)
+npm run android
+
+# iOS (Mac + Xcode required)
+npm run ios</pre>
+<p>Connect your Meta glasses via Bluetooth <em>before</em> launching — the app will route audio through the glasses automatically.</p>
+
+<p style="margin-top:12px"><strong>Step 5: Log in and test</strong></p>
+<ol>
+<li>Open the companion app and tap <strong>Log In</strong></li>
+<li>Enter your Keryx username (email) and password</li>
+<li>Say <strong>"Hey Keryx, I just had a great run in the park"</strong></li>
+<li>The memory is saved to Keryx with GPS context and the green dot appears in Settings</li>
 </ol>
 </div>
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">companion-app/src/services/api.ts, companion-app/src/services/speech.ts, companion-app/src/services/location.ts, companion-app/src/services/bluetooth.ts, companion-app/src/services/wakeWord.ts, companion-app/src/types/mcp.ts</p>
+<p class="file-ref">companion-app/src/services/api.ts, companion-app/src/services/speech.ts, companion-app/src/services/location.ts, companion-app/src/services/bluetooth.ts, companion-app/src/services/wakeWord.ts, companion-app/src/types/mcp.ts, server/routes.ts (POST /api/companion/action, GET /api/companion/status)</p>
 </div>
 
 <div class="detail">
 <span class="tag orange">React Native (separate build)</span>
-<span class="tag">Picovoice SDK</span>
+<span class="tag">Picovoice Porcupine SDK</span>
 <span class="tag">Life OS tier required</span>
 <span class="tag">Env: PICOVOICE_ACCESS_KEY</span>
 </div>

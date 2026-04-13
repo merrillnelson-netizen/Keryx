@@ -904,6 +904,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Handles voice-to-action with geolocation context
    */
 
+  // In-memory map: userId → last successful companion action timestamp
+  const companionLastSeenMap = new Map<number, Date>();
+
+  /**
+   * GET /api/companion/status - Returns last-seen timestamp for the companion app
+   * Used by the Settings card to show connection status
+   */
+  app.get("/api/companion/status", requireAuth, (req, res) => {
+    const user = req.user as User;
+    const lastSeenAt = companionLastSeenMap.get(user.id);
+    res.json({ lastSeenAt: lastSeenAt ? lastSeenAt.toISOString() : null });
+  });
+
   /**
    * POST /api/companion/action - Unified MCP action handler
    * Accepts MCP-compliant payloads from companion app
@@ -914,6 +927,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const payload = mcpPayloadSchema.parse(req.body);
       const user = req.user as User;
+
+      // Track last-seen timestamp for companion app status card
+      companionLastSeenMap.set(user.id, new Date());
 
       if (payload.action === 'record') {
         // Handle memory recording with full context
