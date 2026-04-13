@@ -2211,7 +2211,10 @@ export class DatabaseStorage implements IStorage {
           );
           if (dist > MERGE_RADIUS) continue;
 
-          // Merge secondary into primary — keep the confirmed/labelled one as primary if possible
+          // Skip if both places have different non-null labels — they're intentionally distinct
+          if (primary.label && secondary.label && primary.label !== secondary.label) continue;
+
+          // Keep the confirmed/labelled one as winner; if tied, primary wins
           const keepPrimary = primary.isConfirmed || !secondary.isConfirmed;
           const winner = keepPrimary ? primary : secondary;
           const loser = keepPrimary ? secondary : primary;
@@ -2223,13 +2226,20 @@ export class DatabaseStorage implements IStorage {
           const mergedFirstVisit = loser.firstVisit && (!winner.firstVisit || loser.firstVisit < winner.firstVisit)
             ? loser.firstVisit : winner.firstVisit;
 
+          // IMPORTANT: delete the loser FIRST so its label is freed before we
+          // potentially copy it onto the winner — avoids unique constraint violation
+          // on (userId, label).
+          await this.deleteFrequentPlace(loser.id, userId);
+          toDelete.add(loser.id);
+
+          const inheritedLabel = winner.label ?? loser.label ?? undefined;
           await this.updateFrequentPlace(winner.id, userId, {
             visitCount: mergedVisitCount,
             totalTimeMinutes: mergedTotalTime,
             lastVisit: mergedLastVisit ?? undefined,
             firstVisit: mergedFirstVisit ?? undefined,
             address: winner.address ?? loser.address ?? undefined,
-            label: winner.label ?? loser.label ?? undefined,
+            ...(inheritedLabel !== undefined ? { label: inheritedLabel } : {}),
             isConfirmed: winner.isConfirmed || loser.isConfirmed,
             name: (winner.isConfirmed && !loser.isConfirmed) ? winner.name
               : (!winner.isConfirmed && loser.isConfirmed) ? loser.name
@@ -2237,14 +2247,14 @@ export class DatabaseStorage implements IStorage {
           });
 
           // Update in-memory winner so subsequent passes use merged counts
-          allPlaces[keepPrimary ? i : j] = {
+          const winnerIdx = keepPrimary ? i : j;
+          allPlaces[winnerIdx] = {
             ...winner,
             visitCount: mergedVisitCount,
             totalTimeMinutes: mergedTotalTime,
+            label: inheritedLabel ?? null,
           } as FrequentPlace;
 
-          await this.deleteFrequentPlace(loser.id, userId);
-          toDelete.add(loser.id);
           mergedCount++;
         }
       }
