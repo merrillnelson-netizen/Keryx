@@ -222,6 +222,10 @@ export async function createCalendarEvent(
   const uid = options?.userId || currentUserId;
   const provider = await getConnectedCalendarProvider(uid ?? undefined);
   const userTimezone = options?.timezone || 'UTC';
+
+  if (!provider) {
+    throw new Error('No calendar connected. Please connect Google Calendar or Outlook in Settings.');
+  }
   
   if (provider === 'outlook') {
     return createOutlookCalendarEvent(title, startDateTime, endDateTime, { ...options, timezone: userTimezone, userId: uid ?? undefined });
@@ -320,13 +324,14 @@ async function createGoogleCalendarEvent(
       meetingLink: created.hangoutLink || undefined,
     };
   } catch (error: any) {
+    const detail = error?.errors?.[0]?.message || error?.response?.data?.error?.message || error?.message || 'Unknown error';
     console.error('[Calendar] Failed to create event:', {
       message: error?.message,
       code: error?.code,
       errors: error?.errors,
       response: error?.response?.data,
     });
-    return null;
+    throw new Error(`Google Calendar error: ${detail}`);
   }
 }
 

@@ -224,8 +224,9 @@ export async function createOutlookCalendarEvent(
       location: options?.location,
       meetingLink: response.onlineMeeting?.joinUrl,
     };
-  } catch (error) {
+  } catch (error: any) {
+    const detail = error?.body?.error?.message || error?.message || 'Unknown error';
     console.error('Failed to create Outlook calendar event:', error);
-    return null;
+    throw new Error(`Outlook Calendar error: ${detail}`);
   }
 }

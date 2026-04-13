@@ -1790,7 +1790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (!createdEvent) {
-        return sendErrorResponse(res, 500, "Failed to create calendar event");
+        return sendErrorResponse(res, 500, "Calendar event creation returned no result");
       }
 
       // If memoryId provided, link the event back to the memory
