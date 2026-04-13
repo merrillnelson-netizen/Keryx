@@ -442,13 +442,16 @@ async function detectFollowUpAction(
 ): Promise<DetectedAction | null> {
   try {
     const payload = completedAction.payload as Record<string, unknown>;
+    const sourceContext = completedAction.sourceText
+      ? `\n- Original context: "${completedAction.sourceText.slice(0, 300)}"`
+      : '';
     const prompt = `A user's AI assistant just successfully completed an action. Determine if there is ONE natural, HIGH-VALUE follow-up action warranted.
 
 COMPLETED ACTION:
 - Type: ${completedAction.actionType}
 - Title: ${completedAction.title}
 - Payload summary: ${JSON.stringify(payload).slice(0, 400)}
-- Result: ${JSON.stringify(resultData).slice(0, 200)}
+- Result: ${JSON.stringify(resultData).slice(0, 200)}${sourceContext}
 
 ONLY suggest a follow-up if:
 1. It is a natural, closely related next step (e.g., after scheduling a meeting with someone → draft a confirmation email to them)
@@ -604,6 +607,12 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
 
             const followUp = await detectFollowUpAction(action, result.resultData);
             if (!followUp) return;
+
+            // Hard server-side whitelist: reject any child type not in CHAINABLE_ACTION_TYPES
+            if (!CHAINABLE_ACTION_TYPES.has(followUp.actionType)) {
+              console.warn(`[ai-actions] Chain rejected — child type "${followUp.actionType}" not in CHAINABLE_ACTION_TYPES`);
+              return;
+            }
 
             // Determine policy for the child action type
             const { policy } = await getActionPolicy(action.userId, followUp.actionType);

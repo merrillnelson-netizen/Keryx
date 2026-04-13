@@ -269,7 +269,14 @@ function ActionCard({ action, onMutated, isChild }: { action: AiAction; onMutate
       {parentActionId && (
         <div className="flex items-center gap-1.5 text-xs text-violet-400 pb-1 border-b border-violet-500/20">
           <GitBranch className="w-3 h-3" />
-          <span>Spawned from parent action</span>
+          <span>
+            → spawned from{' '}
+            <span className="font-medium">
+              {action.sourceText?.startsWith('Chained from: ')
+                ? action.sourceText.slice('Chained from: '.length)
+                : 'parent action'}
+            </span>
+          </span>
           {chainDepth > 0 && <span className="text-muted-foreground">· depth {chainDepth}</span>}
         </div>
       )}
