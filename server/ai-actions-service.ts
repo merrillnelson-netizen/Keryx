@@ -29,14 +29,17 @@ import {
   type WebSearchPayload,
   type MemoryCreatePayload,
   type FinancialAlertPayload,
+  type GoalUpdatePayload,
   calendarCreatePayloadSchema,
   emailSendPayloadSchema,
   peopleNotePayloadSchema,
   webSearchPayloadSchema,
   memoryCreatePayloadSchema,
   financialAlertPayloadSchema,
+  goalUpdatePayloadSchema,
 } from "@shared/schema";
 import { tavily } from "@tavily/core";
+import { extractMetadata, generateEmbedding } from "./ai-service";
 import { createCalendarEvent, isGoogleCalendarConnected, deleteGoogleCalendarEvent } from "./calendar-service";
 import { sendEmail as sendGmailEmail, isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
@@ -207,6 +210,8 @@ AVAILABLE ACTIONS:
 4. people.note - Add a note to a person's contact record (e.g. "note that Sarah said she's moving to Denver")
 5. web.search - Search the web for information (e.g. "search for best restaurants in Denver", "look up the latest on X")
 6. memory.create - Explicitly log a new memory entry (e.g. "log that I finished the report", "record that I met with the team")
+7. goal.update - Update progress on a known goal (e.g. "mark my fitness goal at 60%", "update my savings goal to 40% complete")
+8. financial.alert - Surface a financial pattern or spending concern (e.g. "alert me about high spending on dining", "flag recurring charges")
 
 NOT SUPPORTED (do not detect these):
 - calendar.update - Updating existing events is not yet supported
@@ -220,11 +225,13 @@ CURRENT CONTEXT:
 - Email provider: ${providers.email || 'not connected'}
 
 DETECTION RULES:
-- Look for imperative phrases like "schedule", "send", "remind me", "set up", "book", "email", "search for", "look up", "find", "note that", "log that", "record that", "remember about"
+- Look for imperative phrases like "schedule", "send", "remind me", "set up", "book", "email", "search for", "look up", "find", "note that", "log that", "record that", "remember about", "update goal", "mark progress"
 - Look for future-oriented requests that require external action
 - For people.note: detect when user wants to annotate a contact with context (conversations, preferences, facts about them)
 - For web.search: detect explicit search requests or "look up X" / "find info on X" phrasing
 - For memory.create: detect explicit logging requests ("log that", "record that", "note that I did X")
+- For goal.update: detect when user wants to update a specific goal's progress percentage
+- For financial.alert: detect when user wants to be alerted about a spending pattern or financial concern
 - Do NOT flag simple reflective statements or observations as memory.create — only explicit logging requests
 - Do NOT flag general information queries as actions (only explicit "search for" / "find" phrasing)
 
@@ -237,8 +244,8 @@ If an action is detected, extract:
 Respond with JSON:
 {
   "detected": boolean,
-  "actionType": "calendar.create" | "email.send" | "reminder.create" | "people.note" | "web.search" | "memory.create" | null,
-  "actionCategory": "calendar" | "email" | "reminder" | "people" | "research" | "memory" | null,
+  "actionType": "calendar.create" | "email.send" | "reminder.create" | "people.note" | "web.search" | "memory.create" | "goal.update" | "financial.alert" | null,
+  "actionCategory": "calendar" | "email" | "reminder" | "people" | "research" | "memory" | "goals" | "financial" | null,
   "title": "Brief description of the action",
   "description": "Detailed explanation of what will be done",
   "payload": {
@@ -274,6 +281,21 @@ Respond with JSON:
     "memoryText": "The full memory text to log",
     "topicTag": "optional topic category",
     "mood": "optional mood (happy/sad/neutral/excited/stressed/grateful/anxious/content)"
+
+    // For goal.update:
+    "goalId": "goal ID if known, otherwise omit",
+    "goalTitle": "Title of the goal to update",
+    "newProgress": 0-100 (integer percentage),
+    "currentProgress": 0-100 (integer, if known),
+    "progressNote": "optional note about the update"
+
+    // For financial.alert:
+    "alertType": "spending_spike" | "recurring_charge" | "budget_threshold" | "unusual_pattern" | "insight",
+    "title": "Short alert headline",
+    "details": "Explanation of the financial concern",
+    "amount": optional number,
+    "merchant": "optional merchant name",
+    "category": "optional spending category"
   },
   "reasoning": "Explanation of why this was detected as an action and how parameters were extracted",
   "confidence": 0.0-1.0
@@ -420,8 +442,10 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
         result = { success: true, resultData: { acknowledged: true, type: 'reach_out' } };
         break;
       case AI_ACTION_TYPES.GOAL_UPDATE:
+        result = await executeGoalUpdate(action);
+        break;
       case AI_ACTION_TYPES.GOAL_MILESTONE:
-        // Goal actions are advisory — user confirms in the Goals page.
+        // Milestone suggestion is advisory — user confirms in the Goals page.
         result = { success: true, resultData: { acknowledged: true, type: action.actionType } };
         break;
       case AI_ACTION_TYPES.PEOPLE_NOTE:
@@ -434,8 +458,7 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
         result = await executeMemoryCreate(action);
         break;
       case AI_ACTION_TYPES.FINANCIAL_ALERT:
-        // Financial alerts are advisory — approving acknowledges the alert.
-        result = { success: true, resultData: { acknowledged: true, type: 'financial_alert' } };
+        result = await executeFinancialAlert(action);
         break;
       case AI_ACTION_TYPES.INSIGHT_SURFACE:
         // Insight surface actions are informational — approving dismisses the card.
@@ -452,10 +475,12 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
         // Decay audit actions are advisory — approving is an acknowledgment.
         result = { success: true, resultData: { acknowledged: true } };
         break;
-      case AI_ACTION_TYPES.EMAIL_DRAFT:
+      case AI_ACTION_TYPES.EMAIL_DRAFT: {
         // Draft actions produce a draft payload for the user to review — mark complete.
-        result = { success: true, resultData: { drafted: true, subject: (action.payload as any)?.subject } };
+        const draftPayload = action.payload as Record<string, unknown>;
+        result = { success: true, resultData: { drafted: true, subject: typeof draftPayload?.subject === 'string' ? draftPayload.subject : null } };
         break;
+      }
       default:
         // Provide helpful error messages for not-yet-implemented actions
         const notImplementedActions: Record<string, string> = {
@@ -620,20 +645,21 @@ async function executeEmailSend(action: AiAction): Promise<ActionExecutionResult
  * For now, reminders are stored as calendar events with a reminder flag
  */
 async function executeReminderCreate(action: AiAction): Promise<ActionExecutionResult> {
-  // Reminders are implemented as calendar events for now
-  const payload = action.payload as any;
-  
+  const rawPayload = action.payload as Record<string, unknown>;
+  const title = typeof rawPayload.title === 'string' ? rawPayload.title : 'Reminder';
+  const notes = typeof rawPayload.notes === 'string' ? rawPayload.notes : '';
+  const dueDateTime = typeof rawPayload.dueDateTime === 'string' ? rawPayload.dueDateTime : '';
+
   // Convert reminder to calendar event
   const reminderPayload: CalendarCreatePayload = {
-    summary: `[Reminder] ${payload.title}`,
-    description: payload.notes || '',
-    startDateTime: payload.dueDateTime,
-    endDateTime: payload.dueDateTime, // Same time - it's a reminder
+    summary: `[Reminder] ${title}`,
+    description: notes,
+    startDateTime: dueDateTime,
+    endDateTime: dueDateTime, // Same time - it's a reminder
   };
-  
-  // Create as calendar event
-  const modifiedAction = { ...action, payload: reminderPayload };
-  return await executeCalendarCreate(modifiedAction as AiAction);
+
+  const modifiedAction: AiAction = { ...action, payload: reminderPayload };
+  return await executeCalendarCreate(modifiedAction);
 }
 
 /**
@@ -646,14 +672,16 @@ async function executeReminderCreate(action: AiAction): Promise<ActionExecutionR
  * Steps are created as individual AI action records. The parent chain action is marked complete
  * immediately after spawning all children.
  */
+interface ChainStep {
+  actionType: string;
+  title: string;
+  description?: string;
+  payload: Record<string, unknown>;
+}
+
 async function executeChainSequence(action: AiAction): Promise<ActionExecutionResult> {
-  const chainPayload = action.payload as any;
-  const steps: Array<{
-    actionType: string;
-    title: string;
-    description?: string;
-    payload: Record<string, any>;
-  }> = chainPayload?.steps || [];
+  const chainPayload = action.payload as Record<string, unknown>;
+  const steps: ChainStep[] = Array.isArray(chainPayload?.steps) ? (chainPayload.steps as ChainStep[]) : [];
 
   if (!steps || steps.length === 0) {
     return { success: false, errorMessage: 'Chain action has no steps defined.' };
@@ -714,12 +742,12 @@ async function executeChainSequence(action: AiAction): Promise<ActionExecutionRe
  * Execute people.note action — adds a note to a person's record
  */
 async function executePeopleNote(action: AiAction): Promise<ActionExecutionResult> {
-  const payload = action.payload as PeopleNotePayload;
-
-  const validation = peopleNotePayloadSchema.safeParse(payload);
+  const rawPayload = action.payload as Record<string, unknown>;
+  const validation = peopleNotePayloadSchema.safeParse(rawPayload);
   if (!validation.success) {
     return { success: false, errorMessage: `Invalid people.note payload: ${validation.error.message}` };
   }
+  const payload = validation.data;
 
   try {
     let personId = payload.personId;
@@ -751,7 +779,7 @@ async function executePeopleNote(action: AiAction): Promise<ActionExecutionResul
 
     const timestamp = new Date().toISOString();
     const noteEntry = `[${timestamp}] ${payload.note}`;
-    const existingNotes = (person.notes as string | null) || '';
+    const existingNotes = (person.notes ?? '') as string;
     const updatedNotes = existingNotes ? `${existingNotes}\n${noteEntry}` : noteEntry;
 
     await storage.updatePerson(action.userId, personId, { notes: updatedNotes });
@@ -769,15 +797,33 @@ async function executePeopleNote(action: AiAction): Promise<ActionExecutionResul
 }
 
 /**
- * Execute web.search action — runs a Tavily search and returns results
+ * Typed shape of a single Tavily result used within this module.
+ */
+interface TavilySearchResult {
+  title: string;
+  url: string;
+  content: string;
+  score?: number;
+}
+
+/**
+ * Typed shape of the Tavily search response.
+ */
+interface TavilySearchResponse {
+  results: TavilySearchResult[];
+  answer?: string;
+}
+
+/**
+ * Execute web.search action — runs a Tavily search and surfaces results as discoveries.
  */
 async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult> {
-  const payload = action.payload as WebSearchPayload;
-
-  const validation = webSearchPayloadSchema.safeParse(payload);
+  const rawPayload = action.payload as Record<string, unknown>;
+  const validation = webSearchPayloadSchema.safeParse(rawPayload);
   if (!validation.success) {
     return { success: false, errorMessage: `Invalid web.search payload: ${validation.error.message}` };
   }
+  const payload = validation.data;
 
   const tavilyApiKey = process.env.TAVILY_API_KEY;
   if (!tavilyApiKey) {
@@ -792,22 +838,24 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
       max_results: maxResults,
       search_depth: 'basic',
       include_answer: true,
-    }) as any;
+    }) as TavilySearchResponse;
 
-    const results = (response.results || []).map((r: any) => ({
+    const discoveries = (response.results ?? []).map((r) => ({
       title: r.title,
       url: r.url,
-      content: r.content?.slice(0, 400) || '',
+      content: r.content?.slice(0, 400) ?? '',
       score: r.score ?? 0.5,
+      source: new URL(r.url).hostname.replace(/^www\./, ''),
     }));
 
     return {
       success: true,
       resultData: {
         query: payload.query,
-        answer: response.answer || null,
-        results,
-        resultCount: results.length,
+        context: payload.context ?? null,
+        answer: response.answer ?? null,
+        discoveries,
+        resultCount: discoveries.length,
       },
     };
   } catch (error) {
@@ -819,35 +867,145 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
 }
 
 /**
- * Execute memory.create action — creates a new log entry on behalf of the user
+ * Execute memory.create action — creates a new log entry using the full ingestion pipeline.
+ * This includes AI metadata extraction and embedding generation.
  */
 async function executeMemoryCreate(action: AiAction): Promise<ActionExecutionResult> {
-  const payload = action.payload as MemoryCreatePayload;
-
-  const validation = memoryCreatePayloadSchema.safeParse(payload);
+  const rawPayload = action.payload as Record<string, unknown>;
+  const validation = memoryCreatePayloadSchema.safeParse(rawPayload);
   if (!validation.success) {
     return { success: false, errorMessage: `Invalid memory.create payload: ${validation.error.message}` };
   }
+  const payload = validation.data;
 
   try {
+    const [extracted, embeddingVector] = await Promise.all([
+      extractMetadata(payload.memoryText),
+      generateEmbedding(payload.memoryText),
+    ]);
+
+    const topicTag = payload.topicTag || extracted.topicTag || 'General';
+    const mood = payload.mood || extracted.mood || null;
+    const metadataJson = { ...extracted.metadataJson, source: 'agent_action', actionId: action.id };
+
     const entry = await storage.createLogEntry({
       userId: action.userId,
       memoryText: payload.memoryText,
-      topicTag: payload.topicTag || 'General',
-      mood: (payload.mood as any) || null,
-      importance: 5,
-      metadataJson: { source: 'agent_action', actionId: action.id },
-      embeddingVector: Array(1536).fill(0), // Zero vector; backfill can regenerate
+      topicTag,
+      mood,
+      importance: extracted.importance ?? 5,
+      metadataJson,
+      embeddingVector,
     });
 
     return {
       success: true,
-      resultData: { entryId: entry.id, memoryText: payload.memoryText },
+      resultData: { entryId: entry.id, memoryText: payload.memoryText, topicTag },
     };
   } catch (error) {
     return {
       success: false,
       errorMessage: error instanceof Error ? error.message : 'Failed to create memory',
+    };
+  }
+}
+
+/**
+ * Execute goal.update action — mutates the goal's progress percentage in storage.
+ */
+async function executeGoalUpdate(action: AiAction): Promise<ActionExecutionResult> {
+  const rawPayload = action.payload as Record<string, unknown>;
+  const validation = goalUpdatePayloadSchema.safeParse(rawPayload);
+  if (!validation.success) {
+    return { success: false, errorMessage: `Invalid goal.update payload: ${validation.error.message}` };
+  }
+  const payload = validation.data;
+
+  try {
+    let goalId = payload.goalId;
+
+    // If no goalId provided, attempt fuzzy match by title
+    if (!goalId) {
+      const goals = await storage.getGoals(action.userId);
+      const matched = goals.find(g =>
+        g.title.toLowerCase().includes(payload.goalTitle.toLowerCase()) ||
+        payload.goalTitle.toLowerCase().includes(g.title.toLowerCase())
+      );
+      if (matched) {
+        goalId = matched.id;
+      }
+    }
+
+    if (!goalId) {
+      return {
+        success: false,
+        errorMessage: `Could not find a goal matching "${payload.goalTitle}". Check your goals list.`,
+      };
+    }
+
+    const existing = await storage.getGoal(goalId, action.userId);
+    if (!existing) {
+      return { success: false, errorMessage: 'Goal not found.' };
+    }
+
+    const previousProgress = existing.progressPercent;
+    await storage.updateGoal(goalId, action.userId, { progressPercent: payload.newProgress });
+
+    return {
+      success: true,
+      resultData: {
+        goalId,
+        goalTitle: existing.title,
+        previousProgress,
+        newProgress: payload.newProgress,
+        progressNote: payload.progressNote ?? null,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Failed to update goal progress',
+    };
+  }
+}
+
+/**
+ * Execute financial.alert action — sends a push notification for the financial alert.
+ */
+async function executeFinancialAlert(action: AiAction): Promise<ActionExecutionResult> {
+  const rawPayload = action.payload as Record<string, unknown>;
+  const validation = financialAlertPayloadSchema.safeParse(rawPayload);
+  if (!validation.success) {
+    return { success: false, errorMessage: `Invalid financial.alert payload: ${validation.error.message}` };
+  }
+  const payload = validation.data;
+
+  try {
+    if (isPushConfigured()) {
+      await sendPushToAllUserDevices(action.userId, {
+        type: 'alert',
+        title: `💰 ${payload.title}`,
+        body: payload.details.slice(0, 120),
+        url: '/dashboard',
+        requireInteraction: false,
+      });
+    }
+
+    return {
+      success: true,
+      resultData: {
+        alertType: payload.alertType,
+        title: payload.title,
+        details: payload.details,
+        amount: payload.amount ?? null,
+        merchant: payload.merchant ?? null,
+        notificationSent: isPushConfigured(),
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Failed to deliver financial alert',
     };
   }
 }
@@ -882,11 +1040,12 @@ function getActionCategory(actionType: string): string {
  *   - `type`        (string, optional): 'sms' | 'command' | 'event' — defaults to 'command'
  */
 async function executeRelayOutbound(action: AiAction): Promise<ActionExecutionResult> {
-  const payload = action.payload as any;
+  const rawPayload = action.payload as Record<string, unknown>;
   const userId = action.userId;
-  const content = payload?.content || payload?.message || '';
-  const targetLabel = payload?.destination || 'all';
-  const payloadType = payload?.type || 'command';
+  const content = (typeof rawPayload?.content === 'string' ? rawPayload.content : null)
+    ?? (typeof rawPayload?.message === 'string' ? rawPayload.message : '');
+  const targetLabel = typeof rawPayload?.destination === 'string' ? rawPayload.destination : 'all';
+  const payloadType = typeof rawPayload?.type === 'string' ? rawPayload.type : 'command';
 
   if (!content) {
     return { success: false, errorMessage: 'Relay outbound action has no content to send.' };
@@ -909,13 +1068,16 @@ async function executeRelayOutbound(action: AiAction): Promise<ActionExecutionRe
       };
     }
 
+    const extraFields = typeof rawPayload?.extra === 'object' && rawPayload.extra !== null
+      ? (rawPayload.extra as Record<string, unknown>)
+      : {};
     const relayPayload = {
       type: payloadType,
       source: 'keryx_agent',
       content,
       agentActionId: action.id,
       timestamp: new Date().toISOString(),
-      ...( payload?.extra || {} ),
+      ...extraFields,
     };
 
     const results: Array<{ label: string; ok: boolean; error?: string }> = [];

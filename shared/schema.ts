@@ -634,6 +634,14 @@ export const financialAlertPayloadSchema = z.object({
   category: z.string().optional(), // Spending category if applicable
 });
 
+export const goalUpdatePayloadSchema = z.object({
+  goalId: z.string(),              // ID of the goal to update
+  goalTitle: z.string(),           // Title of the goal (for display)
+  newProgress: z.number().int().min(0).max(100), // New progress percent (0-100)
+  currentProgress: z.number().int().min(0).max(100).optional(), // Previous progress
+  progressNote: z.string().optional(), // Optional note about the progress update
+});
+
 export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
 export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
 export type ReminderCreatePayload = z.infer<typeof reminderCreatePayloadSchema>;
@@ -641,6 +649,7 @@ export type PeopleNotePayload = z.infer<typeof peopleNotePayloadSchema>;
 export type WebSearchPayload = z.infer<typeof webSearchPayloadSchema>;
 export type MemoryCreatePayload = z.infer<typeof memoryCreatePayloadSchema>;
 export type FinancialAlertPayload = z.infer<typeof financialAlertPayloadSchema>;
+export type GoalUpdatePayload = z.infer<typeof goalUpdatePayloadSchema>;
 
 /**
  * Ideas table - stores user ideas at various stages of development
