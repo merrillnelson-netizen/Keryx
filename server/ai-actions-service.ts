@@ -25,6 +25,7 @@ import {
   type InsertAiAction,
   type AiActionPreference,
   type CalendarCreatePayload,
+  type CalendarDeletePayload,
   type EmailSendPayload,
   type PeopleNotePayload,
   type WebSearchPayload,
@@ -32,6 +33,7 @@ import {
   type FinancialAlertPayload,
   type GoalUpdatePayload,
   calendarCreatePayloadSchema,
+  calendarDeletePayloadSchema,
   emailSendPayloadSchema,
   peopleNotePayloadSchema,
   webSearchPayloadSchema,
@@ -100,6 +102,12 @@ export const ACTION_DEFINITIONS = {
     category: AI_ACTION_CATEGORIES.CALENDAR,
     description: 'Create a new calendar event',
     examples: ['schedule a meeting', 'add an appointment', 'book time for', 'set up a call'],
+    supported: true,
+  },
+  [AI_ACTION_TYPES.CALENDAR_DELETE]: {
+    category: AI_ACTION_CATEGORIES.CALENDAR,
+    description: 'Delete an existing calendar event',
+    examples: ['cancel my meeting', 'remove the appointment', 'delete the event'],
     supported: true,
   },
   // — Email —
@@ -219,17 +227,17 @@ export async function detectActionFromInput(
 
 AVAILABLE ACTIONS:
 1. calendar.create - Create a calendar event (schedule meeting, book appointment, set up call)
-2. email.send - Send a new email to someone
-3. reminder.create - Set a reminder for the user
-4. people.note - Add a note to a person's contact record (e.g. "note that Sarah said she's moving to Denver")
-5. web.search - Search the web for information (e.g. "search for best restaurants in Denver", "look up the latest on X")
-6. memory.create - Explicitly log a new memory entry (e.g. "log that I finished the report", "record that I met with the team")
-7. goal.update - Update progress on a known goal (e.g. "mark my fitness goal at 60%", "update my savings goal to 40% complete")
-8. financial.alert - Surface a financial pattern or spending concern (e.g. "alert me about high spending on dining", "flag recurring charges")
+2. calendar.delete - Delete an existing calendar event by its event ID (cancel meeting, remove appointment)
+3. email.send - Send a new email to someone
+4. reminder.create - Set a reminder for the user
+5. people.note - Add a note to a person's contact record (e.g. "note that Sarah said she's moving to Denver")
+6. web.search - Search the web for information (e.g. "search for best restaurants in Denver", "look up the latest on X")
+7. memory.create - Explicitly log a new memory entry (e.g. "log that I finished the report", "record that I met with the team")
+8. goal.update - Update progress on a known goal (e.g. "mark my fitness goal at 60%", "update my savings goal to 40% complete")
+9. financial.alert - Surface a financial pattern or spending concern (e.g. "alert me about high spending on dining", "flag recurring charges")
 
 NOT SUPPORTED (do not detect these):
 - calendar.update - Updating existing events is not yet supported
-- calendar.delete - Deleting events is not yet supported
 - email.reply - Replying to emails is not yet supported
 
 CURRENT CONTEXT:
@@ -258,7 +266,7 @@ If an action is detected, extract:
 Respond with JSON:
 {
   "detected": boolean,
-  "actionType": "calendar.create" | "email.send" | "reminder.create" | "people.note" | "web.search" | "memory.create" | "goal.update" | "financial.alert" | null,
+  "actionType": "calendar.create" | "calendar.delete" | "email.send" | "reminder.create" | "people.note" | "web.search" | "memory.create" | "goal.update" | "financial.alert" | null,
   "actionCategory": "calendar" | "email" | "reminder" | "people" | "research" | "memory" | "goals" | "financial" | null,
   "title": "Brief description of the action",
   "description": "Detailed explanation of what will be done",
@@ -271,6 +279,10 @@ Respond with JSON:
     "attendees": ["email@example.com"],
     "location": "optional location",
     "timezone": "${userTimezone}"
+
+    // For calendar.delete:
+    "eventId": "Google Calendar event ID (required)",
+    "eventTitle": "Human-readable event title for confirmation display"
     
     // For email.send:
     "to": ["email or name"],
@@ -521,6 +533,9 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
       case AI_ACTION_TYPES.CALENDAR_CREATE:
         result = await executeCalendarCreate(action);
         break;
+      case AI_ACTION_TYPES.CALENDAR_DELETE:
+        result = await executeCalendarDelete(action);
+        break;
       case AI_ACTION_TYPES.EMAIL_SEND:
         result = await executeEmailSend(action);
         break;
@@ -575,7 +590,6 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
         // Provide helpful error messages for not-yet-implemented actions
         const notImplementedActions: Record<string, string> = {
           'calendar.update': 'Updating existing calendar events is not yet supported. Please modify the event directly in your calendar app.',
-          'calendar.delete': 'Deleting calendar events is not yet supported. Please cancel the event directly in your calendar app.',
           'email.reply': 'Replying to emails is not yet supported. Please compose a new email instead.',
         };
         const helpfulMessage = notImplementedActions[action.actionType];
@@ -712,6 +726,45 @@ async function executeCalendarCreate(action: AiAction): Promise<ActionExecutionR
     return { 
       success: false, 
       errorMessage: error instanceof Error ? error.message : 'Calendar creation failed' 
+    };
+  }
+}
+
+/**
+ * Execute calendar delete action — removes an event from the user's primary calendar
+ */
+async function executeCalendarDelete(action: AiAction): Promise<ActionExecutionResult> {
+  const payload = action.payload as CalendarDeletePayload;
+
+  const validation = calendarDeletePayloadSchema.safeParse(payload);
+  if (!validation.success) {
+    return {
+      success: false,
+      errorMessage: `Invalid calendar delete payload: ${validation.error.message}`,
+    };
+  }
+
+  const provider = payload.provider || 'google';
+
+  try {
+    const isConnected = await isGoogleCalendarConnected(action.userId);
+    if (!isConnected) {
+      return { success: false, errorMessage: 'Google Calendar not connected. Please connect in Settings.' };
+    }
+
+    await deleteGoogleCalendarEvent(payload.eventId, action.userId);
+
+    return {
+      success: true,
+      resultData: {
+        deletedEventId: payload.eventId,
+        title: payload.eventTitle || 'Calendar event',
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Failed to delete calendar event',
     };
   }
 }
@@ -1202,6 +1255,7 @@ async function executeFinancialAlert(action: AiAction): Promise<ActionExecutionR
 function getActionCategory(actionType: string): string {
   const categoryMap: Record<string, string> = {
     [AI_ACTION_TYPES.CALENDAR_CREATE]: AI_ACTION_CATEGORIES.CALENDAR,
+    [AI_ACTION_TYPES.CALENDAR_DELETE]: AI_ACTION_CATEGORIES.CALENDAR,
     [AI_ACTION_TYPES.CALENDAR_UPDATE]: AI_ACTION_CATEGORIES.CALENDAR,
     [AI_ACTION_TYPES.EMAIL_SEND]: AI_ACTION_CATEGORIES.EMAIL,
     [AI_ACTION_TYPES.EMAIL_DRAFT]: AI_ACTION_CATEGORIES.EMAIL,

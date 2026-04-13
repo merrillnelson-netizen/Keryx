@@ -597,6 +597,12 @@ export const calendarCreatePayloadSchema = z.object({
   timezone: z.string().optional(), // IANA timezone (e.g., 'America/New_York')
 });
 
+export const calendarDeletePayloadSchema = z.object({
+  eventId: z.string(),             // Calendar event ID to delete
+  eventTitle: z.string().optional(), // Human-readable title for display/confirmation
+  provider: z.enum(['google', 'outlook']).optional(),
+});
+
 export const emailSendPayloadSchema = z.object({
   to: z.array(z.string()), // Email addresses
   subject: z.string(),
@@ -648,6 +654,7 @@ export const goalUpdatePayloadSchema = z.object({
 });
 
 export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
+export type CalendarDeletePayload = z.infer<typeof calendarDeletePayloadSchema>;
 export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
 export type ReminderCreatePayload = z.infer<typeof reminderCreatePayloadSchema>;
 export type PeopleNotePayload = z.infer<typeof peopleNotePayloadSchema>;

@@ -259,8 +259,7 @@ async function createGoogleCalendarEvent(
     const endDate = new Date(endDateTime);
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      console.error('[Calendar] Invalid date format:', { startDateTime, endDateTime });
-      return null;
+      throw new Error(`Invalid date format — start: "${startDateTime}", end: "${endDateTime}". Expected ISO 8601 string.`);
     }
     
     const formatLocalDateTime = (dateStr: string, date: Date, tz: string): string => {
