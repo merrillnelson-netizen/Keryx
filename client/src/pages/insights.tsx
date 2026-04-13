@@ -35,61 +35,65 @@ export default function Insights() {
         <PersonalInsights />
 
         {/* Ecosystem View teaser */}
-        <Link href="/ecosystem">
-          <Card className="glass-card border-white/20 hover:border-indigo-500/30 transition-colors cursor-pointer group">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-indigo-400" />
-                Ecosystem View
-                <span className="ml-auto text-muted-foreground group-hover:text-indigo-400 transition-colors">
-                  <ArrowRight className="w-4 h-4" />
-                </span>
-              </CardTitle>
-              <CardDescription>Your life at a glance — all data sources in one place</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                See your memory pulse, mood trend, topic distribution, relationship health, goal progress, and financial snapshot — all in a single unified dashboard with a full transaction browser.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {ECOSYSTEM_FEATURES.map(({ icon: Icon, label, color }) => (
-                  <div
-                    key={label}
-                    className="flex items-center gap-1.5 text-xs bg-white/5 rounded-full px-2.5 py-1 text-muted-foreground"
-                  >
-                    <Icon className={`w-3 h-3 ${color}`} />
-                    {label}
-                  </div>
-                ))}
-              </div>
-              <Button size="sm">
+        <Card className="glass-card border-white/20 hover:border-indigo-500/30 transition-colors group">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-indigo-400" />
+              Ecosystem View
+              <span className="ml-auto text-muted-foreground group-hover:text-indigo-400 transition-colors">
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </CardTitle>
+            <CardDescription>Your life at a glance — all data sources in one place</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              See your memory pulse, mood trend, topic distribution, relationship health, goal progress, and financial snapshot — all in a single unified dashboard with a full transaction browser.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ECOSYSTEM_FEATURES.map(({ icon: Icon, label, color }) => (
+                <div
+                  key={label}
+                  className="flex items-center gap-1.5 text-xs bg-white/5 rounded-full px-2.5 py-1 text-muted-foreground"
+                >
+                  <Icon className={`w-3 h-3 ${color}`} />
+                  {label}
+                </div>
+              ))}
+            </div>
+            <Button size="sm" asChild>
+              <Link href="/ecosystem">
                 Open Ecosystem View
                 <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-        </Link>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* AI Thematic Synthesis Link */}
-        <Link href="/synthesis">
-          <Card className="glass-card border-white/20 hover:border-purple-500/30 transition-colors cursor-pointer group">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-500" />
-                AI Thematic Synthesis
-                <span className="ml-auto text-muted-foreground group-hover:text-purple-500 transition-colors">→</span>
-              </CardTitle>
-              <CardDescription>
-                Deep analysis of patterns in your memories with interactive Q&A
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Get a comprehensive analysis of your memories, discover hidden patterns, and ask follow-up questions to explore your insights further.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card className="glass-card border-white/20 hover:border-purple-500/30 transition-colors group">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-500" />
+              AI Thematic Synthesis
+              <span className="ml-auto text-muted-foreground group-hover:text-purple-500 transition-colors">→</span>
+            </CardTitle>
+            <CardDescription>
+              Deep analysis of patterns in your memories with interactive Q&A
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Get a comprehensive analysis of your memories, discover hidden patterns, and ask follow-up questions to explore your insights further.
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/synthesis">
+                Open AI Synthesis
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
