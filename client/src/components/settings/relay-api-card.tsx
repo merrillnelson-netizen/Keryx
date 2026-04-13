@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import {
   Network, Eye, EyeOff, Copy, RefreshCcw, Plus, Trash2,
-  Send, Loader2, Radio, Zap,
+  Send, Loader2, Radio, Zap, ArrowUpRight, ChevronDown, ChevronRight,
 } from "lucide-react";
 
 export function RelayApiCard() {
@@ -23,6 +24,8 @@ export function RelayApiCard() {
   const [newDestApiKey, setNewDestApiKey] = useState('');
   const [newDestTypes, setNewDestTypes] = useState<string[]>([]);
   const [showAddDest, setShowAddDest] = useState(false);
+  const [expandedDests, setExpandedDests] = useState<Set<string>>(new Set());
+  const [testingPingId, setTestingPingId] = useState<string | null>(null);
 
   const [testRelayType, setTestRelayType] = useState<'sms' | 'command' | 'event'>('sms');
   const [testRelayFields, setTestRelayFields] = useState({
@@ -98,6 +101,15 @@ export function RelayApiCard() {
     onError: () => toast({ title: "Failed to update destination", variant: "destructive" }),
   });
 
+  const updateDestinationMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const res = await apiRequest("PUT", `/api/relay/destinations/${id}`, updates);
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/relay/destinations"] }),
+    onError: () => toast({ title: "Failed to update destination", variant: "destructive" }),
+  });
+
   const testRelayMutation = useMutation({
     mutationFn: async () => {
       const body: Record<string, any> = { type: testRelayType, source: 'relay_dashboard' };
@@ -116,6 +128,32 @@ export function RelayApiCard() {
     onSuccess: (data) => setTestRelayResult({ ok: true, data }),
     onError: (err: any) => setTestRelayResult({ ok: false, data: { error: err?.message ?? 'Unknown error' } }),
   });
+
+  const sendTestPing = async (destId: string) => {
+    setTestingPingId(destId);
+    try {
+      const res = await apiRequest("POST", `/api/relay/destinations/${destId}/test-outbound`);
+      const data = await res.json();
+      if (data.ok) {
+        toast({ title: "Test ping delivered successfully" });
+      } else {
+        toast({ title: "Test ping failed", description: data.error || "Unknown error", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Test ping failed", description: err?.message || "Network error", variant: "destructive" });
+    } finally {
+      setTestingPingId(null);
+    }
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedDests(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   return (
     <Card className="backdrop-blur-xl bg-white/5 dark:bg-white/5 bg-white border-white/10">
@@ -189,7 +227,7 @@ export function RelayApiCard() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Relay inbound payloads to additional services (your Android app, n8n webhook, etc.). SMS payloads are always saved to Keryx.
+            Relay inbound payloads to additional services (your Android app, n8n webhook, etc.). Enable outbound to also push Keryx events to a surface.
           </p>
 
           {showAddDest && (
@@ -225,29 +263,126 @@ export function RelayApiCard() {
           )}
 
           <div className="space-y-2">
-            {relayDestinations.map((dest: any) => (
-              <div key={dest.id} className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
-                <Radio className="w-4 h-4 text-violet-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{dest.label}</p>
-                  <p className="text-xs text-muted-foreground truncate">{dest.url}</p>
-                  {dest.payloadTypeFilter?.length > 0 && (
-                    <div className="flex gap-1 mt-1">
-                      {dest.payloadTypeFilter.map((t: string) => (
-                        <Badge key={t} variant="secondary" className="text-xs px-1 py-0">{t}</Badge>
-                      ))}
+            {relayDestinations.map((dest: any) => {
+              const isExpanded = expandedDests.has(dest.id);
+              return (
+                <div key={dest.id} className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+                  {/* Destination header row */}
+                  <div className="flex items-center gap-2 p-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(dest.id)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+                    <Radio className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{dest.label}</p>
+                      <p className="text-xs text-muted-foreground truncate">{dest.url}</p>
+                      <div className="flex gap-1 mt-0.5 flex-wrap">
+                        {dest.payloadTypeFilter?.length > 0 && dest.payloadTypeFilter.map((t: string) => (
+                          <Badge key={t} variant="secondary" className="text-xs px-1 py-0">{t}</Badge>
+                        ))}
+                        {dest.outboundEnabled && (
+                          <Badge variant="outline" className="text-xs px-1 py-0 border-orange-500/50 text-orange-400">
+                            <ArrowUpRight className="w-2.5 h-2.5 mr-0.5" />
+                            outbound
+                          </Badge>
+                        )}
+                        {dest.outboundEnabled && dest.outboundBriefingRelay && (
+                          <Badge variant="outline" className="text-xs px-1 py-0 border-amber-500/50 text-amber-400">briefing</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={dest.enabled}
+                      onCheckedChange={(enabled) => toggleDestinationMutation.mutate({ id: dest.id, enabled })}
+                    />
+                    <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => deleteDestinationMutation.mutate(dest.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {/* Outbound settings (expanded) */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 pt-0 border-t border-white/10 space-y-3">
+                      <p className="text-xs text-muted-foreground pt-2">
+                        Outbound relay lets Keryx push events <span className="text-orange-400 font-medium">to</span> this destination — not just forward inbound payloads.
+                      </p>
+
+                      {/* Outbound enabled toggle */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-medium">Enable Outbound Relay</p>
+                          <p className="text-xs text-muted-foreground">Push high-signal alerts, auto-actions, and financial alerts here</p>
+                        </div>
+                        <Switch
+                          checked={dest.outboundEnabled ?? false}
+                          onCheckedChange={(outboundEnabled) =>
+                            updateDestinationMutation.mutate({ id: dest.id, updates: { outboundEnabled } })
+                          }
+                        />
+                      </div>
+
+                      {dest.outboundEnabled && (
+                        <>
+                          {/* Briefing relay toggle */}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-medium">Relay Briefing Summaries</p>
+                              <p className="text-xs text-muted-foreground">Send your daily briefing summary to this destination</p>
+                            </div>
+                            <Switch
+                              checked={dest.outboundBriefingRelay ?? false}
+                              onCheckedChange={(outboundBriefingRelay) =>
+                                updateDestinationMutation.mutate({ id: dest.id, updates: { outboundBriefingRelay } })
+                              }
+                            />
+                          </div>
+
+                          {/* Outbound format selector */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-medium">Payload Format</p>
+                              <p className="text-xs text-muted-foreground">How to serialize outbound payloads</p>
+                            </div>
+                            <Select
+                              value={dest.outboundFormat ?? "json"}
+                              onValueChange={(outboundFormat) =>
+                                updateDestinationMutation.mutate({ id: dest.id, updates: { outboundFormat } })
+                              }
+                            >
+                              <SelectTrigger className="h-7 text-xs w-24">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="json">JSON</SelectItem>
+                                <SelectItem value="text">Text</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Test ping button */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full text-xs"
+                            onClick={() => sendTestPing(dest.id)}
+                            disabled={testingPingId === dest.id}
+                          >
+                            {testingPingId === dest.id
+                              ? <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                              : <Zap className="w-3 h-3 mr-1" />}
+                            Send Test Ping
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
-                <Switch
-                  checked={dest.enabled}
-                  onCheckedChange={(enabled) => toggleDestinationMutation.mutate({ id: dest.id, enabled })}
-                />
-                <Button size="icon" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => deleteDestinationMutation.mutate(dest.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -255,7 +390,7 @@ export function RelayApiCard() {
         <div className="space-y-3 pt-2 border-t border-white/10">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-400" />
-            <Label className="text-sm font-medium">Test Relay</Label>
+            <Label className="text-sm font-medium">Test Inbound Relay</Label>
             <span className="text-xs text-muted-foreground">— fire a payload without needing an extension or glasses</span>
           </div>
 

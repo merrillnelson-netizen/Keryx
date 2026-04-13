@@ -2940,6 +2940,23 @@ Respond with JSON only.`
         }
       });
 
+      // Background: Outbound relay — dispatch briefing summary to configured destinations
+      if (briefing?.summary) {
+        setImmediate(async () => {
+          try {
+            const { dispatchBriefingSummary } = await import('./relay-outbound-service');
+            await dispatchBriefingSummary(
+              user.id,
+              briefing.summary,
+              briefing.focusAreas
+            );
+          } catch (err) {
+            // Non-fatal — relay failure must not affect briefing delivery
+            console.warn('[briefing] Outbound relay dispatch failed:', err instanceof Error ? err.message : err);
+          }
+        });
+      }
+
       // Background: Create insight.surface actions from pattern alerts
       setImmediate(async () => {
         try {
@@ -3425,7 +3442,7 @@ Respond with JSON only.`
         error: discoveries.error
       });
 
-      // Background: Send push notification for high-signal alerts + companion people.note
+      // Background: Send push notification for high-signal alerts + companion people.note + outbound relay
       if (highSignalAlerts.length > 0) {
         setImmediate(async () => {
           try {
@@ -3450,6 +3467,17 @@ Respond with JSON only.`
                 confidence: m.confidence,
               }))
             );
+            // Outbound relay: dispatch high-signal alert to configured external surfaces
+            const { dispatchHighSignalAlert } = await import('./relay-outbound-service');
+            for (const match of highSignalAlerts) {
+              await dispatchHighSignalAlert(
+                user.id,
+                match.person.name,
+                match.discovery.title,
+                match.discovery.url,
+                match.matchContext
+              );
+            }
           } catch (err) {
             console.error('High-signal push notification or companion error:', err);
           }
@@ -7041,6 +7069,29 @@ Respond with JSON only.`
       res.json({ deleted: true });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to delete destination", error);
+    }
+  });
+
+  /** POST /api/relay/destinations/:id/test-outbound — send a test ping to a single outbound destination */
+  app.post("/api/relay/destinations/:id/test-outbound", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const dest = (await storage.getRelayDestinations(user.id)).find(d => d.id === req.params.id);
+      if (!dest) return res.status(404).json({ error: 'Destination not found' });
+      if (!dest.outboundEnabled) return res.status(400).json({ error: 'Outbound relay is not enabled for this destination' });
+      const { dispatchOutbound } = await import('./relay-outbound-service');
+      const results = await dispatchOutbound(user.id, 'test_ping', {
+        title: 'Keryx Outbound Test',
+        summary: 'This is a test ping from your Keryx relay settings.',
+        destinationLabel: dest.label,
+      });
+      const result = results[0];
+      if (!result || !result.ok) {
+        return res.status(502).json({ error: result?.error || 'Test ping failed', result });
+      }
+      res.json({ ok: true, result });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to send test ping", error);
     }
   });
 

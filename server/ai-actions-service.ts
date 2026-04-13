@@ -1248,6 +1248,20 @@ export async function processUserInputForActions(
   if (policy === AI_ACTION_POLICIES.AUTO) {
     // Auto-execute if policy allows
     const executionResult = await executeAction(action);
+
+    // Outbound relay: dispatch auto-executed action result to configured destinations (non-blocking)
+    if (executionResult.success) {
+      setImmediate(async () => {
+        try {
+          const { dispatchAutoActionResult } = await import('./relay-outbound-service');
+          const summary = typeof executionResult.resultData?.summary === 'string'
+            ? executionResult.resultData.summary
+            : `${detected.actionType} action "${detected.title}" completed successfully.`;
+          await dispatchAutoActionResult(userId, detected.actionType, detected.title, summary);
+        } catch { /* non-fatal */ }
+      });
+    }
+
     return { 
       actionDetected: true, 
       action, 

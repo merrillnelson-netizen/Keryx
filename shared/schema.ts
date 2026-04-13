@@ -1224,6 +1224,10 @@ export const relayDestinations = pgTable("relay_destinations", {
   apiKey: text("api_key"),
   payloadTypeFilter: text("payload_type_filter").array(), // null = all types, or ['sms','command','event']
   enabled: boolean("enabled").default(true),
+  // Outbound relay fields — push events FROM Keryx TO this destination
+  outboundEnabled: boolean("outbound_enabled").default(false), // Enable outbound dispatch to this destination
+  outboundFormat: text("outbound_format").default("json"), // 'json' or 'text' — how to serialize outbound payloads
+  outboundBriefingRelay: boolean("outbound_briefing_relay").default(false), // Relay daily briefing summaries
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   userIdIdx: index("relay_dest_user_id_idx").on(table.userId),
@@ -1232,8 +1236,9 @@ export const relayDestinations = pgTable("relay_destinations", {
 export const relayEvents = pgTable("relay_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  type: text("type").notNull(), // 'sms' | 'command' | 'event'
-  source: text("source"), // e.g. 'chrome_extension', 'android_service', 'glasses'
+  direction: text("direction").default("inbound"), // 'inbound' | 'outbound'
+  type: text("type").notNull(), // 'sms' | 'command' | 'event' | 'high_signal' | 'briefing' | 'auto_action' | 'financial_alert'
+  source: text("source"), // e.g. 'chrome_extension', 'android_service', 'glasses', 'keryx_agent'
   payload: jsonb("payload").notNull(),
   routedTo: text("routed_to").array(), // destination labels that received this event
   createdAt: timestamp("created_at").defaultNow().notNull(),
