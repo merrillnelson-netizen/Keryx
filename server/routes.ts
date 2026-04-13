@@ -2,9 +2,9 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
-import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone } from "./ai-service";
+import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
 import passport from "./auth";
 import { requireAuth, withSettings } from "./auth";
@@ -3494,9 +3494,49 @@ Respond with JSON only.`
   /**
    * GET /api/ecosystem/stats - Aggregate life dashboard data
    * Returns mood trend, topic frequency, memories/day, people, goals, financial, reminders, AI actions.
-   * Cached 5 minutes per user (in-memory keyed by userId+date).
+   * Cached 5 minutes per user (in-memory keyed by userId+timezone+days).
    */
-  const ecosystemCache = new Map<string, { data: any; expiresAt: number }>();
+  interface EcosystemPayload {
+    period: { days: number; timezone: string };
+    systemHealth: {
+      totalMemories: number;
+      activeReminders: number;
+      pendingActions: number;
+      patternAlerts: { positive: number; negative: number; insight: number; neutral: number };
+    };
+    memoryPulse: {
+      perDay: { date: string; count: number }[];
+      total7Days: number;
+      velocityDeltaPct: number | null;
+    };
+    moodTrend: {
+      trend: { date: string; avgScore: number; count: number }[];
+      recentAvg: number | null;
+      trendDir: 'up' | 'down' | 'flat';
+    };
+    topicDistribution: { topic: string; count: number }[];
+    relationshipHealth: { name: string; mentionCount: number; velocityTier: string }[];
+    goalProgress: {
+      id: string;
+      title: string;
+      status: string;
+      progress: number;
+      milestones: GoalMilestone[];
+      aiSummary: string | null;
+    }[];
+    financial: {
+      connected: boolean;
+      totalSpending?: number;
+      totalIncome?: number;
+      transactionCount?: number;
+      categoryBreakdown?: { category: string; amount: number }[];
+    };
+    captions: EcosystemCaptions;
+    generatedAt: string;
+    cached: boolean;
+  }
+
+  const ecosystemCache = new Map<string, { data: EcosystemPayload; expiresAt: number }>();
 
   app.get("/api/ecosystem/stats", requireAuth, requireTier('pro'), async (req, res) => {
     try {
@@ -3517,16 +3557,21 @@ Respond with JSON only.`
       const userTier = user.subscriptionTier || 'free';
       const hasLifeOS = userTier === 'life_os';
 
+      const userSettings = await storage.getSettings(user.id);
+      const sassLevel = userSettings?.sassLevel ?? 50;
+      const professionalMode = userSettings?.professionalMode ?? false;
+
       const [
-        moodTrend,
-        topicFrequency,
-        memoriesPerDay,
-        allPeople,
-        activeGoals,
-        pendingReminders,
-        pendingActions,
-        totalMemories,
+        moodTrendResult,
+        topicFrequencyResult,
+        memoriesPerDayResult,
+        allPeopleResult,
+        activeGoalsResult,
+        pendingRemindersResult,
+        pendingActionsResult,
+        totalMemoriesResult,
         financialResult,
+        cachedAlertsResult,
       ] = await Promise.allSettled([
         storage.getMoodTrend(user.id, days, timezone),
         storage.getTopicFrequency(user.id, days),
@@ -3537,33 +3582,86 @@ Respond with JSON only.`
         storage.getPendingActions(user.id),
         storage.getLogEntriesCount(user.id),
         hasLifeOS ? plaidService.getSpendingSummary(user.id, days) : Promise.resolve(null),
+        storage.getAiCache(user.id, 'alerts', 'days-14'),
       ]);
 
-      const mood = moodTrend.status === 'fulfilled' ? moodTrend.value : [];
-      const topics = topicFrequency.status === 'fulfilled' ? topicFrequency.value : [];
-      const memPerDay = memoriesPerDay.status === 'fulfilled' ? memoriesPerDay.value : [];
-      const people = (allPeople.status === 'fulfilled' ? allPeople.value : []).slice(0, 8);
-      const goals = activeGoals.status === 'fulfilled' ? activeGoals.value : [];
-      const reminders = pendingReminders.status === 'fulfilled' ? pendingReminders.value : [];
-      const actions = pendingActions.status === 'fulfilled' ? pendingActions.value : [];
-      const total = totalMemories.status === 'fulfilled' ? totalMemories.value : 0;
-      const financial = (financialResult.status === 'fulfilled' ? financialResult.value : null) as any;
+      const mood = moodTrendResult.status === 'fulfilled' ? moodTrendResult.value : [];
+      const topics = topicFrequencyResult.status === 'fulfilled' ? topicFrequencyResult.value : [];
+      const memPerDay = memoriesPerDayResult.status === 'fulfilled' ? memoriesPerDayResult.value : [];
+      const rawPeople = allPeopleResult.status === 'fulfilled' ? allPeopleResult.value : [] as Person[];
+      const people = rawPeople.slice(0, 8);
+      const goals = activeGoalsResult.status === 'fulfilled' ? activeGoalsResult.value : [] as Goal[];
+      const reminders = pendingRemindersResult.status === 'fulfilled' ? pendingRemindersResult.value : [];
+      const actions = pendingActionsResult.status === 'fulfilled' ? pendingActionsResult.value : [];
+      const total = totalMemoriesResult.status === 'fulfilled' ? totalMemoriesResult.value : 0;
+      const financialRaw = financialResult.status === 'fulfilled' ? financialResult.value : null;
+      const cachedAlerts = cachedAlertsResult.status === 'fulfilled' ? cachedAlertsResult.value : null;
 
-      // Compute KPIs
-      const last7 = memPerDay.slice(-7).reduce((s: number, d: { count: number }) => s + d.count, 0);
-      const prev7 = memPerDay.slice(-14, -7).reduce((s: number, d: { count: number }) => s + d.count, 0);
+      // Compute memory KPIs
+      const last7 = memPerDay.slice(-7).reduce((s, d) => s + d.count, 0);
+      const prev7 = memPerDay.slice(-14, -7).reduce((s, d) => s + d.count, 0);
       const velocityDelta = prev7 > 0 ? Math.round(((last7 - prev7) / prev7) * 100) : null;
 
-      const recentMoodAvg = mood.slice(-7).length > 0
-        ? Math.round(mood.slice(-7).reduce((s: number, d: { avgScore: number }) => s + d.avgScore, 0) / mood.slice(-7).length)
+      // Compute mood KPIs
+      const recentMoodSlice = mood.slice(-7);
+      const recentMoodAvg = recentMoodSlice.length > 0
+        ? Math.round(recentMoodSlice.reduce((s, d) => s + d.avgScore, 0) / recentMoodSlice.length)
         : null;
+      const prevMoodSlice = mood.slice(-14, -7);
+      const prevMoodAvg = prevMoodSlice.length > 0
+        ? Math.round(prevMoodSlice.reduce((s, d) => s + d.avgScore, 0) / prevMoodSlice.length)
+        : null;
+      let moodTrendDir: 'up' | 'down' | 'flat' = 'flat';
+      if (recentMoodAvg !== null && prevMoodAvg !== null) {
+        if (recentMoodAvg - prevMoodAvg > 5) moodTrendDir = 'up';
+        else if (prevMoodAvg - recentMoodAvg > 5) moodTrendDir = 'down';
+      }
 
-      const payload = {
+      // Pattern alert sentiment breakdown from cached alerts data
+      const patternAlerts = { positive: 0, negative: 0, insight: 0, neutral: 0 };
+      if (cachedAlerts?.data && Array.isArray(cachedAlerts.data)) {
+        for (const alert of cachedAlerts.data as { type: string }[]) {
+          if (alert.type === 'positive') patternAlerts.positive++;
+          else if (alert.type === 'negative') patternAlerts.negative++;
+          else if (alert.type === 'insight') patternAlerts.insight++;
+          else patternAlerts.neutral++;
+        }
+      }
+
+      // Goal avg progress
+      const avgGoalProgress = goals.length > 0
+        ? Math.round(goals.reduce((s, g) => s + (g.progress ?? 0), 0) / goals.length)
+        : 0;
+
+      // Build captions in parallel with response prep (fire-and-forget if slow, use defaults)
+      const captions = await generateEcosystemCaptions({
+        totalMemories: total,
+        velocityDeltaPct: velocityDelta,
+        moodRecentAvg: recentMoodAvg,
+        moodTrendDir,
+        topTopics: topics.slice(0, 3).map(t => t.topic),
+        topPerson: people[0]?.name ?? null,
+        peopleCount: rawPeople.length,
+        activeGoals: goals.length,
+        avgGoalProgress,
+        financialConnected: !!financialRaw,
+        totalSpending: financialRaw?.totalSpending ?? 0,
+      }, sassLevel, professionalMode).catch(() => ({
+        memoryPulse: "Memory velocity logged.",
+        moodTrend: "Mood trend recorded.",
+        topicDistribution: "Topic breakdown ready.",
+        relationshipHealth: "People tracked.",
+        goalProgress: "Goal status updated.",
+        financial: financialRaw ? "Spending data available." : "Connect Plaid to see spending.",
+      }));
+
+      const payload: EcosystemPayload = {
         period: { days, timezone },
         systemHealth: {
           totalMemories: total,
           activeReminders: reminders.length,
           pendingActions: actions.length,
+          patternAlerts,
         },
         memoryPulse: {
           perDay: memPerDay,
@@ -3573,28 +3671,30 @@ Respond with JSON only.`
         moodTrend: {
           trend: mood,
           recentAvg: recentMoodAvg,
+          trendDir: moodTrendDir,
         },
         topicDistribution: topics.slice(0, 8),
-        relationshipHealth: people.map((p: any) => ({
+        relationshipHealth: people.map((p) => ({
           name: p.name,
-          mentionCount: p.mentionCount || 0,
-          closenessScore: p.closenessScore || 0,
+          mentionCount: p.mentionCount ?? 0,
+          velocityTier: p.velocityTier ?? 'acquaintance',
         })),
-        goalProgress: goals.map((g: any) => ({
+        goalProgress: goals.map((g) => ({
           id: g.id,
           title: g.title,
           status: g.status,
-          progress: g.progress || 0,
-          milestones: Array.isArray(g.milestones) ? g.milestones : [],
-          aiSummary: g.aiSummary || null,
+          progress: g.progressPercent ?? 0,
+          milestones: (Array.isArray(g.milestones) ? g.milestones : []) as GoalMilestone[],
+          aiSummary: g.aiSummary ?? null,
         })),
-        financial: financial ? {
+        financial: financialRaw ? {
           connected: true,
-          totalSpending: financial.totalSpending,
-          totalIncome: financial.totalIncome,
-          transactionCount: financial.transactionCount,
-          categoryBreakdown: financial.categoryBreakdown,
+          totalSpending: financialRaw.totalSpending,
+          totalIncome: financialRaw.totalIncome,
+          transactionCount: financialRaw.transactionCount,
+          categoryBreakdown: financialRaw.categoryBreakdown,
         } : { connected: false },
+        captions,
         generatedAt: new Date().toISOString(),
         cached: false,
       };

@@ -2055,3 +2055,86 @@ export async function detectGoalPatternAlerts(
   // Limit to top 3 most relevant alerts
   return alerts.slice(0, 3);
 }
+
+export interface EcosystemCaptions {
+  memoryPulse: string;
+  moodTrend: string;
+  topicDistribution: string;
+  relationshipHealth: string;
+  goalProgress: string;
+  financial: string;
+}
+
+/**
+ * Generate one-liner AI captions for each Ecosystem Dashboard section.
+ * Each caption is a direct, Keryx-flavored observation — not a label.
+ */
+export async function generateEcosystemCaptions(
+  stats: {
+    totalMemories: number;
+    velocityDeltaPct: number | null;
+    moodRecentAvg: number | null;
+    moodTrendDir: 'up' | 'down' | 'flat';
+    topTopics: string[];
+    topPerson: string | null;
+    peopleCount: number;
+    activeGoals: number;
+    avgGoalProgress: number;
+    financialConnected: boolean;
+    totalSpending: number;
+  },
+  sassLevel: number = 50,
+  professionalMode: boolean = false
+): Promise<EcosystemCaptions> {
+  try {
+    const prompt = `Generate ultra-short (≤12 words each), Keryx-voiced one-liners for each ecosystem section. Return JSON only.
+
+DATA:
+- memories.total=${stats.totalMemories}, velocity_delta=${stats.velocityDeltaPct !== null ? stats.velocityDeltaPct + '%' : 'unknown'}
+- mood.recent_avg=${stats.moodRecentAvg !== null ? stats.moodRecentAvg : 'no data'}, trend=${stats.moodTrendDir}
+- top_topics=${stats.topTopics.join(', ') || 'none'}
+- top_person=${stats.topPerson || 'none'}, people_tracked=${stats.peopleCount}
+- active_goals=${stats.activeGoals}, avg_progress=${stats.avgGoalProgress}%
+- financial=${stats.financialConnected ? `connected, spent $${stats.totalSpending.toFixed(0)}` : 'not connected'}
+
+Return JSON with exactly these keys. Each value = 1 short sentence (≤12 words) in Keryx's voice — sharp, direct, occasionally dry. No hollow praise.
+{
+  "memoryPulse": "...",
+  "moodTrend": "...",
+  "topicDistribution": "...",
+  "relationshipHealth": "...",
+  "goalProgress": "...",
+  "financial": "..."
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: getKeryxPersona(sassLevel, professionalMode) },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 300,
+      temperature: 0.7,
+    });
+
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+    return {
+      memoryPulse: result.memoryPulse || "Memory velocity logged.",
+      moodTrend: result.moodTrend || "Mood trend recorded.",
+      topicDistribution: result.topicDistribution || "Topic breakdown ready.",
+      relationshipHealth: result.relationshipHealth || "People tracked.",
+      goalProgress: result.goalProgress || "Goal status updated.",
+      financial: result.financial || (stats.financialConnected ? "Spending data available." : "Connect Plaid to see spending."),
+    };
+  } catch {
+    return {
+      memoryPulse: "Memory velocity logged.",
+      moodTrend: "Mood trend recorded.",
+      topicDistribution: "Topic breakdown ready.",
+      relationshipHealth: "People tracked.",
+      goalProgress: "Goal status updated.",
+      financial: stats.financialConnected ? "Spending data available." : "Connect Plaid to see spending.",
+    };
+  }
+}
