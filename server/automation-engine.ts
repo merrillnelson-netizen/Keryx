@@ -48,6 +48,8 @@ export interface TriggerContext {
   reminderContent?: string;
   // daily.schedule
   localHour?: number; // 0-23
+  // Chain depth tracking — prevents recursive automation loops
+  chainDepth?: number; // 0 = top-level event, 1+ = triggered by another rule's action
 }
 
 export interface RuleExecutionResult {
@@ -275,6 +277,9 @@ function interpolate(template: string, ctx: TriggerContext): string {
 
 // ─── Main Engine Entry Point ──────────────────────────────────────────────────
 
+/** Maximum automation chain depth allowed before aborting to prevent runaway loops. */
+const MAX_CHAIN_DEPTH = 3;
+
 /**
  * Fire a trigger event. Fetches matching enabled rules, evaluates conditions,
  * then executes actions asynchronously (fire-and-forget with error isolation).
@@ -282,6 +287,7 @@ function interpolate(template: string, ctx: TriggerContext): string {
  * @param userId  - The user whose rules to evaluate
  * @param trigger - A value from AUTOMATION_TRIGGERS
  * @param ctx     - Event context used for condition evaluation and action templating
+ *                  ctx.chainDepth tracks how many automation hops deep we are (default 0).
  */
 export async function fireTrigger(
   userId: string,
@@ -289,11 +295,44 @@ export async function fireTrigger(
   ctx: TriggerContext
 ): Promise<void> {
   try {
+    // ── Chain depth guard ────────────────────────────────────────────────────
+    // Prevents infinite loops where Rule A's action fires a trigger that re-evaluates Rule A.
+    const depth = ctx.chainDepth ?? 0;
+    if (depth >= MAX_CHAIN_DEPTH) {
+      console.warn(
+        `[automation-engine] Max chain depth (${MAX_CHAIN_DEPTH}) reached for trigger "${trigger}" ` +
+        `at depth ${depth} — aborting to prevent runaway loop. ` +
+        `Check for circular automation rules (e.g. action.completed → create_ai_action → action.completed).`
+      );
+      // Surface a user-visible warning so they can identify and fix the circular rule
+      storage.createAiAction({
+        userId,
+        actionType: 'INSIGHT_SURFACE',
+        actionCategory: 'SYSTEM',
+        sourceType: 'automation_engine',
+        sourceId: `chain_limit:${trigger}:${Date.now()}`,
+        title: 'Automation loop detected — chain limit reached',
+        description: `A chain of automation rules tried to fire more than ${MAX_CHAIN_DEPTH} times in a row (trigger: "${trigger}"). ` +
+          `Execution was stopped to prevent a runaway loop. Review your automation rules for cycles ` +
+          `(e.g. a rule whose action creates another action that re-triggers the same rule).`,
+        payload: { trigger, depth },
+        aiReasoning: 'Automatic loop protection.',
+        confidence: 1,
+        status: 'pending',
+        rollbackAvailable: false,
+        rollbackData: null,
+        resultData: null,
+        errorMessage: null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }).catch(() => {}); // fire-and-forget; don't block
+      return;
+    }
+
     const rules = await storage.getEnabledRulesByTrigger(userId, trigger);
     if (rules.length === 0) return;
 
     for (const rule of rules) {
-      // Enforce per-day run limit
+      // Enforce per-day run limit (secondary guard — depth guard catches loops first)
       const runsToday = await storage.countRuleRunsToday(rule.id, userId);
       const maxPerDay = rule.maxRunsPerDay ?? 3;
       if (runsToday >= maxPerDay) {
@@ -306,12 +345,16 @@ export async function fireTrigger(
         continue;
       }
 
+      // Build child context with incremented depth for any triggers fired by this action
+      const childCtx: TriggerContext = { ...ctx, userId, chainDepth: depth + 1 };
+
       // Execute action (isolated, non-blocking)
       setImmediate(async () => {
         try {
-          await executeRuleAction(rule, { ...ctx, userId });
+          await executeRuleAction(rule, childCtx);
           await storage.recordRuleExecution(rule.id, userId, true);
-          console.log(`[automation-engine] Rule "${rule.name}" executed successfully`);
+          const depthTag = depth > 0 ? ` [chain depth: ${depth}]` : '';
+          console.log(`[automation-engine] Rule "${rule.name}" executed successfully${depthTag}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           await storage.recordRuleExecution(rule.id, userId, false, msg).catch(() => {});
