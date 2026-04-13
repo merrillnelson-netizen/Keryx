@@ -239,24 +239,18 @@ app.use((req, res, next) => {
     }, 24 * 60 * 60 * 1000); // once per day
 
     // ─── Daily Schedule Automation Trigger ───────────────────────────────────
-    // Fire the daily.schedule trigger every hour so rules can match any local hour.
-    // The automation engine's per-day run limit (default 3) prevents duplicate fires.
-    // Active users = anyone with a memory in the last 14 days OR a settings row with
-    // at least one automation rule. We query both to avoid excluding dormant-memory users
-    // who still rely on time-based automations.
+    // Fire the daily.schedule trigger every hour so rules can match any configured local hour.
+    // Only targets users who have at least one enabled daily.schedule rule (efficient at scale).
+    // The automation engine's per-day run limit (default 3) prevents unintended duplicate fires.
     setInterval(async () => {
       try {
         const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
-        // Include users with recent memories AND users who have active automation rules
+        // Only query users who have at least one enabled daily.schedule rule
         const activeUsers = await pool.query(
-          `SELECT DISTINCT u.id as user_id, s.user_timezone
-           FROM users u
-           LEFT JOIN settings s ON s.user_id = u.id
-           WHERE u.id IN (
-             SELECT DISTINCT user_id FROM log_entries WHERE timestamp >= NOW() - INTERVAL '14 days'
-             UNION
-             SELECT DISTINCT user_id FROM automation_rules WHERE enabled = true
-           )`
+          `SELECT DISTINCT ar.user_id, s.user_timezone
+           FROM automation_rules ar
+           LEFT JOIN settings s ON s.user_id = ar.user_id
+           WHERE ar.enabled = true AND ar.trigger = 'daily.schedule'`
         );
         for (const row of activeUsers.rows) {
           setImmediate(async () => {
