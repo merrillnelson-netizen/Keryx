@@ -1254,6 +1254,9 @@ export const automationRules = pgTable("automation_rules", {
   lastRunAt: timestamp("last_run_at"),
   lastRunResult: text("last_run_result"), // 'success' | 'error'
   lastRunError: text("last_run_error"),
+  // Per-day run counting — resets when todayRunDate changes (UTC date string YYYY-MM-DD)
+  todayRunDate: text("today_run_date"), // UTC date of the current day window
+  todayRunCount: integer("today_run_count").default(0).notNull(),
   // Limits to prevent infinite loops
   maxRunsPerDay: integer("max_runs_per_day").default(3),
   createdAt: timestamp("created_at").defaultNow().notNull(),

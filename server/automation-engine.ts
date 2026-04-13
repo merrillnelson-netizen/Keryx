@@ -119,7 +119,8 @@ function evaluateConditions(conditions: any, ctx: TriggerContext): boolean {
 // ─── Action Executors ─────────────────────────────────────────────────────────
 
 async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Promise<void> {
-  const payload = rule.actionPayload as any;
+  // actionPayload is stored as a JSONB object; access fields via index signature
+  const payload = (rule.actionPayload ?? {}) as Record<string, unknown>;
 
   switch (rule.actionType) {
     case AUTOMATION_ACTIONS.SEND_NOTIFICATION: {
@@ -127,9 +128,9 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
       if (isPushConfigured()) {
         await sendPushToAllUserDevices(ctx.userId, {
           type: 'alert',
-          title: payload.title || rule.name,
-          body: interpolate(payload.body || '', ctx),
-          url: payload.url || '/',
+          title: (payload.title as string) || rule.name,
+          body: interpolate((payload.body as string) || '', ctx),
+          url: (payload.url as string) || '/',
         });
       }
       break;
@@ -137,42 +138,49 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
 
     case AUTOMATION_ACTIONS.CREATE_REMINDER: {
       const dueAt = payload.minutesFromNow
-        ? new Date(Date.now() + payload.minutesFromNow * 60_000)
+        ? new Date(Date.now() + Number(payload.minutesFromNow) * 60_000)
         : payload.dueAt
-          ? new Date(payload.dueAt)
+          ? new Date(payload.dueAt as string)
           : new Date(Date.now() + 60 * 60_000); // default 1 hour
 
+      // InsertReminder omits: id, userId, status, snoozedUntil, snoozeCount,
+      // triggeredAt, completedAt, advanceNotifiedAt, createdAt — no priority field
       await storage.createReminder(ctx.userId, {
-        content: interpolate(payload.content || rule.name, ctx),
+        content: interpolate((payload.content as string) || rule.name, ctx),
         triggerTime: dueAt,
         triggerType: 'time',
-        priority: payload.priority || 'medium',
-      } as any);
+      });
       break;
     }
 
     case AUTOMATION_ACTIONS.CREATE_AI_ACTION: {
+      // InsertAiAction requires: userId, actionType, actionCategory, sourceType, title, payload, status
       await storage.createAiAction({
         userId: ctx.userId,
-        type: payload.actionType || 'INSIGHT_SURFACE',
-        category: payload.category || 'SYSTEM',
-        title: interpolate(payload.title || rule.name, ctx),
-        description: interpolate(payload.description || '', ctx),
-        reasoning: `Automation rule "${rule.name}" triggered this action.`,
-        confidence: payload.confidence ?? 0.8,
-        priority: payload.priority || 'medium',
-        status: 'pending',
-        sourceId: `rule:${rule.id}`,
+        actionType: (payload.actionType as string) || 'INSIGHT_SURFACE',
+        actionCategory: (payload.category as string) || 'SYSTEM',
         sourceType: 'automation_rule',
-        actionData: payload.actionData || null,
-      } as any);
+        sourceId: `rule:${rule.id}`,
+        title: interpolate((payload.title as string) || rule.name, ctx),
+        description: interpolate((payload.description as string) || '', ctx),
+        payload: (payload.actionData as object) || {},
+        aiReasoning: `Automation rule "${rule.name}" triggered this action.`,
+        confidence: (payload.confidence as number) ?? 0.8,
+        status: 'pending',
+        rollbackAvailable: false,
+        rollbackData: null,
+        resultData: null,
+        errorMessage: null,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
       break;
     }
 
     case AUTOMATION_ACTIONS.LOG_MEMORY: {
       const { extractMetadata } = await import('./ai-service');
-      const content = interpolate(payload.content || 'Automated log entry', ctx);
+      const content = interpolate((payload.content as string) || 'Automated log entry', ctx);
       const meta = await extractMetadata(content);
+      // InsertLogEntry requires: userId, memoryText, topicTag, metadataJson (timestamp omitted/defaulted)
       await storage.createLogEntry({
         userId: ctx.userId,
         memoryText: content,
@@ -182,27 +190,34 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
         importance: meta.importance || 5,
         detectedPeople: meta.detectedPeople || [],
         metadataJson: meta.metadataJson || {},
-      } as any);
+      });
       break;
     }
 
     case AUTOMATION_ACTIONS.RELAY_OUTBOUND: {
-      // Fire a relay outbound action (queued as an AI action for approval or direct)
+      // Queue relay as a pending AI action awaiting user approval
       if (payload.requiresApproval !== false) {
         await storage.createAiAction({
           userId: ctx.userId,
-          type: 'RELAY_OUTBOUND',
-          category: 'RELAY',
-          title: `Relay: ${payload.label || 'Send message'}`,
-          description: interpolate(payload.message || '', ctx),
-          reasoning: `Automation rule "${rule.name}" triggered outbound relay.`,
-          confidence: 0.9,
-          priority: 'medium',
-          status: 'pending',
-          sourceId: `rule:${rule.id}`,
+          actionType: 'RELAY_OUTBOUND',
+          actionCategory: 'RELAY',
           sourceType: 'automation_rule',
-          actionData: { destination: payload.destination, message: interpolate(payload.message || '', ctx) },
-        } as any);
+          sourceId: `rule:${rule.id}`,
+          title: `Relay: ${(payload.label as string) || 'Send message'}`,
+          description: interpolate((payload.message as string) || '', ctx),
+          payload: {
+            destination: payload.destination,
+            message: interpolate((payload.message as string) || '', ctx),
+          },
+          aiReasoning: `Automation rule "${rule.name}" triggered outbound relay.`,
+          confidence: 0.9,
+          status: 'pending',
+          rollbackAvailable: false,
+          rollbackData: null,
+          resultData: null,
+          errorMessage: null,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
       }
       break;
     }

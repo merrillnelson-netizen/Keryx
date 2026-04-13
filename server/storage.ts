@@ -2874,37 +2874,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void> {
+    const nowUtc = new Date();
+    const todayUtc = nowUtc.toISOString().slice(0, 10); // YYYY-MM-DD UTC
+
+    // Read current todayRunDate to decide whether to reset or increment the counter
+    const [current] = await db
+      .select({ todayRunDate: automationRules.todayRunDate, todayRunCount: automationRules.todayRunCount })
+      .from(automationRules)
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
+
+    const newTodayCount =
+      current?.todayRunDate === todayUtc
+        ? (current.todayRunCount ?? 0) + 1
+        : 1; // new day — reset to 1
+
     await db.update(automationRules)
       .set({
-        lastRunAt: new Date(),
+        lastRunAt: nowUtc,
         lastRunResult: success ? 'success' : 'error',
         lastRunError: error ?? null,
         runCount: sql`${automationRules.runCount} + 1`,
-        updatedAt: new Date(),
+        todayRunDate: todayUtc,
+        todayRunCount: newTodayCount,
+        updatedAt: nowUtc,
       })
       .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
   }
 
   async countRuleRunsToday(id: string, userId: string): Promise<number> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const [row] = await db.select({ count: sql<number>`count(*)` }).from(automationRules)
-      .where(and(
-        eq(automationRules.id, id),
-        eq(automationRules.userId, userId),
-        gte(automationRules.lastRunAt, today)
-      ));
-    // lastRunAt is a single timestamp, use runCount delta approach
-    // Instead, query the rule and check if lastRunAt is today — track via a simple heuristic
-    // Since we don't have a run log table, we use the fact that runs are sequential:
-    // return 0 if lastRunAt was before today, else return min(runCount, 999)
-    const [ruleRow] = await db.select({ lastRunAt: automationRules.lastRunAt })
+    const todayUtc = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+    const [row] = await db
+      .select({ todayRunDate: automationRules.todayRunDate, todayRunCount: automationRules.todayRunCount })
       .from(automationRules)
       .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
-    if (!ruleRow?.lastRunAt) return 0;
-    const lastRun = new Date(ruleRow.lastRunAt);
-    lastRun.setHours(0, 0, 0, 0);
-    return lastRun.getTime() === today.getTime() ? 1 : 0;
+    if (!row || row.todayRunDate !== todayUtc) return 0;
+    return row.todayRunCount ?? 0;
   }
 }
 

@@ -1,3 +1,8 @@
+// TEMPORAL CONTEXT AUDIT: high-signal-service.ts contains no AI prompt calls.
+// All logic here is pure regex/string matching against web discovery content.
+// Date/time context is not emitted to any LLM. No buildTemporalContext injection
+// required. If LLM summarisation of matches is added, adopt buildTemporalContext
+// from './temporal-context' at that callsite.
 import { storage } from "./storage";
 import type { Person } from "@shared/schema";
 import type { Discovery } from "./contextual-discoveries-service";

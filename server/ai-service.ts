@@ -282,6 +282,8 @@ export interface DetectedCalendarEvent {
  * @returns Promise<ExtractedMetadata> - Topic tag and structured metadata
  */
 export async function extractMetadata(memoryText: string, userTimezone?: string): Promise<ExtractedMetadata> {
+  // Build temporal context once — used in the reminder time-conversion block below
+  const extractTemporal = buildTemporalContext(userTimezone || 'UTC');
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -364,13 +366,13 @@ For food/meal-related entries, use these EXACT field names:
    - content: What to remind about (the action or task)
    - triggerType: "time" for time-based, "location" for location-based
    - triggerTime: For time-based, convert to UTC and output in ISO 8601 format with Z suffix. IMPORTANT CONTEXT:
-     * Current date/time in user's timezone (${userTimezone || 'UTC'}): ${userTimezone ? new Date().toLocaleString('en-US', { timeZone: userTimezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/(\d+)\/(\d+)\/(\d+),?\s+(.*)/, '$3-$1-$2T$4') : new Date().toISOString()}
+     * Current date/time in user's timezone (${extractTemporal.timezone}): ${extractTemporal.localDate}T${extractTemporal.localTime} (${extractTemporal.utcOffset})
      * Current UTC date/time: ${new Date().toISOString()}
-     * When the user says "at 3pm", they mean 3pm in ${userTimezone || 'UTC'}.
+     * When the user says "at 3pm", they mean 3pm in ${extractTemporal.timezone}.
      * You must CONVERT the user's local time to UTC and output with Z suffix.
      * Example: If user is in America/Denver (UTC-7) and says "at 3pm" on 2026-02-08, output "2026-02-08T22:00:00Z" (3pm + 7 hours = 10pm UTC)
      * "in 2 hours" → current UTC time + 2 hours with Z suffix
-     * Always ensure the year is ${new Date().getFullYear()} or later, NEVER use past years
+     * Always ensure the year is ${extractTemporal.year} or later, NEVER use past years
      * ALWAYS include the Z suffix to indicate UTC
    - triggerLocationName: For location-based, the place name (e.g., "gym", "grocery store", "office", "home")
 

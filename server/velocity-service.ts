@@ -1,3 +1,8 @@
+// TEMPORAL CONTEXT AUDIT: velocity-service.ts contains no AI prompt calls.
+// All date/time logic here is purely algorithmic (SQL window queries, decay math,
+// and hardcoded string templates for AI action descriptions). No buildTemporalContext
+// injection is required. If this changes — e.g., if an LLM is added for relationship
+// summaries — adopt buildTemporalContext from './temporal-context' at that callsite.
 import { db } from "./db";
 import { storage } from "./storage";
 import { people, logEntries, messages, aiActions } from "@shared/schema";
