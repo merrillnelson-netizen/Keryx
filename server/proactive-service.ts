@@ -325,9 +325,11 @@ export async function generateDiscoveryActionProposals(
         inputText,
         'discovery',
         `disc_${discovery.id}`,
+        undefined,
+        MIN_ACTION_CONFIDENCE,
       );
 
-      if (result.actionDetected && result.action && (result.action.confidence ?? 0) >= MIN_ACTION_CONFIDENCE) {
+      if (result.actionDetected && result.action) {
         created++;
       }
     } catch (err) {
@@ -396,9 +398,11 @@ export async function generateBriefingActionProposals(
         item,
         'briefing',
         itemKey,
+        undefined,
+        MIN_ACTION_CONFIDENCE,
       );
 
-      if (result.actionDetected && result.action && (result.action.confidence ?? 0) >= MIN_ACTION_CONFIDENCE) {
+      if (result.actionDetected && result.action) {
         created++;
       }
     } catch (err) {

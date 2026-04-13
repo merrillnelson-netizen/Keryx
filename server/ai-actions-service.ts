@@ -1205,7 +1205,8 @@ export async function processUserInputForActions(
   userInput: string,
   sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' | 'discovery' | 'velocity' | 'high_signal' = 'voice_input',
   sourceId?: string,
-  contextInfo?: { timezone?: string }
+  contextInfo?: { timezone?: string },
+  minConfidence?: number
 ): Promise<{ 
   actionDetected: boolean; 
   action?: AiAction; 
@@ -1219,6 +1220,11 @@ export async function processUserInputForActions(
   });
   
   if (!detected) {
+    return { actionDetected: false };
+  }
+
+  // Enforce minimum confidence gate before any persistence
+  if (minConfidence !== undefined && (detected.confidence ?? 0) < minConfidence) {
     return { actionDetected: false };
   }
   
