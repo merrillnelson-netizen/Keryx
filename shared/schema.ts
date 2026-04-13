@@ -1345,5 +1345,34 @@ export const insertAutomationRuleSchema = createInsertSchema(automationRules).om
   updatedAt: true,
 });
 
+/**
+ * Type-safe schema for triggerConditions JSONB field.
+ * All fields are optional and may be combined. Stored as JSONB in the DB.
+ */
+export const automationConditionsSchema = z.object({
+  // Mood thresholds (1-10 scale)
+  moodBelow: z.number().int().min(1).max(10).optional(),
+  moodAbove: z.number().int().min(1).max(10).optional(),
+  // Keyword — word-boundary match; handles inflections (stress → stressed, stressful)
+  keyword: z.string().optional(),
+  // Person mentioned by name
+  personName: z.string().optional(),
+  // Raw topic (same as AI topic; kept for backward compat)
+  topic: z.string().optional(),
+  // AI-extracted topic tag (preferred alias for topic in memory.logged rules)
+  aiTopic: z.string().optional(),
+  // AI-derived sentiment label: positive | neutral | negative
+  aiSentiment: z.enum(['positive', 'neutral', 'negative']).optional(),
+  // Goal progress thresholds (0-100)
+  progressAbove: z.number().int().min(0).max(100).optional(),
+  progressBelow: z.number().int().min(0).max(100).optional(),
+  // Daily schedule: hour of day (0-23, local time)
+  atHour: z.number().int().min(0).max(23).optional(),
+  // Action type filter (for action.completed trigger)
+  actionType: z.string().optional(),
+}).passthrough(); // allow any additional fields for forward compat
+
+export type AutomationConditions = z.infer<typeof automationConditionsSchema>;
+
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;

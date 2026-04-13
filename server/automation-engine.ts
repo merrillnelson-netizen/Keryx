@@ -20,12 +20,16 @@ export interface TriggerContext {
   // Shared
   userId: string;
   timestamp?: Date;
-  // memory.logged
+  // memory.logged — raw fields
   memoryContent?: string;
   moodScore?: number;        // 1-10
   topics?: string[];
-  peopleNames?: string[];    // people mentioned
-  aiSentiment?: 'positive' | 'neutral' | 'negative'; // derived from moodScore
+  peopleNames?: string[];
+  // memory.logged — AI-derived enriched fields
+  aiTopics?: string[];       // AI-extracted topic tags (same as topics, explicit alias for conditions)
+  aiPeople?: string[];       // AI-detected people (same as peopleNames, explicit alias)
+  aiMoodLabel?: string;      // Human label derived from moodScore: 'great'|'good'|'neutral'|'low'|'bad'
+  aiSentiment?: 'positive' | 'neutral' | 'negative'; // Coarse sentiment derived from moodScore
   // keyword.detected
   keyword?: string;
   // person.mentioned
@@ -98,15 +102,25 @@ function evaluateConditions(conditions: any, ctx: TriggerContext): boolean {
     if (!mentioned.some(n => n.includes(target) || target.includes(n))) return false;
   }
 
-  // Topic match
+  // Topic match (raw ctx.topics)
   if (conditions.topic) {
     const target = String(conditions.topic).toLowerCase();
     const topics = (ctx.topics || []).map(t => t.toLowerCase());
     if (!topics.some(t => t.includes(target) || target.includes(t))) return false;
   }
 
-  // AI Sentiment match (positive | neutral | negative)
-  if (conditions.aiSentiment && ctx.aiSentiment) {
+  // AI Topic match — uses ctx.aiTopics (explicit AI-extracted alias)
+  if (conditions.aiTopic) {
+    const target = String(conditions.aiTopic).toLowerCase();
+    const aiTopics = (ctx.aiTopics || ctx.topics || []).map(t => t.toLowerCase());
+    // Fail if the AI topic data is absent in context (avoids pass-through)
+    if (aiTopics.length === 0 && !ctx.topics?.length) return false;
+    if (!aiTopics.some(t => t.includes(target) || target.includes(t))) return false;
+  }
+
+  // AI Sentiment match — explicit fail when ctx.aiSentiment is absent but condition specifies it
+  if (conditions.aiSentiment) {
+    if (!ctx.aiSentiment) return false;
     if (ctx.aiSentiment !== String(conditions.aiSentiment).toLowerCase()) return false;
   }
 

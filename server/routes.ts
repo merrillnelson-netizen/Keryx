@@ -631,12 +631,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               moodScore !== undefined
                 ? moodScore >= 7 ? 'positive' : moodScore <= 3 ? 'negative' : 'neutral'
                 : 'neutral';
+            const aiMoodLabel =
+              moodScore !== undefined
+                ? moodScore >= 9 ? 'great' : moodScore >= 7 ? 'good' : moodScore >= 5 ? 'neutral' : moodScore >= 3 ? 'low' : 'bad'
+                : undefined;
+            const aiTopics = extracted.topicTag ? [extracted.topicTag] : [];
+            const aiPeople = extracted.detectedPeople || [];
             const ctx = {
               userId: user.id,
               memoryContent: memoryText,
               moodScore,
-              topics: extracted.topicTag ? [extracted.topicTag] : [],
-              peopleNames: extracted.detectedPeople || [],
+              topics: aiTopics,
+              peopleNames: aiPeople,
+              // Enriched AI fields for advanced condition matching
+              aiTopics,
+              aiPeople,
+              aiMoodLabel,
               aiSentiment,
             };
 

@@ -579,6 +579,8 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
   const [triggerType, setTriggerType] = useState("");
   const [actionType, setActionType] = useState("");
   const [conditionJson, setConditionJson] = useState("");
+  const [aiTopicFilter, setAiTopicFilter] = useState("");
+  const [aiSentimentFilter, setAiSentimentFilter] = useState("");
   const [payloadJson, setPayloadJson] = useState("{}");
   const [maxRunsPerDay, setMaxRunsPerDay] = useState("3");
   const { toast } = useToast();
@@ -591,6 +593,12 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
 
       if (conditionJson.trim()) {
         triggerConditions = JSON.parse(conditionJson);
+      }
+      // Merge quick-select AI filters into conditions object
+      if (aiTopicFilter.trim() || aiSentimentFilter) {
+        triggerConditions = triggerConditions || {};
+        if (aiTopicFilter.trim()) triggerConditions.aiTopic = aiTopicFilter.trim();
+        if (aiSentimentFilter) triggerConditions.aiSentiment = aiSentimentFilter;
       }
       actionPayload = JSON.parse(payloadJson || "{}");
 
@@ -609,7 +617,8 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
       queryClient.invalidateQueries({ queryKey: ["/api/automation/rules"] });
       toast({ title: "Automation rule created" });
       setName(""); setDescription(""); setTriggerType(""); setActionType("");
-      setConditionJson(""); setPayloadJson("{}"); setMaxRunsPerDay("3");
+      setConditionJson(""); setAiTopicFilter(""); setAiSentimentFilter("");
+      setPayloadJson("{}"); setMaxRunsPerDay("3");
       onCreated();
     },
     onError: (err: Error) => {
@@ -733,18 +742,47 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
 
+      {/* AI-aware quick condition controls */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-violet-400">AI Topic filter</Label>
+          <Input
+            placeholder='e.g. Health, Work, Family…'
+            value={aiTopicFilter}
+            onChange={e => setAiTopicFilter(e.target.value)}
+            className="h-8 text-sm"
+          />
+          <p className="text-xs text-muted-foreground">Matches AI-detected topic tag, not raw text</p>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-violet-400">AI Sentiment filter</Label>
+          <Select value={aiSentimentFilter} onValueChange={setAiSentimentFilter}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Any sentiment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Any sentiment</SelectItem>
+              <SelectItem value="positive">Positive</SelectItem>
+              <SelectItem value="neutral">Neutral</SelectItem>
+              <SelectItem value="negative">Negative</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">AI-derived from mood score when memory is logged</p>
+        </div>
+      </div>
+
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">
-          Conditions (JSON, optional){conditionPlaceholder && ` — e.g., ${conditionPlaceholder}`}
+          Additional conditions (JSON, optional){conditionPlaceholder && ` — e.g., ${conditionPlaceholder}`}
         </Label>
         <Textarea
-          placeholder={conditionPlaceholder || 'Leave empty to always trigger, or: { "keyword": "stress" }'}
+          placeholder={conditionPlaceholder || 'e.g. { "keyword": "stress", "moodBelow": 4 }'}
           value={conditionJson}
           onChange={e => setConditionJson(e.target.value)}
-          className="text-xs font-mono h-16 resize-none"
+          className="text-xs font-mono h-14 resize-none"
         />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Available fields: <code className="bg-muted px-1 rounded">keyword</code> (word-boundary match — "stress" catches "stressed"), <code className="bg-muted px-1 rounded">topic</code> (AI-detected topic), <code className="bg-muted px-1 rounded">aiSentiment</code> (positive / neutral / negative), <code className="bg-muted px-1 rounded">moodBelow</code> / <code className="bg-muted px-1 rounded">moodAbove</code> (1–10), <code className="bg-muted px-1 rounded">personName</code>.
+          Also supports: <code className="bg-muted px-1 rounded">keyword</code> (word-boundary — "stress" catches "stressed"), <code className="bg-muted px-1 rounded">moodBelow</code> / <code className="bg-muted px-1 rounded">moodAbove</code> (1–10), <code className="bg-muted px-1 rounded">personName</code>.
         </p>
       </div>
 
