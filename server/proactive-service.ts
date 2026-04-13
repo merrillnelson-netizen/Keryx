@@ -275,50 +275,17 @@ export async function runProactiveAnalysis(userId: string, userTimezone: string 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. DISCOVERY → ACTION BRIDGE
-// After contextual discoveries are generated, scan each discovery's title +
-// content for phrases that imply an actionable proposal (reach-out, schedule,
-// follow-up, note). If the confidence threshold is met, queue an action card.
+// After contextual discoveries are generated, pass each discovery's text
+// through processUserInputForActions (the AI detection pipeline). Only create
+// proposals when detected confidence ≥ 0.7 and action type is not DISABLED.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Simple keyword patterns that signal an actionable opportunity in discovery text. */
-const DISCOVERY_ACTION_PATTERNS: Array<{
-  regex: RegExp;
-  actionType: string;
-  actionCategory: string;
-  buildTitle: (discoveryTitle: string) => string;
-  buildDescription: (discoveryTitle: string, discoveryUrl: string) => string;
-  confidence: number;
-}> = [
-  {
-    regex: /\bbirthday\b/i,
-    actionType: AI_ACTION_TYPES.REMINDER_CREATE,
-    actionCategory: AI_ACTION_CATEGORIES.REMINDER,
-    buildTitle: (t) => `Birthday reminder from discovery: ${t.slice(0, 50)}`,
-    buildDescription: (t, u) => `A discovery mentions a birthday. Consider sending a message. Source: ${u}`,
-    confidence: 0.75,
-  },
-  {
-    regex: /\breach\s+out\b|\bfollow[\s-]?up\b|\bcheck\s+in\b|\breconnect\b/i,
-    actionType: AI_ACTION_TYPES.PEOPLE_REACH_OUT,
-    actionCategory: AI_ACTION_CATEGORIES.PEOPLE,
-    buildTitle: (t) => `Follow up — from discovery: ${t.slice(0, 50)}`,
-    buildDescription: (t, u) => `A discovery suggests reaching out or following up. Source: ${u}`,
-    confidence: 0.72,
-  },
-  {
-    regex: /\bschedule\b|\bmeeting\b|\bappointment\b|\bbook\s+a\b/i,
-    actionType: AI_ACTION_TYPES.REMINDER_CREATE,
-    actionCategory: AI_ACTION_CATEGORIES.REMINDER,
-    buildTitle: (t) => `Schedule something — from discovery: ${t.slice(0, 50)}`,
-    buildDescription: (t, u) => `A discovery references scheduling. Consider adding a reminder. Source: ${u}`,
-    confidence: 0.70,
-  },
-];
+const MIN_ACTION_CONFIDENCE = 0.7;
 
 /**
- * After discoveries are generated, scan each one for action-triggering keywords.
- * Only runs when user hasn't disabled the relevant action type.
- * Throttled: at most 2 proposals per run, 7-day dedup per discovery.
+ * After discoveries are generated, pass each discovery's summary text through
+ * the AI action-detection pipeline. Proposals are queued with sourceType='discovery'.
+ * Throttled: at most 2 proposals per run, 7-day dedup per discovery ID.
  */
 export async function generateDiscoveryActionProposals(
   userId: string,
@@ -326,58 +293,45 @@ export async function generateDiscoveryActionProposals(
 ): Promise<number> {
   if (!discoveries || discoveries.length === 0) return 0;
 
+  const { processUserInputForActions } = await import('./ai-actions-service');
   let created = 0;
   const MAX = 2;
 
   for (const discovery of discoveries) {
     if (created >= MAX) break;
 
-    const searchText = `${discovery.title} ${discovery.content} ${discovery.insightContext}`;
+    // Build a natural-language summary of the discovery for action detection
+    const inputText = `${discovery.insightContext ? discovery.insightContext + '. ' : ''}${discovery.title}. ${discovery.content?.slice(0, 200) || ''}`;
 
-    for (const pattern of DISCOVERY_ACTION_PATTERNS) {
-      if (created >= MAX) break;
-      if (!pattern.regex.test(searchText)) continue;
+    // Dedup check: skip if ANY action from this discovery was created recently
+    let alreadyExists = false;
+    try {
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const { db } = await import('./db');
+      const { aiActions } = await import('@shared/schema');
+      const { and, eq, gte, like } = await import('drizzle-orm');
+      const existing = await db
+        .select({ id: aiActions.id })
+        .from(aiActions)
+        .where(and(eq(aiActions.userId, userId), like(aiActions.sourceId, `disc_${discovery.id}%`), gte(aiActions.createdAt, cutoff)))
+        .limit(1);
+      alreadyExists = existing.length > 0;
+    } catch { /* ignore */ }
+    if (alreadyExists) continue;
 
-      // Dedup: one action per discovery per action type per 7 days
-      const sourceId = `disc_${discovery.id}_${pattern.actionType}`;
-      const hasDupe = await hasDuplicateRecentAction(userId, pattern.actionType, sourceId, 7);
-      if (hasDupe) continue;
+    try {
+      const result = await processUserInputForActions(
+        userId,
+        inputText,
+        'discovery',
+        `disc_${discovery.id}`,
+      );
 
-      // Respect user's action policy — skip if DISABLED
-      const { getActionPolicy } = await import('./ai-actions-service');
-      const { policy } = await getActionPolicy(userId, pattern.actionType);
-      if (policy === 'disabled') continue;
-
-      try {
-        await storage.createAiAction({
-          userId,
-          actionType: pattern.actionType,
-          actionCategory: pattern.actionCategory,
-          sourceType: 'discovery',
-          sourceId,
-          sourceText: discovery.insightContext || discovery.title,
-          title: pattern.buildTitle(discovery.title),
-          description: pattern.buildDescription(discovery.title, discovery.url),
-          payload: {
-            discoveryId: discovery.id,
-            discoveryTitle: discovery.title,
-            discoveryUrl: discovery.url,
-            insightContext: discovery.insightContext,
-          },
-          status: AI_ACTION_STATUSES.PENDING,
-          aiReasoning: `Discovery "${discovery.title}" matched action pattern for ${pattern.actionType}`,
-          confidence: pattern.confidence,
-          rollbackAvailable: false,
-          rollbackData: null,
-          resultData: null,
-          errorMessage: null,
-          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours
-        });
+      if (result.actionDetected && result.action && (result.action.confidence ?? 0) >= MIN_ACTION_CONFIDENCE) {
         created++;
-      } catch (err) {
-        console.error('[proactive] Discovery action creation failed:', err instanceof Error ? err.message : err);
       }
-      break; // Only one action per discovery
+    } catch (err) {
+      console.error('[proactive] Discovery action detection failed:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -386,52 +340,16 @@ export async function generateDiscoveryActionProposals(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. BRIEFING → ACTION PROPOSALS
-// After a morning briefing is generated, scan focusAreas and reminders for
-// actionable phrases. Queues proposals with sourceType = 'briefing'.
+// After a morning briefing is generated, pass each focusArea and reminder
+// through processUserInputForActions (the same AI detection pipeline).
+// Proposals are queued with sourceType = 'briefing'.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Briefing text patterns that imply an actionable proposal */
-const BRIEFING_ACTION_PATTERNS: Array<{
-  regex: RegExp;
-  actionType: string;
-  actionCategory: string;
-  buildTitle: (text: string) => string;
-  confidence: number;
-}> = [
-  {
-    regex: /\breach\s+out\s+to\s+(\w+)|\bcontact\s+(\w+)|\bcheck\s+in\s+with\s+(\w+)/i,
-    actionType: AI_ACTION_TYPES.PEOPLE_REACH_OUT,
-    actionCategory: AI_ACTION_CATEGORIES.PEOPLE,
-    buildTitle: (text) => `Reach out — "${text.slice(0, 60)}"`,
-    confidence: 0.80,
-  },
-  {
-    regex: /\bschedule\b|\bset\s+up\s+a\s+(meeting|call|appointment)\b/i,
-    actionType: AI_ACTION_TYPES.REMINDER_CREATE,
-    actionCategory: AI_ACTION_CATEGORIES.REMINDER,
-    buildTitle: (text) => `Schedule: "${text.slice(0, 60)}"`,
-    confidence: 0.75,
-  },
-  {
-    regex: /\bfollow[\s-]?up\b|\bdon['']t\s+forget\b|\bremember\s+to\b/i,
-    actionType: AI_ACTION_TYPES.REMINDER_CREATE,
-    actionCategory: AI_ACTION_CATEGORIES.REMINDER,
-    buildTitle: (text) => `Follow up: "${text.slice(0, 60)}"`,
-    confidence: 0.75,
-  },
-  {
-    regex: /\bdraft\b|\bsend\s+(an?\s+)?(email|message|note)\b/i,
-    actionType: AI_ACTION_TYPES.EMAIL_DRAFT,
-    actionCategory: AI_ACTION_CATEGORIES.EMAIL,
-    buildTitle: (text) => `Draft: "${text.slice(0, 60)}"`,
-    confidence: 0.72,
-  },
-];
-
 /**
- * Scan morning briefing focusAreas and reminders arrays for action triggers.
+ * Scan morning briefing focusAreas and reminders arrays for actionable suggestions.
+ * Each item is passed through the AI action-detection pipeline.
  * Creates pending action proposals with sourceType = 'briefing'.
- * Max 2 proposals per briefing to avoid noise.
+ * Max 2 proposals per briefing. Policy-gated via processUserInputForActions.
  */
 export async function generateBriefingActionProposals(
   userId: string,
@@ -448,54 +366,43 @@ export async function generateBriefingActionProposals(
 
   if (items.length === 0) return 0;
 
+  const { processUserInputForActions } = await import('./ai-actions-service');
   let created = 0;
   const MAX = 2;
 
   for (const item of items) {
     if (created >= MAX) break;
 
-    for (const pattern of BRIEFING_ACTION_PATTERNS) {
-      if (created >= MAX) break;
-      if (!pattern.regex.test(item)) continue;
+    // Dedup: skip if a briefing action from this exact item text was created within 24h
+    const itemKey = `brief_${Buffer.from(item).toString('base64').slice(0, 24)}`;
+    let alreadyExists = false;
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const { db } = await import('./db');
+      const { aiActions } = await import('@shared/schema');
+      const { and, eq, gte, like } = await import('drizzle-orm');
+      const existing = await db
+        .select({ id: aiActions.id })
+        .from(aiActions)
+        .where(and(eq(aiActions.userId, userId), like(aiActions.sourceId, `${itemKey}%`), gte(aiActions.createdAt, cutoff)))
+        .limit(1);
+      alreadyExists = existing.length > 0;
+    } catch { /* ignore */ }
+    if (alreadyExists) continue;
 
-      // Dedup: one proposal per unique briefing item per action type per 24h
-      const sourceId = `brief_${Buffer.from(item).toString('base64').slice(0, 24)}_${pattern.actionType}`;
-      const hasDupe = await hasDuplicateRecentAction(userId, pattern.actionType, sourceId, 1);
-      if (hasDupe) continue;
+    try {
+      const result = await processUserInputForActions(
+        userId,
+        item,
+        'briefing',
+        itemKey,
+      );
 
-      // Respect user's action policy
-      const { getActionPolicy } = await import('./ai-actions-service');
-      const { policy } = await getActionPolicy(userId, pattern.actionType);
-      if (policy === 'disabled') continue;
-
-      try {
-        await storage.createAiAction({
-          userId,
-          actionType: pattern.actionType,
-          actionCategory: pattern.actionCategory,
-          sourceType: 'briefing',
-          sourceId,
-          sourceText: item,
-          title: pattern.buildTitle(item),
-          description: `Suggested from your morning briefing: "${item}"`,
-          payload: {
-            briefingItem: item,
-            actionable: true,
-          },
-          status: AI_ACTION_STATUSES.PENDING,
-          aiReasoning: `Morning briefing item matched action pattern for ${pattern.actionType}: "${item}"`,
-          confidence: pattern.confidence,
-          rollbackAvailable: false,
-          rollbackData: null,
-          resultData: null,
-          errorMessage: null,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-        });
+      if (result.actionDetected && result.action && (result.action.confidence ?? 0) >= MIN_ACTION_CONFIDENCE) {
         created++;
-      } catch (err) {
-        console.error('[proactive] Briefing action creation failed:', err instanceof Error ? err.message : err);
       }
-      break; // One action per item
+    } catch (err) {
+      console.error('[proactive] Briefing action detection failed:', err instanceof Error ? err.message : err);
     }
   }
 

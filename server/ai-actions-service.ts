@@ -367,7 +367,7 @@ export async function getActionPolicy(
 export async function createPendingAction(
   userId: string,
   detected: DetectedAction,
-  sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual',
+  sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' | 'discovery' | 'velocity' | 'high_signal',
   sourceId?: string,
   sourceText?: string
 ): Promise<AiAction> {
@@ -1203,7 +1203,7 @@ export async function rejectAction(actionId: string, userId: string): Promise<bo
 export async function processUserInputForActions(
   userId: string,
   userInput: string,
-  sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' = 'voice_input',
+  sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' | 'discovery' | 'velocity' | 'high_signal' = 'voice_input',
   sourceId?: string,
   contextInfo?: { timezone?: string }
 ): Promise<{ 

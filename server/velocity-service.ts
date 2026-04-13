@@ -221,6 +221,9 @@ export async function runVelocityRecalculation(): Promise<{
 
             // Companion: people.note — "Draft a message to keep in touch"
             try {
+              const { getActionPolicy } = await import('./ai-actions-service');
+              const { policy: notePolicy } = await getActionPolicy(userId, "people.note");
+              if (notePolicy !== 'disabled') {
               const companionDupeCheck = await db
                 .select({ id: aiActions.id })
                 .from(aiActions)
@@ -259,6 +262,7 @@ export async function runVelocityRecalculation(): Promise<{
                 });
                 pendingActionsCreated++;
               }
+              } // end if (notePolicy !== 'disabled')
             } catch (companionErr) {
               console.warn(`[velocity] Companion note creation failed for ${person.name}:`, companionErr instanceof Error ? companionErr.message : companionErr);
             }
