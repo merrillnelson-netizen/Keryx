@@ -148,6 +148,7 @@ export interface IStorage {
   updateFrequentPlace(id: string, userId: string, updates: Partial<InsertFrequentPlace>): Promise<FrequentPlace | undefined>;
   deleteFrequentPlace(id: string, userId: string): Promise<boolean>;
   upsertFrequentPlaces(places: InsertFrequentPlace[]): Promise<number>;
+  deduplicateFrequentPlaces(userId: string): Promise<{ merged: number; remaining: number }>;
 
   // Push Subscriptions (user-scoped)
   getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
@@ -2103,31 +2104,155 @@ export class DatabaseStorage implements IStorage {
   async upsertFrequentPlaces(places: InsertFrequentPlace[]): Promise<number> {
     try {
       if (places.length === 0) return 0;
-      
+
+      // Inline haversine — avoids circular import with location-service
+      const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+        const R = 6371000;
+        const toRad = (d: number) => d * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLng = toRad(lng2 - lng1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      const MERGE_RADIUS = 200; // metres
+
+      // Fetch existing places once so we can proximity-check without per-place queries
+      const existingPlaces = await this.getFrequentPlaces(places[0].userId);
+
       let upserted = 0;
       for (const place of places) {
-        // Check if a place with same label exists for this user
-        if (place.label) {
-          const existing = await this.getFrequentPlaceByLabel(place.userId, place.label);
+        // 1. Labeled home/work: deduplicate by label
+        if (place.label && ['home', 'work'].includes(place.label)) {
+          const existing = existingPlaces.find(e => e.label === place.label);
           if (existing) {
-            await this.updateFrequentPlace(existing.id, place.userId, {
-              ...place,
+            const updated = await this.updateFrequentPlace(existing.id, place.userId, {
               visitCount: (existing.visitCount ?? 0) + (place.visitCount ?? 0),
               totalTimeMinutes: (existing.totalTimeMinutes ?? 0) + (place.totalTimeMinutes ?? 0),
+              lastVisit: place.lastVisit && (!existing.lastVisit || place.lastVisit > existing.lastVisit)
+                ? place.lastVisit : existing.lastVisit ?? undefined,
+              firstVisit: place.firstVisit && (!existing.firstVisit || place.firstVisit < existing.firstVisit)
+                ? place.firstVisit : existing.firstVisit ?? undefined,
+              ...(place.address && !existing.address ? { address: place.address } : {}),
             });
+            if (updated) {
+              const idx = existingPlaces.findIndex(e => e.id === existing.id);
+              if (idx !== -1) existingPlaces[idx] = updated;
+            }
             upserted++;
             continue;
           }
         }
-        
-        await this.createFrequentPlace(place);
+
+        // 2. All places: deduplicate by proximity (200 m radius)
+        const nearby = existingPlaces.find(e =>
+          haversineMeters(e.latitude, e.longitude, place.latitude, place.longitude) <= MERGE_RADIUS
+        );
+        if (nearby) {
+          const updated = await this.updateFrequentPlace(nearby.id, place.userId, {
+            visitCount: (nearby.visitCount ?? 0) + (place.visitCount ?? 0),
+            totalTimeMinutes: (nearby.totalTimeMinutes ?? 0) + (place.totalTimeMinutes ?? 0),
+            lastVisit: place.lastVisit && (!nearby.lastVisit || place.lastVisit > nearby.lastVisit)
+              ? place.lastVisit : nearby.lastVisit ?? undefined,
+            firstVisit: place.firstVisit && (!nearby.firstVisit || place.firstVisit < nearby.firstVisit)
+              ? place.firstVisit : nearby.firstVisit ?? undefined,
+            // Promote richer data if the existing entry is missing it
+            ...(place.address && !nearby.address ? { address: place.address } : {}),
+            ...(place.name && !nearby.name.startsWith('Location ') ? {} : place.name ? { name: place.name } : {}),
+            ...(place.label && !nearby.label ? { label: place.label } : {}),
+          });
+          if (updated) {
+            const idx = existingPlaces.findIndex(e => e.id === nearby.id);
+            if (idx !== -1) existingPlaces[idx] = updated;
+          }
+          upserted++;
+          continue;
+        }
+
+        // 3. Genuinely new place — insert and track for same-batch dedup
+        const created = await this.createFrequentPlace(place);
+        existingPlaces.push(created);
         upserted++;
       }
-      
+
       return upserted;
     } catch (error) {
       console.error('Failed to upsert frequent places:', error);
       throw new Error('Database error while upserting frequent places');
+    }
+  }
+
+  async deduplicateFrequentPlaces(userId: string): Promise<{ merged: number; remaining: number }> {
+    try {
+      const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+        const R = 6371000;
+        const toRad = (d: number) => d * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLng = toRad(lng2 - lng1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      const MERGE_RADIUS = 200;
+
+      const allPlaces = await this.getFrequentPlaces(userId);
+      const toDelete = new Set<string>();
+      let mergedCount = 0;
+
+      for (let i = 0; i < allPlaces.length; i++) {
+        if (toDelete.has(allPlaces[i].id)) continue;
+        const primary = allPlaces[i];
+
+        for (let j = i + 1; j < allPlaces.length; j++) {
+          if (toDelete.has(allPlaces[j].id)) continue;
+          const secondary = allPlaces[j];
+
+          const dist = haversineMeters(
+            primary.latitude, primary.longitude,
+            secondary.latitude, secondary.longitude
+          );
+          if (dist > MERGE_RADIUS) continue;
+
+          // Merge secondary into primary — keep the confirmed/labelled one as primary if possible
+          const keepPrimary = primary.isConfirmed || !secondary.isConfirmed;
+          const winner = keepPrimary ? primary : secondary;
+          const loser = keepPrimary ? secondary : primary;
+
+          const mergedVisitCount = (winner.visitCount ?? 0) + (loser.visitCount ?? 0);
+          const mergedTotalTime = (winner.totalTimeMinutes ?? 0) + (loser.totalTimeMinutes ?? 0);
+          const mergedLastVisit = loser.lastVisit && (!winner.lastVisit || loser.lastVisit > winner.lastVisit)
+            ? loser.lastVisit : winner.lastVisit;
+          const mergedFirstVisit = loser.firstVisit && (!winner.firstVisit || loser.firstVisit < winner.firstVisit)
+            ? loser.firstVisit : winner.firstVisit;
+
+          await this.updateFrequentPlace(winner.id, userId, {
+            visitCount: mergedVisitCount,
+            totalTimeMinutes: mergedTotalTime,
+            lastVisit: mergedLastVisit ?? undefined,
+            firstVisit: mergedFirstVisit ?? undefined,
+            address: winner.address ?? loser.address ?? undefined,
+            label: winner.label ?? loser.label ?? undefined,
+            isConfirmed: winner.isConfirmed || loser.isConfirmed,
+            name: (winner.isConfirmed && !loser.isConfirmed) ? winner.name
+              : (!winner.isConfirmed && loser.isConfirmed) ? loser.name
+              : winner.name,
+          });
+
+          // Update in-memory winner so subsequent passes use merged counts
+          allPlaces[keepPrimary ? i : j] = {
+            ...winner,
+            visitCount: mergedVisitCount,
+            totalTimeMinutes: mergedTotalTime,
+          } as FrequentPlace;
+
+          await this.deleteFrequentPlace(loser.id, userId);
+          toDelete.add(loser.id);
+          mergedCount++;
+        }
+      }
+
+      return { merged: mergedCount, remaining: allPlaces.length - toDelete.size };
+    } catch (error) {
+      console.error('Failed to deduplicate frequent places:', error);
+      throw new Error('Database error while deduplicating frequent places');
     }
   }
 

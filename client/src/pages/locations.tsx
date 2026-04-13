@@ -10,7 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { 
   MapPin, Upload, Trash2, Home, Building2, Coffee, Dumbbell, 
-  Loader2, Check, X, AlertCircle, Calendar, Clock, Navigation, Edit3
+  Loader2, Check, X, AlertCircle, Calendar, Clock, Navigation, Edit3,
+  Wand2, Layers
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -299,6 +300,51 @@ export default function LocationsPage() {
     },
   });
 
+  const deduplicateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/locations/places/deduplicate', {});
+      if (!res.ok) throw new Error('Failed to merge duplicates');
+      return res.json() as Promise<{ success: boolean; merged: number; remaining: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/locations/places'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/locations/stats'] });
+      if (data.merged > 0) {
+        toast({
+          title: `Merged ${data.merged} duplicate${data.merged !== 1 ? 's' : ''}`,
+          description: `${data.remaining} unique places remaining`,
+        });
+      } else {
+        toast({ title: 'No duplicates found — all places are already unique' });
+      }
+    },
+    onError: () => {
+      toast({ title: 'Failed to merge duplicates', variant: 'destructive' });
+    },
+  });
+
+  const aiNameMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/locations/places/ai-name', {});
+      if (!res.ok) throw new Error('Failed to AI-name places');
+      return res.json() as Promise<{ success: boolean; named: number; message?: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/locations/places'] });
+      if (data.named > 0) {
+        toast({
+          title: `Named ${data.named} place${data.named !== 1 ? 's' : ''}`,
+          description: 'Review the suggestions and confirm or rename as needed',
+        });
+      } else {
+        toast({ title: data.message || 'No unnamed places to process' });
+      }
+    },
+    onError: () => {
+      toast({ title: 'Failed to name places', variant: 'destructive' });
+    },
+  });
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -530,31 +576,73 @@ export default function LocationsPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="flex items-center gap-2">
               <MapPin className="w-5 h-5" />
               Frequent Places
             </CardTitle>
-            {places && places.some(p => !p.address) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => geocodeMutation.mutate()}
-                disabled={geocodeMutation.isPending}
-              >
-                {geocodeMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Getting addresses...
-                  </>
-                ) : (
-                  <>
-                    <Navigation className="w-4 h-4 mr-2" />
-                    Get Addresses
-                  </>
-                )}
-              </Button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {places && places.some(p => !p.address) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => geocodeMutation.mutate()}
+                  disabled={geocodeMutation.isPending}
+                >
+                  {geocodeMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Getting addresses...
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="w-4 h-4 mr-2" />
+                      Get Addresses
+                    </>
+                  )}
+                </Button>
+              )}
+              {places && places.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => deduplicateMutation.mutate()}
+                  disabled={deduplicateMutation.isPending}
+                >
+                  {deduplicateMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Merging...
+                    </>
+                  ) : (
+                    <>
+                      <Layers className="w-4 h-4 mr-2" />
+                      Merge Duplicates
+                    </>
+                  )}
+                </Button>
+              )}
+              {places && places.some(p => !p.isHidden && !p.isConfirmed && /^Location \d+$/.test(p.name)) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => aiNameMutation.mutate()}
+                  disabled={aiNameMutation.isPending}
+                >
+                  {aiNameMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Naming...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4 mr-2" />
+                      AI Name All
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
           <CardDescription>
             Places you visit often, detected from your location history. Confirm important ones to improve your briefings.

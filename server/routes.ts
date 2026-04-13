@@ -6137,6 +6137,88 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
+  // Deduplicate frequent places (merge nearby duplicates within 200m)
+  app.post("/api/locations/places/deduplicate", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const result = await storage.deduplicateFrequentPlaces(user.id);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to deduplicate places", error);
+    }
+  });
+
+  // AI-name unnamed frequent places using OpenAI
+  app.post("/api/locations/places/ai-name", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const places = await storage.getFrequentPlaces(user.id);
+
+      // Only process unhidden, unlabeled/generic places without a confirmed custom name
+      const toName = places.filter(p =>
+        !p.isHidden &&
+        !p.isConfirmed &&
+        (!p.label || ['home', 'work'].includes(p.label) === false) &&
+        /^Location \d+$/.test(p.name)
+      );
+
+      if (toName.length === 0) {
+        return res.json({ success: true, named: 0, message: "No unnamed places to process" });
+      }
+
+      const { openai } = await import('./ai-service.js');
+      const placeDescriptions = toName.map((p, i) => {
+        const parts: string[] = [];
+        parts.push(`[${i + 1}] ID: ${p.id}`);
+        if (p.address) parts.push(`Address: ${p.address}`);
+        else parts.push(`Coordinates: ${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}`);
+        parts.push(`Visits: ${p.visitCount ?? 0}`);
+        if (p.typicalDays && p.typicalDays.length > 0) parts.push(`Typical days: ${p.typicalDays.join(', ')}`);
+        if (p.averageVisitMinutes) parts.push(`Avg stay: ${Math.round(p.averageVisitMinutes)} min`);
+        return parts.join(' | ');
+      }).join('\n');
+
+      const aiRes = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a location naming assistant. Given a list of frequently visited locations, suggest a short, descriptive, human-friendly name for each one (2-4 words max). Names should reflect what the place likely is based on address, visit frequency, and timing patterns (e.g. "Coffee Shop", "Grocery Store", "Kids School", "Dog Park", "Friend's House"). Return ONLY valid JSON: an array of objects with "id" and "name" fields, one per location, in the same order as the input.`
+          },
+          {
+            role: 'user',
+            content: `Name these locations:\n${placeDescriptions}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      });
+
+      const raw = aiRes.choices[0]?.message?.content || '{}';
+      let suggestions: Array<{ id: string; name: string }> = [];
+      try {
+        const parsed = JSON.parse(raw);
+        suggestions = Array.isArray(parsed) ? parsed : (parsed.locations ?? parsed.places ?? parsed.results ?? []);
+      } catch {
+        return res.json({ success: false, message: "AI response could not be parsed" });
+      }
+
+      let namedCount = 0;
+      for (const s of suggestions) {
+        if (!s.id || !s.name) continue;
+        // Verify this place belongs to the user
+        const place = toName.find(p => p.id === s.id);
+        if (!place) continue;
+        await storage.updateFrequentPlace(s.id, user.id, { name: s.name.trim() });
+        namedCount++;
+      }
+
+      res.json({ success: true, named: namedCount });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to AI-name places", error);
+    }
+  });
+
   // Get location context for AI (formatted for briefings)
   app.get("/api/locations/context", requireAuth, async (req, res) => {
     try {
