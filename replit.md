@@ -15,7 +15,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **UI**: Tailwind CSS, shadcn/ui components, glassmorphism design, dark/light theme.
 - **State Management**: TanStack Query.
 - **Speech APIs**: Browser's native Web Speech API.
-- **Companion App**: React Native project for Meta Glasses integration.
+- **Companion App**: React Native project for Meta Glasses integration. Settings card at `client/src/components/settings/companion-app-card.tsx` shows setup steps, server URL, and Picovoice links.
 - **PWA Support**: Full PWA capabilities including manifest, service worker, Web Share Target, App Shortcuts, App Badge API, Haptic Feedback, Screen Wake Lock, and Offline Action Queuing.
 
 ### Backend
@@ -52,8 +52,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Personal Insights**: AI-generated insights from various data sources.
 - **People Management**: Closeness scores, AI People Search (natural language queries), AI Duplicate Detection, and a streamlined People Merge UX.
 - **Integrations**: Multi-provider Calendar & Email integration, Meta Glasses integration (MCP Protocol 2025-01).
-- **Universal Relay API**: Inbound gateway at `POST /api/relay/inbound` (X-API-Key auth). Accepts `sms`, `command`, and `event` payload types from any external source (Android bridge, Chrome extension, Meta glasses). Fan-out routing to configurable destinations. Full event log. Session-authenticated test endpoint at `POST /api/relay/test`. Relay API key managed in Settings UI.
-- **Chrome Extension** (`extension/`): MV3 extension for Google Messages for Web. MutationObserver-based message interception, SHA-based deduplication (24h cache in `chrome.storage.local`), background service worker for relay POSTs, popup with connection status light + API key setup.
+- **Universal Relay API**: Inbound gateway at `POST /api/relay/inbound` (X-API-Key auth). Accepts `sms`, `command`, and `event` payload types from any external source (Android bridge, Meta glasses). Fan-out routing to configurable destinations. Full event log. Session-authenticated test endpoint at `POST /api/relay/test`. Relay API key managed in Settings UI.
 - **Android Bridge** (`android-bridge/`): Native Kotlin Android app (minSdk 26) that captures Google Messages in real time without requiring a browser. NotificationListenerService captures all incoming messages (SMS, MMS, RCS) and best-effort outgoing RCS. SMS ContentObserver foreground service captures sent SMS/MMS via Android content provider. OkHttp relay client with 2.5s debounce buffer, Keep-Alive reuse, EncryptedSharedPreferences, libphonenumber E.164 normalization, Room retry queue, WorkManager retry with NetworkType.CONNECTED gating (6 attempts, exponential backoff). BootReceiver restarts on reboot. Battery optimization exemption prompt on first launch. Built via GitHub Actions (`.github/workflows/android-bridge.yml`) — APK served from Keryx Settings page once built. Settings card at `client/src/components/settings/android-bridge-card.tsx` shows last-seen status, credentials for copy, and APK download link.
 - **Location Features**: Google Timeline import, automatic capture, frequent place detection.
 - **Messaging**: SMS/MMS/RCS import with AI-powered conversation analysis, chat bubble UI.

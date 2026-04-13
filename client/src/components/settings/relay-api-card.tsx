@@ -125,7 +125,7 @@ export function RelayApiCard() {
           Universal Relay API
         </CardTitle>
         <p className="text-sm text-muted-foreground mt-1">
-          One authenticated endpoint that accepts SMS, voice commands, and events from any external source — your Android bridge, Meta glasses, Chrome extension, or anything else.
+          One authenticated endpoint that accepts SMS, voice commands, and events from any external source — your Android bridge, Meta glasses, or anything else.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">

@@ -200,13 +200,12 @@ const capabilities: CapabilityCategory[] = [
     name: "Messages",
     icon: Smartphone,
     color: "text-violet-500",
-    description: "Browse and search your SMS/text history — imported archives or live relay via Android Bridge or Chrome Extension",
+    description: "Browse and search your SMS/text history — imported archives or live relay via the Android Bridge",
     examples: [
       { phrase: "Show my recent messages from Mom", description: "Browse texts from a specific contact in the chat bubble view" },
       { phrase: "What did Jake and I talk about last week?", description: "Search imported or relayed conversation history by person and date" },
       { phrase: "Import my SMS backup from Android", description: "Upload an SMS archive (NDJSON/ZIP) from the SMS Import / Export app (F-Droid)" },
       { phrase: "Set up the Android Bridge app for live relay", description: "Install the companion APK so all Google Messages relay automatically — no browser needed" },
-      { phrase: "Set up the Chrome Extension to relay live messages", description: "Install the extension so new Google Messages for Web texts sync automatically" },
       { phrase: "Delete relayed messages from a conversation", description: "Use the trash icon in any conversation to remove relay-sourced messages" },
     ]
   },
@@ -246,6 +245,7 @@ const hintExamples = [
   "How am I doing on my fitness goal?",
   "Remind me in 2 hours to take a break",
   "Show my recent messages from Mom",
+  "Set up Android Bridge for live relay",
   "Import my SMS backup from Android",
   "Show me my life dashboard",
   "Which relationships need attention?",
@@ -424,11 +424,10 @@ export function KeryxCapabilitiesModal() {
                       <div className="flex items-start gap-3">
                         <Smartphone className="w-5 h-5 text-violet-500 mt-0.5" />
                         <div>
-                          <p className="text-sm font-medium text-foreground">Three ways to get messages in</p>
+                          <p className="text-sm font-medium text-foreground">Two ways to get messages in</p>
                           <p className="text-sm text-muted-foreground">
                             <strong>Archive import:</strong> Export from the "SMS Import / Export" Android app (F-Droid) and upload the NDJSON/ZIP file in Settings → Integrations.<br />
-                            <strong>Android Bridge:</strong> Install the companion APK (download from Settings) for native real-time relay — works in the background without needing a browser open.<br />
-                            <strong>Chrome Extension:</strong> Install the extension so new texts from Google Messages for Web sync automatically while your browser is open.
+                            <strong>Android Bridge:</strong> Install the companion APK (download from Settings) for native real-time relay — works in the background without needing a browser open.
                           </p>
                         </div>
                       </div>

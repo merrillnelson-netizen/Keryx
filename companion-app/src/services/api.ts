@@ -8,7 +8,7 @@ import type { MCPPayload, MCPResponse } from '../types/mcp';
 
 const API_BASE_URL = __DEV__ 
   ? 'http://localhost:5000' 
-  : 'https://your-keryx-instance.replit.app';
+  : 'https://nelson.replit.app';
 
 class KeryxApiService {
   private sessionCookie: string | null = null;
