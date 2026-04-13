@@ -1250,6 +1250,28 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Action Chaining toggle */}
+              <div className="flex items-center justify-between pt-1 border-t border-white/10">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-violet-400" />
+                    Allow Action Chaining
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    After completing an action, Keryx can detect and propose a natural follow-up (e.g., after scheduling a meeting, draft a confirmation email). Chains are capped at 3 hops.
+                  </p>
+                </div>
+                <Switch
+                  data-testid="switch-allow-action-chaining"
+                  checked={settings.allowActionChaining ?? true}
+                  onCheckedChange={(checked) => {
+                    const updated = { ...settings, allowActionChaining: checked };
+                    setSettings(updated);
+                    updateSettingsMutation.mutate({ allowActionChaining: checked });
+                  }}
+                />
+              </div>
             </CardContent>
           </Card>
 

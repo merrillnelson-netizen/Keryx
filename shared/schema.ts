@@ -247,6 +247,8 @@ export const settings = pgTable("settings", {
   professionalMode: boolean("professional_mode").default(false), // Overrides sassLevel to muted/professional mode
   // Relay API
   relayApiKey: text("relay_api_key"), // Static API key for inbound relay endpoint (no session required)
+  // Action Chaining
+  allowActionChaining: boolean("allow_action_chaining").default(true), // Allow agent to spawn follow-up child actions after successful completion
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -284,6 +286,9 @@ export const aiActions = pgTable("ai_actions", {
   rollbackAvailable: boolean("rollback_available").default(false),
   rollbackData: jsonb("rollback_data"), // Data needed to undo this action
   rolledBackAt: timestamp("rolled_back_at"),
+  // Action chaining — linked parent action for sequential workflows
+  parentActionId: varchar("parent_action_id"), // FK to ai_actions.id (self-referential, nullable)
+  chainDepth: integer("chain_depth").default(0), // 0 = root, max 3 hops
   // Timestamps
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

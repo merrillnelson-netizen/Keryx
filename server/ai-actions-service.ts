@@ -55,6 +55,19 @@ const openai = new OpenAI({
 });
 
 /**
+ * Action types that can spawn follow-up child actions via chaining.
+ * Deliberately narrow — we only chain actions that naturally lead to related next steps.
+ * memory.create and financial.alert are excluded to avoid noisy or recursive chains.
+ */
+const CHAINABLE_ACTION_TYPES = new Set([
+  'calendar.create',
+  'email.send',
+  'people.note',
+]);
+
+const MAX_CHAIN_DEPTH = 3;
+
+/**
  * Detected action from user input
  */
 export interface DetectedAction {
@@ -416,6 +429,79 @@ export async function createPendingAction(
 }
 
 /**
+ * GPT-powered follow-up detection for action chaining.
+ * Given a completed action's type, payload, and result, asks the AI whether
+ * there is a natural next step with confidence ≥ 0.75.
+ *
+ * Returns a DetectedAction if a follow-up is warranted, null otherwise.
+ * Intentionally concise to minimize latency and token cost.
+ */
+async function detectFollowUpAction(
+  completedAction: AiAction,
+  resultData: unknown,
+): Promise<DetectedAction | null> {
+  try {
+    const payload = completedAction.payload as Record<string, unknown>;
+    const prompt = `A user's AI assistant just successfully completed an action. Determine if there is ONE natural, HIGH-VALUE follow-up action warranted.
+
+COMPLETED ACTION:
+- Type: ${completedAction.actionType}
+- Title: ${completedAction.title}
+- Payload summary: ${JSON.stringify(payload).slice(0, 400)}
+- Result: ${JSON.stringify(resultData).slice(0, 200)}
+
+ONLY suggest a follow-up if:
+1. It is a natural, closely related next step (e.g., after scheduling a meeting with someone → draft a confirmation email to them)
+2. Confidence ≥ 0.75
+3. The follow-up type is one of: calendar.create, email.send, people.note
+
+Do NOT suggest follow-ups for exploratory or advisory actions, or if there is no clear compelling next step.
+
+Respond with JSON:
+{
+  "followUp": boolean,
+  "actionType": "calendar.create" | "email.send" | "people.note" | null,
+  "actionCategory": "calendar" | "email" | "people" | null,
+  "title": "Brief title",
+  "description": "What this follow-up does and why",
+  "payload": { /* action-specific params */ },
+  "reasoning": "Why this is a natural next step",
+  "confidence": 0.0-1.0
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a concise AI assistant that suggests follow-up actions. Respond only with valid JSON.' },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 400,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const parsed = JSON.parse(content);
+    if (!parsed.followUp || !parsed.actionType || (parsed.confidence ?? 0) < 0.75) return null;
+
+    return {
+      detected: true,
+      actionType: parsed.actionType,
+      actionCategory: parsed.actionCategory || 'system',
+      title: parsed.title || 'Follow-up action',
+      description: parsed.description || '',
+      payload: parsed.payload || {},
+      reasoning: parsed.reasoning || 'Natural follow-up from completed action',
+      confidence: parsed.confidence,
+    };
+  } catch (err) {
+    console.warn('[ai-actions] Follow-up detection failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Execute an approved action
  * Routes to the appropriate provider service based on action type
  */
@@ -505,7 +591,60 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
       rollbackAvailable: !!result.rollbackData,
       rollbackData: result.rollbackData,
     });
-    
+
+    // ─── Action Chaining: detect and spawn follow-up child action ───────────────
+    if (result.success && CHAINABLE_ACTION_TYPES.has(action.actionType)) {
+      const currentDepth = (action.chainDepth ?? 0);
+      if (currentDepth < MAX_CHAIN_DEPTH) {
+        setImmediate(async () => {
+          try {
+            // Check user's allow_action_chaining setting
+            const userSettings = await storage.getSettings(action.userId);
+            if (userSettings?.allowActionChaining === false) return;
+
+            const followUp = await detectFollowUpAction(action, result.resultData);
+            if (!followUp) return;
+
+            // Determine policy for the child action type
+            const { policy } = await getActionPolicy(action.userId, followUp.actionType);
+            if (policy === AI_ACTION_POLICIES.DISABLED) return;
+
+            const childDepth = currentDepth + 1;
+            const expiresAt = new Date();
+            expiresAt.setHours(expiresAt.getHours() + 24);
+
+            const childAction: InsertAiAction = {
+              userId: action.userId,
+              actionType: followUp.actionType,
+              actionCategory: followUp.actionCategory,
+              sourceType: 'manual', // chaining is agent-initiated
+              sourceText: `Chained from: ${action.title}`,
+              title: followUp.title,
+              description: followUp.description,
+              payload: followUp.payload,
+              status: AI_ACTION_STATUSES.PENDING,
+              aiReasoning: followUp.reasoning,
+              confidence: followUp.confidence,
+              parentActionId: action.id,
+              chainDepth: childDepth,
+              expiresAt,
+            };
+
+            const created = await storage.createAiAction(childAction);
+            console.log(`[ai-actions] Chained action spawned: ${followUp.actionType} (depth ${childDepth}) id=${created.id}`);
+
+            // If the user has auto-policy for this action type, execute it immediately
+            if (policy === AI_ACTION_POLICIES.AUTO) {
+              await executeAction(created);
+            }
+          } catch (chainErr) {
+            console.warn('[ai-actions] Action chaining failed:', chainErr instanceof Error ? chainErr.message : chainErr);
+          }
+        });
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

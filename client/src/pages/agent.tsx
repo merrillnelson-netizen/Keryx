@@ -48,6 +48,7 @@ import {
   Brain,
   DollarSign,
   UserPen,
+  GitBranch,
 } from "lucide-react";
 import { type AiAction, AI_ACTION_TYPES, AUTOMATION_TRIGGERS, AUTOMATION_ACTIONS } from "@shared/schema";
 
@@ -196,7 +197,7 @@ function getSourceLabel(sourceType: string): string {
 
 // ─── ActionCard ───────────────────────────────────────────────────────────────
 
-function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () => void }) {
+function ActionCard({ action, onMutated, isChild }: { action: AiAction; onMutated?: () => void; isChild?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -259,8 +260,19 @@ function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () =>
   const catCfg = CATEGORY_CONFIG[action.actionCategory];
   const anyMutating = approveMutation.isPending || rejectMutation.isPending || rollbackMutation.isPending;
 
+  const chainDepth = (action as any).chainDepth ?? 0;
+  const parentActionId = (action as any).parentActionId ?? null;
+
   return (
-    <div className={`rounded-lg border p-3 space-y-2 ${statusCfg.bg}`}>
+    <div className={`rounded-lg border p-3 space-y-2 ${statusCfg.bg} ${isChild ? 'border-l-2 border-l-violet-500/50' : ''}`}>
+      {/* Chain header badge */}
+      {parentActionId && (
+        <div className="flex items-center gap-1.5 text-xs text-violet-400 pb-1 border-b border-violet-500/20">
+          <GitBranch className="w-3 h-3" />
+          <span>Spawned from parent action</span>
+          {chainDepth > 0 && <span className="text-muted-foreground">· depth {chainDepth}</span>}
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {getCategoryIcon(action.actionCategory, "w-4 h-4 mt-0.5 flex-shrink-0")}
@@ -1130,9 +1142,46 @@ export default function AgentPage() {
                     : `${filteredActions.length} action${filteredActions.length !== 1 ? "s" : ""}`}
                   {categoryFilter !== "all" ? ` in ${CATEGORY_CONFIG[categoryFilter]?.label || categoryFilter}` : ""}
                 </p>
-                {filteredActions.map(action => (
-                  <ActionCard key={action.id} action={action} onMutated={handleMutated} />
-                ))}
+                {/* Build nested tree: root actions first, children indented below their parent */}
+                {(() => {
+                  const childrenByParent = new Map<string, AiAction[]>();
+                  const rootActions: AiAction[] = [];
+                  for (const a of filteredActions) {
+                    const parentId = (a as any).parentActionId;
+                    if (parentId) {
+                      const arr = childrenByParent.get(parentId) || [];
+                      arr.push(a);
+                      childrenByParent.set(parentId, arr);
+                    } else {
+                      rootActions.push(a);
+                    }
+                  }
+                  const items: JSX.Element[] = [];
+                  for (const action of rootActions) {
+                    items.push(
+                      <ActionCard key={action.id} action={action} onMutated={handleMutated} />
+                    );
+                    const children = childrenByParent.get(action.id) || [];
+                    for (const child of children) {
+                      items.push(
+                        <div key={child.id} className="pl-4 border-l border-violet-500/20 ml-2">
+                          <ActionCard action={child} onMutated={handleMutated} isChild />
+                        </div>
+                      );
+                    }
+                  }
+                  // Orphan children (parent not in current page) shown ungrouped at end
+                  const renderedIds = new Set(rootActions.map(a => a.id));
+                  for (const a of filteredActions) {
+                    const parentId = (a as any).parentActionId;
+                    if (parentId && !renderedIds.has((a as any).parentActionId)) {
+                      items.push(
+                        <ActionCard key={a.id} action={a} onMutated={handleMutated} isChild />
+                      );
+                    }
+                  }
+                  return items;
+                })()}
                 {hasMore && (
                   <Button
                     variant="outline"
