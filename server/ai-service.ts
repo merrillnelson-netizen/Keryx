@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { buildTemporalContext } from './temporal-context';
 
 /**
  * Convert a UTC Date to a formatted date string in the user's timezone
@@ -1057,11 +1058,8 @@ export async function generateMorningBriefing(
       }).join('\n')}`;
     }
 
-    // Build today's local date context so the AI can correctly label reminders
-    const nowForBriefing = new Date();
-    const briefingLocalDate = nowForBriefing.toLocaleDateString('en-CA', { timeZone: userTimezone }); // YYYY-MM-DD
-    const briefingDayOfWeek = nowForBriefing.toLocaleDateString('en-US', { timeZone: userTimezone, weekday: 'long' });
-    const briefingLocalTime = nowForBriefing.toLocaleTimeString('en-US', { timeZone: userTimezone, hour: 'numeric', minute: '2-digit', hour12: true });
+    // Build temporal context via shared helper — ensures consistent date/time handling across all AI prompts
+    const temporal = buildTemporalContext(userTimezone);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -1072,19 +1070,18 @@ export async function generateMorningBriefing(
 
 You are generating a ${timeOfDay} briefing for ${userName || 'the user'}. This is their daily system status report — direct, factual, and useful. Skip the pleasantries. Lead with what matters.
 
-TODAY'S DATE (user's local time): ${briefingLocalDate} (${briefingDayOfWeek})
-CURRENT LOCAL TIME: ${briefingLocalTime}
-USER'S TIMEZONE: ${userTimezone}
+TODAY'S DATE (user's local time): ${temporal.localDate} (${temporal.dayOfWeek})
+CURRENT LOCAL TIME: ${temporal.localTime}
+USER'S TIMEZONE: ${temporal.timezone} (${temporal.utcOffset})
 
-CRITICAL DATE RULES — READ CAREFULLY:
-1. TODAY is ${briefingLocalDate} (${briefingDayOfWeek}). TOMORROW is the next calendar day. Never confuse UTC with the user's local date.
+${temporal.criticalRules}
 2. For REMINDERS listed in the USER-SET REMINDERS section: the due date is already in local time — compare it against TODAY above to determine "today"/"tomorrow"/"this Thursday" etc.
 3. For appointments/events mentioned in EMAILS: each email shows its "Received" date. If an email says "your appointment is tomorrow", calculate from the email's received date, not from today. If an email says "your appointment is on [specific day/date]", use that specific date and compare to TODAY to determine "today"/"tomorrow"/"[day name]".
-4. NEVER label an appointment as "today" unless its date matches ${briefingLocalDate} exactly. If unsure, use the specific day name (e.g., "Thursday") rather than relative terms.
+4. NEVER label an appointment as "today" unless its date matches ${temporal.localDate} exactly. If unsure, use the specific day name (e.g., "Thursday") rather than relative terms.
 
 CRITICAL FOCUS AREAS RULE — NO PATTERN INFERENCE FOR TODAY:
 5. Do NOT infer or predict that a recurring activity happens TODAY based solely on memory patterns. Seeing several memories about "billiards league" does NOT mean there is billiards tonight. Seeing gym memories does NOT mean the user goes to the gym today. Memory patterns show habits over time — they do NOT confirm today's schedule.
-6. A specific activity may only be stated as happening "today" or "tonight" if it appears explicitly in: (a) a USER-SET REMINDER dated today (${briefingLocalDate}), or (b) a calendar event for today. Without one of these, use non-time-specific language: "Continue attending billiards league as usual" rather than "Prepare for billiards league tonight."
+6. A specific activity may only be stated as happening "today" or "tonight" if it appears explicitly in: (a) a USER-SET REMINDER dated today (${temporal.localDate}), or (b) a calendar event for today. Without one of these, use non-time-specific language: "Continue attending billiards league as usual" rather than "Prepare for billiards league tonight."
 7. Pattern-based insights are welcome in FOCUS_AREAS (e.g., "You've been consistent with your billiards league practice") but must never predict today's schedule from patterns alone.
 
 Based on their recent memories${recentEmails?.length ? ', emails' : ''}${financialSummary ? ', and spending data' : ''}${locationContext ? ', location patterns' : ''}${activeProjects?.length ? ', with special attention to their active focus areas' : ''}${knownPeople?.length ? ', and knowledge about people in their life' : ''}${activeGoals?.length ? ', and their active goals' : ''}${activeReminders?.length ? ', and their set reminders' : ''}, create a personalized briefing that:
@@ -1259,19 +1256,8 @@ export async function detectCalendarEvent(
   currentDate: Date = new Date(),
   userTimezone: string = 'UTC'
 ): Promise<DetectedCalendarEvent> {
-  // Build local date context so AI knows the user's actual day/time
-  const now = currentDate;
-  const localDate = now.toLocaleDateString('en-CA', { timeZone: userTimezone }); // YYYY-MM-DD
-  const localTime = now.toLocaleTimeString('en-US', {
-    timeZone: userTimezone,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-  const localDayOfWeek = now.toLocaleDateString('en-US', {
-    timeZone: userTimezone,
-    weekday: 'long',
-  });
+  // Use shared temporal context helper for consistent date/time handling
+  const temporal = buildTemporalContext(userTimezone);
 
   try {
     const response = await openai.chat.completions.create({
@@ -1282,13 +1268,12 @@ export async function detectCalendarEvent(
           content: `You are an AI assistant that detects future events from natural language.
 Analyze the text to determine if it describes a FUTURE calendar event (meeting, appointment, gathering, call, etc.).
 
-USER'S LOCAL DATE: ${localDate}
-USER'S LOCAL TIME: ${localTime}
-USER'S DAY OF WEEK: ${localDayOfWeek}
-USER'S TIMEZONE: ${userTimezone}
+USER'S LOCAL DATE: ${temporal.localDate}
+USER'S LOCAL TIME: ${temporal.localTime}
+USER'S DAY OF WEEK: ${temporal.dayOfWeek}
+USER'S TIMEZONE: ${temporal.timezone} (${temporal.utcOffset})
 
-CRITICAL DATETIME RULES:
-1. Always calculate relative dates (today, tomorrow, Saturday, next week, etc.) from the USER'S LOCAL DATE and DAY OF WEEK shown above — never from UTC.
+${temporal.criticalRules}
 2. All datetimes you return MUST be in the user's LOCAL time as plain ISO 8601 WITHOUT a Z suffix or timezone offset (e.g. "2026-03-07T08:00:00" not "2026-03-07T15:00:00Z"). The calendar system will apply the user's timezone automatically.
 3. Only detect FUTURE events (not past events or general statements).
 4. If dates are relative ("tomorrow", "next Tuesday", "in 2 weeks"), calculate the actual date from USER'S LOCAL DATE above.

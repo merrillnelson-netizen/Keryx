@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { tavily } from "@tavily/core";
-import { getYearInTimezone, getMonthNameInTimezone } from "./temporal-context";
+import { buildTemporalContext } from "./temporal-context";
 
 const openai = new OpenAI({ 
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -112,8 +112,7 @@ export async function extractSearchableInsights(
   // 1. LOCATION AWARENESS: If user is visiting a new location, show local discoveries
   if (locationContext?.isAway && locationContext.currentCity) {
     const cityName = locationContext.currentCity.split(',')[0].trim();
-    const currentYear = getYearInTimezone(userTimezone);
-    const currentMonth = getMonthNameInTimezone(userTimezone);
+    const { year: currentYear, month: currentMonth } = buildTemporalContext(userTimezone);
     
     insights.push({
       type: 'location',
@@ -242,7 +241,7 @@ function generateGoalTopics(title: string, description: string, userTimezone: st
   // Generate search topics based on goal title and description
   const combined = `${title} ${description}`.toLowerCase();
   const topics: string[] = [];
-  const currentYear = getYearInTimezone(userTimezone);
+  const { year: currentYear } = buildTemporalContext(userTimezone);
   
   // Add a specific search based on the goal
   topics.push(`how to ${title.toLowerCase()} tips ${currentYear}`);
@@ -478,7 +477,7 @@ function topicHasLocation(topic: string): boolean {
 
 function buildPersonalizedSearchQueries(insight: InsightContext, userTimezone: string = 'America/Denver'): string[] {
   const queries: string[] = [];
-  const currentYear = getYearInTimezone(userTimezone);
+  const { year: currentYear } = buildTemporalContext(userTimezone);
   
   if (insight.type === 'location' && insight.location) {
     // Currently visiting - focus on immediate local info
