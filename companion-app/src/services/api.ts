@@ -6,6 +6,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { MCPPayload, MCPResponse } from '../types/mcp';
 
+// Production URL — update this to your Keryx deployment URL before building for release.
+// In development, the local server is used automatically.
 const API_BASE_URL = __DEV__ 
   ? 'http://localhost:5000' 
   : 'https://nelson.replit.app';
