@@ -174,8 +174,10 @@ export async function dispatchOutboundToDestination(
 
   for (attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     lastResult = await postToDestination(dest, body, isJson);
-    // Log every individual attempt
-    setImmediate(() => logAttempt(userId, eventType, dest!, attempt, lastResult, body));
+    // Capture loop variables for async setImmediate to avoid closure/timing issues
+    const capturedAttempt = attempt;
+    const capturedResult = { ...lastResult };
+    setImmediate(() => logAttempt(userId, eventType, dest!, capturedAttempt, capturedResult, body));
     if (lastResult.ok) break;
     const isTransient = lastResult.status === 0 || lastResult.status >= 500;
     if (!isTransient || attempt >= MAX_RETRIES) break;

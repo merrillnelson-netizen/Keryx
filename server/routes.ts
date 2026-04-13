@@ -7050,8 +7050,12 @@ Respond with JSON only.`
   app.put("/api/relay/destinations/:id", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      // Reuse the canonical insert schema (partial) to ensure field types match InsertRelayDestination
-      const data = insertRelayDestinationSchema.partial().omit({ userId: true }).parse(req.body);
+      // Reuse the canonical insert schema (partial), then override outboundFormat with strict enum validation
+      const baseSchema = insertRelayDestinationSchema.partial().omit({ userId: true });
+      const strictSchema = baseSchema.extend({
+        outboundFormat: z.enum(['json', 'text']).optional(),
+      });
+      const data = strictSchema.parse(req.body);
       const updated = await storage.updateRelayDestination(req.params.id, user.id, data);
       if (!updated) return res.status(404).json({ error: 'Destination not found' });
       res.json(updated);
