@@ -250,7 +250,7 @@ app.use((req, res, next) => {
           `SELECT DISTINCT ar.user_id, s.user_timezone
            FROM automation_rules ar
            LEFT JOIN settings s ON s.user_id = ar.user_id
-           WHERE ar.enabled = true AND ar.trigger = 'daily.schedule'`
+           WHERE ar.enabled = true AND ar.trigger_type = 'daily.schedule'`
         );
         for (const row of activeUsers.rows) {
           setImmediate(async () => {
