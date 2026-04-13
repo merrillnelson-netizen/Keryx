@@ -3912,6 +3912,7 @@ Respond with JSON only.`
           name: p.name,
           mentionCount: p.mentionCount ?? 0,
           velocityTier: p.velocityTier ?? 'acquaintance',
+          relationship: p.relationship ?? 'acquaintance',
         })),
         goalProgress: goals.map((g) => ({
           id: g.id,

@@ -126,7 +126,7 @@ interface EcosystemStats {
     trendDir: "up" | "down" | "flat";
   };
   topicDistribution: { topic: string; count: number }[];
-  relationshipHealth: { name: string; mentionCount: number; velocityTier: string }[];
+  relationshipHealth: { name: string; mentionCount: number; velocityTier: string; relationship: string }[];
   goalProgress: {
     id: string;
     title: string;
@@ -164,16 +164,35 @@ const TX_DAYS_OPTIONS = [
   { value: "90", label: "90 days" },
 ];
 
-const VELOCITY_COLORS: Record<string, string> = {
-  partner: "#6366f1",
-  family: "#6366f1",
+// Colors keyed by relationship type (what this person is to you)
+const RELATIONSHIP_COLORS: Record<string, string> = {
+  partner:      "#6366f1",
+  family:       "#8b5cf6",
   close_friend: "#3b82f6",
-  friend: "#10b981",
+  friend:       "#10b981",
+  colleague:    "#f59e0b",
+  client:       "#f97316",
+  mentor:       "#06b6d4",
+  other:        "#6b7280",
+  unset:        "#6b7280",
   acquaintance: "#6b7280",
 };
 
-function velocityColor(tier: string): string {
-  return VELOCITY_COLORS[tier] ?? "#6b7280";
+// Velocity tier fallback colors (used when relationship is unset/unknown)
+const VELOCITY_TIER_COLORS: Record<string, string> = {
+  high:         "#10b981",
+  medium:       "#f59e0b",
+  acquaintance: "#6b7280",
+};
+
+const VELOCITY_COLORS = RELATIONSHIP_COLORS; // alias for legend rendering
+
+function relationshipColor(relationship: string, velocityTier: string): string {
+  // Prefer relationship type color; fall back to velocity tier
+  if (relationship && relationship !== 'unset' && relationship !== 'acquaintance') {
+    return RELATIONSHIP_COLORS[relationship] ?? "#6b7280";
+  }
+  return VELOCITY_TIER_COLORS[velocityTier] ?? "#6b7280";
 }
 
 function velocityLabel(tier: string): string {
@@ -766,8 +785,8 @@ export default function Ecosystem() {
                           border: "1px solid rgba(255,255,255,0.1)",
                           borderRadius: 8,
                         }}
-                        formatter={(val: number, _name: string, item: { payload: { velocityTier: string } }) => [
-                          `${val} mentions — ${velocityLabel(item.payload.velocityTier)}`,
+                        formatter={(val: number, _name: string, item: { payload: { relationship: string; velocityTier: string } }) => [
+                          `${val} mentions — ${velocityLabel(item.payload.relationship || item.payload.velocityTier)}`,
                           "Mentions",
                         ]}
                       />
@@ -775,7 +794,7 @@ export default function Ecosystem() {
                         {data.relationshipHealth.map((p) => (
                           <Cell
                             key={p.name}
-                            fill={velocityColor(p.velocityTier)}
+                            fill={relationshipColor(p.relationship, p.velocityTier)}
                           />
                         ))}
                       </Bar>
@@ -784,18 +803,21 @@ export default function Ecosystem() {
                 )}
                 {data.relationshipHealth.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {Object.entries(VELOCITY_COLORS)
-                      .filter(([tier]) =>
-                        data.relationshipHealth.some((p) => p.velocityTier === tier)
+                    {Object.entries(RELATIONSHIP_COLORS)
+                      .filter(([rel]) =>
+                        rel !== 'unset' &&
+                        data.relationshipHealth.some((p) =>
+                          (p.relationship || 'acquaintance') === rel
+                        )
                       )
-                      .map(([tier, color]) => (
-                        <div key={tier} className="flex items-center gap-1.5">
+                      .map(([rel, color]) => (
+                        <div key={rel} className="flex items-center gap-1.5">
                           <div
                             className="w-2.5 h-2.5 rounded-full"
                             style={{ background: color }}
                           />
                           <span className="text-xs text-muted-foreground">
-                            {velocityLabel(tier)}
+                            {velocityLabel(rel)}
                           </span>
                         </div>
                       ))}

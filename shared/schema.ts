@@ -631,9 +631,9 @@ export const webSearchPayloadSchema = z.object({
 });
 
 export const memoryCreatePayloadSchema = z.object({
-  memoryText: z.string(),          // The memory content to log
-  topicTag: z.string().optional(), // Optional category tag
-  mood: z.string().optional(),     // Optional mood
+  memoryText: z.string(),                      // The memory content to log
+  topicTag: z.string().nullable().optional(),  // Optional category tag
+  mood: z.string().nullable().optional(),      // Optional mood (AI may send null)
 });
 
 export const financialAlertPayloadSchema = z.object({

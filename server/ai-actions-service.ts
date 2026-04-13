@@ -1166,13 +1166,44 @@ async function executeGoalUpdate(action: AiAction): Promise<ActionExecutionResul
     // If no goalId provided, attempt fuzzy match by title
     if (!goalId) {
       const goals = await storage.getGoals(action.userId);
-      const matched = goals.find(g =>
-        g.title.toLowerCase().includes(payload.goalTitle.toLowerCase()) ||
-        payload.goalTitle.toLowerCase().includes(g.title.toLowerCase())
-      );
-      if (matched) {
-        goalId = matched.id;
+
+      // Normalize: strip numbers/percentages and common noise words, then compare
+      const normalize = (s: string) =>
+        s.toLowerCase()
+          .replace(/\d+\s*%/g, '')            // "70%" → ""
+          .replace(/\b(goal|progress|update|my|the|a|an|to|for|on)\b/g, '')
+          .replace(/[^a-z\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const wordSet = (s: string) => new Set(normalize(s).split(' ').filter(w => w.length > 2));
+      const overlapScore = (a: string, b: string) => {
+        const wa = wordSet(a);
+        const wb = wordSet(b);
+        let n = 0;
+        for (const w of wa) if (wb.has(w)) n++;
+        return n;
+      };
+
+      const normPayload = normalize(payload.goalTitle);
+      let matched = goals.find(g => {
+        const normGoal = normalize(g.title);
+        return normGoal === normPayload ||
+          normGoal.includes(normPayload) ||
+          normPayload.includes(normGoal) ||
+          g.title.toLowerCase().includes(payload.goalTitle.toLowerCase()) ||
+          payload.goalTitle.toLowerCase().includes(g.title.toLowerCase());
+      });
+
+      // Fallback: pick best word-overlap match if score >= 2
+      if (!matched) {
+        let bestScore = 1; // require at least 2 overlapping words
+        for (const g of goals) {
+          const score = overlapScore(g.title, payload.goalTitle);
+          if (score > bestScore) { bestScore = score; matched = g; }
+        }
       }
+
+      if (matched) goalId = matched.id;
     }
 
     if (!goalId) {
