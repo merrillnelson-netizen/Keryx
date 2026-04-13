@@ -857,9 +857,9 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
       };
     });
 
-    // Persist as cached discoveries so they surface on the Discoveries page
-    const cacheKey = `agent_search_${action.id}`;
-    await storage.setAiCache(action.userId, 'discoveries', cacheKey, {
+    // Persist as cached discoveries under the standard 'discoveries' cache key
+    // so results appear immediately in the Discoveries UI (/api/discoveries reads this key)
+    await storage.setAiCache(action.userId, 'discoveries', 'discoveries', {
       discoveries: discoveryItems,
       insights: [],
       generatedAt: new Date().toISOString(),
@@ -1263,13 +1263,23 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
   available: boolean;
   provider?: string;
 }[]> {
-  const [googleCalendar, outlookCalendar, gmail, outlookMail] = await Promise.all([
+  // Check integration and data presence in parallel
+  const [googleCalendar, outlookCalendar, gmail, outlookMail, people, goals, relayDests] = await Promise.all([
     isGoogleCalendarConnected(userId),
     isOutlookConnected(userId),
     isGmailConnected(userId),
     isOutlookMailConnected(userId),
+    userId ? storage.getPeople(userId).catch(() => []) : Promise.resolve([]),
+    userId ? storage.getGoals(userId).catch(() => []) : Promise.resolve([]),
+    userId ? storage.getRelayDestinations(userId).catch(() => []) : Promise.resolve([]),
   ]);
-  
+
+  const hasPeople = Array.isArray(people) && people.length > 0;
+  const hasGoals = Array.isArray(goals) && goals.length > 0;
+  // Financial alert available when Plaid is configured (PLAID_CLIENT_ID present)
+  const hasFinancialIntegration = !!process.env.PLAID_CLIENT_ID;
+  const hasRelayDestination = Array.isArray(relayDests) && relayDests.some((d) => d.enabled);
+
   return [
     // Calendar
     {
@@ -1294,7 +1304,7 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: gmail || outlookMail,
       provider: gmail ? 'gmail' : outlookMail ? 'outlook' : undefined,
     },
-    // Reminders
+    // Reminders — always available (no dependency)
     {
       actionType: AI_ACTION_TYPES.REMINDER_CREATE,
       category: AI_ACTION_CATEGORIES.REMINDER,
@@ -1302,37 +1312,37 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: true,
       provider: undefined,
     },
-    // People
+    // People — require at least one contact in the people list
     {
       actionType: AI_ACTION_TYPES.PEOPLE_REACH_OUT,
       category: AI_ACTION_CATEGORIES.PEOPLE,
       description: 'Suggest reaching out to a contact',
-      available: true,
+      available: hasPeople,
       provider: undefined,
     },
     {
       actionType: AI_ACTION_TYPES.PEOPLE_NOTE,
       category: AI_ACTION_CATEGORIES.PEOPLE,
       description: 'Add a note to a person\'s contact record',
-      available: true,
+      available: hasPeople,
       provider: undefined,
     },
-    // Goals
+    // Goals — require at least one active goal
     {
       actionType: AI_ACTION_TYPES.GOAL_UPDATE,
       category: AI_ACTION_CATEGORIES.GOALS,
       description: 'Update goal progress based on memory evidence',
-      available: true,
+      available: hasGoals,
       provider: undefined,
     },
     {
       actionType: AI_ACTION_TYPES.GOAL_MILESTONE,
       category: AI_ACTION_CATEGORIES.GOALS,
       description: 'Suggest adding or completing a milestone',
-      available: true,
+      available: hasGoals,
       provider: undefined,
     },
-    // Research
+    // Research — requires Tavily API key
     {
       actionType: AI_ACTION_TYPES.WEB_SEARCH,
       category: AI_ACTION_CATEGORIES.RESEARCH,
@@ -1340,7 +1350,7 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: !!process.env.TAVILY_API_KEY,
       provider: 'tavily',
     },
-    // Memory
+    // Memory — always available (pure AI pipeline, no external deps)
     {
       actionType: AI_ACTION_TYPES.MEMORY_CREATE,
       category: AI_ACTION_CATEGORIES.MEMORY,
@@ -1348,13 +1358,13 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: true,
       provider: undefined,
     },
-    // Financial
+    // Financial — requires Plaid integration
     {
       actionType: AI_ACTION_TYPES.FINANCIAL_ALERT,
       category: AI_ACTION_CATEGORIES.FINANCIAL,
       description: 'Surface a financial pattern or spending alert',
-      available: true,
-      provider: undefined,
+      available: hasFinancialIntegration,
+      provider: 'plaid',
     },
     // System
     {
@@ -1364,12 +1374,12 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: true,
       provider: undefined,
     },
-    // Relay
+    // Relay — requires at least one enabled destination
     {
       actionType: AI_ACTION_TYPES.RELAY_OUTBOUND,
       category: AI_ACTION_CATEGORIES.RELAY,
       description: 'Send content via outbound relay',
-      available: true,
+      available: hasRelayDestination,
       provider: undefined,
     },
   ];
