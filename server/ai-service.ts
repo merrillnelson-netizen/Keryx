@@ -366,7 +366,7 @@ For food/meal-related entries, use these EXACT field names:
    - content: What to remind about (the action or task)
    - triggerType: "time" for time-based, "location" for location-based
    - triggerTime: For time-based, convert to UTC and output in ISO 8601 format with Z suffix. IMPORTANT CONTEXT:
-     * Current date/time in user's timezone (${extractTemporal.timezone}): ${extractTemporal.localDate}T${extractTemporal.localTime} (${extractTemporal.utcOffset})
+     * Current date/time in user's timezone (${extractTemporal.timezone}): ${extractTemporal.localDate}T${extractTemporal.localTime24} (${extractTemporal.utcOffset})
      * Current UTC date/time: ${new Date().toISOString()}
      * When the user says "at 3pm", they mean 3pm in ${extractTemporal.timezone}.
      * You must CONVERT the user's local time to UTC and output with Z suffix.

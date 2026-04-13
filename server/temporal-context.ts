@@ -86,12 +86,13 @@ function getUtcOffsetString(tz: string, now: Date = new Date()): string {
 export function buildTemporalContext(tz: string = DEFAULT_TZ, referenceDate?: Date): {
   year: number;
   month: string;
-  localDate: string;     // YYYY-MM-DD in user's timezone
-  localTime: string;     // "h:mm AM/PM" in user's timezone
-  dayOfWeek: string;     // e.g. "Monday"
-  timezone: string;      // IANA tz string, e.g. "America/Denver"
-  utcOffset: string;     // e.g. "UTC-6"
-  criticalRules: string; // Ready-to-paste CRITICAL DATE RULES block for AI prompts
+  localDate: string;      // YYYY-MM-DD in user's timezone
+  localTime: string;      // "h:mm AM/PM" in user's timezone (human-readable display)
+  localTime24: string;    // "HH:MM" 24-hour format — use this in machine-readable/AI conversion prompts
+  dayOfWeek: string;      // e.g. "Monday"
+  timezone: string;       // IANA tz string, e.g. "America/Denver"
+  utcOffset: string;      // e.g. "UTC-6"
+  criticalRules: string;  // Ready-to-paste CRITICAL DATE RULES block for AI prompts
 } {
   const now = referenceDate ?? new Date();
   const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
@@ -101,6 +102,12 @@ export function buildTemporalContext(tz: string = DEFAULT_TZ, referenceDate?: Da
     minute: '2-digit',
     hour12: true,
   });
+  const localTime24 = now.toLocaleTimeString('en-GB', {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }); // Returns "HH:MM" in 24-hour format
   const dayOfWeek = now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long' });
   const year = parseInt(now.toLocaleDateString('en-CA', { timeZone: tz, year: 'numeric' }), 10);
   const month = now.toLocaleDateString('en-US', { timeZone: tz, month: 'long' });
@@ -114,7 +121,7 @@ export function buildTemporalContext(tz: string = DEFAULT_TZ, referenceDate?: Da
 - When the user says "tomorrow", compute the day after ${localDate}.
 - When the user says "next year", use ${year + 1}.
 - When the user says "next [weekday]", compute the next occurrence of that day after ${localDate}.
-- Treat all relative time references ("in 30 minutes", "this afternoon") as relative to ${localTime} in ${tz}.`;
+- Treat all relative time references ("in 30 minutes", "this afternoon") as relative to ${localTime24} (${localTime}) in ${tz}.`;
 
-  return { year, month, localDate, localTime, dayOfWeek, timezone: tz, utcOffset, criticalRules };
+  return { year, month, localDate, localTime, localTime24, dayOfWeek, timezone: tz, utcOffset, criticalRules };
 }
