@@ -28,7 +28,7 @@ import {
   calendarCreatePayloadSchema,
   emailSendPayloadSchema,
 } from "@shared/schema";
-import { createCalendarEvent, isGoogleCalendarConnected } from "./calendar-service";
+import { createCalendarEvent, isGoogleCalendarConnected, deleteGoogleCalendarEvent } from "./calendar-service";
 import { sendEmail as sendGmailEmail, isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
 import { sendOutlookEmail, isOutlookMailConnected } from "./outlook-mail-service";
@@ -851,8 +851,13 @@ export async function processUserInputForActions(
 }
 
 /**
- * Get available action types with connection status
+ * Delete a calendar event by ID — used for rollback compensation.
+ * Wraps deleteGoogleCalendarEvent from calendar-service.
  */
+export async function deleteCalendarEventById(eventId: string, userId: string): Promise<void> {
+  await deleteGoogleCalendarEvent(eventId, userId);
+}
+
 export async function getAvailableActionTypes(userId?: string): Promise<{
   actionType: string;
   category: string;

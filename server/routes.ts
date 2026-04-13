@@ -4032,7 +4032,7 @@ Respond with JSON only.`
   // =========================================
 
   /**
-   * GET /api/actions - Get user's AI actions with optional status filter
+   * GET /api/actions - Get user's AI actions with optional status filter, pagination, and date filter
    */
   app.get("/api/actions", requireAuth, async (req, res) => {
     try {
@@ -4040,14 +4040,38 @@ Respond with JSON only.`
       const statusFilter = req.query.status 
         ? (req.query.status as string).split(',') 
         : undefined;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       
-      const actions = await storage.getAiActions(user.id, statusFilter, limit);
+      // Server-side date filtering: 'today' | '7d' | '30d' | 'all'
+      let since: Date | undefined;
+      const range = req.query.range as string;
+      if (range && range !== 'all') {
+        since = new Date();
+        if (range === 'today') {
+          since.setHours(0, 0, 0, 0);
+        } else if (range === '7d') {
+          since.setDate(since.getDate() - 7);
+          since.setHours(0, 0, 0, 0);
+        } else if (range === '30d') {
+          since.setDate(since.getDate() - 30);
+          since.setHours(0, 0, 0, 0);
+        }
+      }
+      
+      const [actions, total] = await Promise.all([
+        storage.getAiActions(user.id, statusFilter, limit, offset, since),
+        storage.getAiActionsCount(user.id, statusFilter, since),
+      ]);
       
       res.json({
         status: 'success',
         data: actions,
         count: actions.length,
+        total,
+        offset,
+        limit,
+        hasMore: offset + actions.length < total,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -4062,18 +4086,29 @@ Respond with JSON only.`
   app.get("/api/actions/stats", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const [all, pending] = await Promise.all([
-        storage.getAiActions(user.id, undefined, 500),
-        storage.getPendingActions(user.id),
-      ]);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const completedToday = all.filter(a => 
-        a.status === 'completed' && new Date(a.createdAt) >= today
-      ).length;
-      const rejectedTotal = all.filter(a => a.status === 'rejected').length;
-      const failedTotal = all.filter(a => a.status === 'failed').length;
-      const completedTotal = all.filter(a => a.status === 'completed').length;
+      
+      const [
+        pending,
+        completedTotal,
+        completedToday,
+        failedTotal,
+        failedToday,
+        rejectedTotal,
+        rejectedToday,
+        totalActions,
+      ] = await Promise.all([
+        storage.getPendingActions(user.id),
+        storage.getAiActionsCount(user.id, ['completed']),
+        storage.getAiActionsCount(user.id, ['completed'], today),
+        storage.getAiActionsCount(user.id, ['failed']),
+        storage.getAiActionsCount(user.id, ['failed'], today),
+        storage.getAiActionsCount(user.id, ['rejected']),
+        storage.getAiActionsCount(user.id, ['rejected'], today),
+        storage.getAiActionsCount(user.id),
+      ]);
+      
       // Category breakdown of pending actions
       const categoryBreakdown: Record<string, number> = {};
       for (const a of pending) {
@@ -4085,9 +4120,11 @@ Respond with JSON only.`
           pendingCount: pending.length,
           completedToday,
           completedTotal,
-          rejectedTotal,
+          failedToday,
           failedTotal,
-          totalActions: all.length,
+          rejectedToday,
+          rejectedTotal,
+          totalActions,
           categoryBreakdown,
         },
         timestamp: new Date().toISOString(),
@@ -4259,7 +4296,7 @@ Respond with JSON only.`
 
   /**
    * POST /api/actions/:id/rollback - Roll back a completed action
-   * Only available when rollbackAvailable is true and rolledBackAt is null
+   * Executes compensating actions based on rollbackData, then marks rolledBackAt.
    */
   app.post("/api/actions/:id/rollback", requireAuth, async (req, res) => {
     try {
@@ -4279,12 +4316,41 @@ Respond with JSON only.`
         return sendErrorResponse(res, 400, "Action has already been rolled back");
       }
 
-      // Mark as rolled back
+      // Execute compensating actions based on rollbackData
+      let compensationNote: string | undefined;
+      if (action.rollbackData) {
+        const rd = action.rollbackData as Record<string, unknown>;
+        
+        if (action.actionType === 'calendar.create' && rd.action === 'delete' && rd.eventId) {
+          // Delete the created calendar event
+          try {
+            const { deleteCalendarEventById } = await import('./ai-actions-service.js');
+            await deleteCalendarEventById(String(rd.eventId), user.id);
+            compensationNote = `Calendar event deleted (id: ${rd.eventId})`;
+          } catch (compErr) {
+            const errMsg = compErr instanceof Error ? compErr.message : String(compErr);
+            compensationNote = `Event deletion attempted but may have failed: ${errMsg}. The action is marked as rolled back.`;
+          }
+        } else if (action.actionType === 'log.create' && rd.entryId) {
+          // Delete the created log entry
+          try {
+            await storage.deleteLogEntry(String(rd.entryId), user.id);
+            compensationNote = `Memory entry removed (id: ${rd.entryId})`;
+          } catch {
+            compensationNote = 'Memory entry removal attempted. The action is marked as rolled back.';
+          }
+        } else {
+          // For other action types with rollbackData, record that compensation was attempted
+          compensationNote = `Rollback recorded. Manual verification may be needed for action type: ${action.actionType}`;
+        }
+      }
+
+      // Mark as rolled back in DB
       await storage.markActionRolledBack(action.id, user.id);
 
       res.json({
         status: 'success',
-        message: 'Action rolled back',
+        message: compensationNote || 'Action rolled back',
         timestamp: new Date().toISOString()
       });
     } catch (error) {

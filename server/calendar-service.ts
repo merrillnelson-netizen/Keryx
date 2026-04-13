@@ -509,3 +509,15 @@ async function getOutlookUpcomingEvents(days: number = 14, userId?: string): Pro
     return [];
   }
 }
+
+/**
+ * Delete a Google Calendar event by event ID.
+ * Used for rollback compensation after a calendar.create action.
+ */
+export async function deleteGoogleCalendarEvent(eventId: string, userId?: string): Promise<void> {
+  const calendar = await getCalendarClient(userId);
+  await calendar.events.delete({
+    calendarId: 'primary',
+    eventId,
+  });
+}

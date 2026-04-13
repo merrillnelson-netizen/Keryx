@@ -307,8 +307,10 @@ interface ActionStats {
   pendingCount: number;
   completedToday: number;
   completedTotal: number;
-  rejectedTotal: number;
+  failedToday: number;
   failedTotal: number;
+  rejectedToday: number;
+  rejectedTotal: number;
   totalActions: number;
 }
 
@@ -337,7 +339,17 @@ function AgentActivityWidget() {
                 {stats.completedToday > 0 && (
                   <span className="flex items-center gap-1 text-green-400">
                     <CheckCircle2 className="w-3 h-3" />
-                    {stats.completedToday} done today
+                    {stats.completedToday} done
+                  </span>
+                )}
+                {stats.failedToday > 0 && (
+                  <span className="flex items-center gap-1 text-red-400">
+                    {stats.failedToday} failed
+                  </span>
+                )}
+                {stats.rejectedToday > 0 && (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    {stats.rejectedToday} rejected
                   </span>
                 )}
                 {stats.pendingCount > 0 && (
@@ -346,7 +358,7 @@ function AgentActivityWidget() {
                     {stats.pendingCount} pending
                   </span>
                 )}
-                {stats.completedToday === 0 && stats.pendingCount === 0 && (
+                {stats.completedToday === 0 && stats.failedToday === 0 && stats.rejectedToday === 0 && stats.pendingCount === 0 && (
                   <span>{stats.completedTotal} total actions taken</span>
                 )}
               </div>

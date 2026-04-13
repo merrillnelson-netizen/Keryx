@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { format, formatDistanceToNow, isToday, isWithinInterval, subDays } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import AppLayout from "@/components/app-layout";
 import {
   Bot,
@@ -53,8 +53,10 @@ interface ActionStats {
   pendingCount: number;
   completedToday: number;
   completedTotal: number;
-  rejectedTotal: number;
+  failedToday: number;
   failedTotal: number;
+  rejectedToday: number;
+  rejectedTotal: number;
   totalActions: number;
   categoryBreakdown: Record<string, number>;
 }
@@ -817,60 +819,75 @@ function RulesTab() {
   );
 }
 
-// ─── Time range filter helper ─────────────────────────────────────────────────
-
-function filterByTime(actions: AiAction[], timeFilter: string): AiAction[] {
-  const now = new Date();
-  if (timeFilter === "today") {
-    return actions.filter(a => isToday(new Date(a.createdAt)));
-  }
-  if (timeFilter === "7d") {
-    return actions.filter(a =>
-      isWithinInterval(new Date(a.createdAt), { start: subDays(now, 7), end: now })
-    );
-  }
-  if (timeFilter === "30d") {
-    return actions.filter(a =>
-      isWithinInterval(new Date(a.createdAt), { start: subDays(now, 30), end: now })
-    );
-  }
-  return actions; // "all"
-}
+const PAGE_SIZE = 50;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+interface ActionsResponse {
+  status: string;
+  data: AiAction[];
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
 
 export default function AgentPage() {
   const [mainTab, setMainTab] = useState<"actions" | "rules">("actions");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [timeFilter, setTimeFilter] = useState<string>("7d");
+  const [offset, setOffset] = useState(0);
+  const [accumulated, setAccumulated] = useState<AiAction[]>([]);
+  const filtersRef = useRef({ statusFilter, timeFilter });
+
+  // Reset on filter change
+  useEffect(() => {
+    const prev = filtersRef.current;
+    if (prev.statusFilter !== statusFilter || prev.timeFilter !== timeFilter) {
+      filtersRef.current = { statusFilter, timeFilter };
+      setOffset(0);
+      setAccumulated([]);
+    }
+  }, [statusFilter, timeFilter]);
 
   const { data: statsData } = useQuery<{ status: string; data: ActionStats }>({
     queryKey: ["/api/actions/stats"],
     refetchInterval: 30000,
   });
 
-  const { data: actionsData = { data: [] }, isLoading } = useQuery<{ data: AiAction[] }>({
-    queryKey: ["/api/actions", statusFilter !== "all" ? statusFilter : undefined],
+  const { data: actionsData, isLoading, isFetching } = useQuery<ActionsResponse>({
+    queryKey: ["/api/actions", statusFilter, timeFilter, offset],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      params.set("limit", "200");
+      if (timeFilter !== "all") params.set("range", timeFilter);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
       const res = await apiRequest("GET", `/api/actions?${params.toString()}`);
       return res.json();
     },
     refetchInterval: 30000,
   });
 
+  // Merge newly fetched page into accumulated list
+  useEffect(() => {
+    if (!actionsData?.data) return;
+    setAccumulated(prev => {
+      const ids = new Set(prev.map(a => a.id));
+      const fresh = actionsData.data.filter(a => !ids.has(a.id));
+      return offset === 0 ? actionsData.data : [...prev, ...fresh];
+    });
+  }, [actionsData, offset]);
+
   const stats = statsData?.data;
-  const allActions: AiAction[] = actionsData?.data || [];
-
-  const timeFiltered = filterByTime(allActions, timeFilter);
   const filteredActions = categoryFilter === "all"
-    ? timeFiltered
-    : timeFiltered.filter(a => a.actionCategory === categoryFilter);
+    ? accumulated
+    : accumulated.filter(a => a.actionCategory === categoryFilter);
 
-  const categories = Array.from(new Set(allActions.map(a => a.actionCategory))).sort();
+  const categories = Array.from(new Set(accumulated.map(a => a.actionCategory))).sort();
+  const hasMore = actionsData?.hasMore ?? false;
+  const total = actionsData?.total ?? 0;
 
   return (
     <AppLayout>
@@ -914,17 +931,7 @@ export default function AgentPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Done Today</p>
                   <p className="text-xl font-bold">{stats.completedToday}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-white/10">
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/10">
-                  <TrendingUp className="w-4 h-4 text-blue-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Done</p>
-                  <p className="text-xl font-bold">{stats.completedTotal}</p>
+                  <p className="text-[10px] text-muted-foreground">{stats.completedTotal} total</p>
                 </div>
               </CardContent>
             </Card>
@@ -934,8 +941,21 @@ export default function AgentPage() {
                   <XCircle className="w-4 h-4 text-red-400" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Rejected</p>
-                  <p className="text-xl font-bold">{stats.rejectedTotal}</p>
+                  <p className="text-xs text-muted-foreground">Failed Today</p>
+                  <p className="text-xl font-bold">{stats.failedToday}</p>
+                  <p className="text-[10px] text-muted-foreground">{stats.failedTotal} total</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-white/10">
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-muted/20">
+                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Rejected Today</p>
+                  <p className="text-xl font-bold">{stats.rejectedToday}</p>
+                  <p className="text-[10px] text-muted-foreground">{stats.rejectedTotal} total</p>
                 </div>
               </CardContent>
             </Card>
@@ -1071,17 +1091,34 @@ export default function AgentPage() {
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  {filteredActions.length} action{filteredActions.length !== 1 ? "s" : ""}
+                  {total > 0
+                    ? `Showing ${filteredActions.length} of ${total} action${total !== 1 ? "s" : ""}`
+                    : `${filteredActions.length} action${filteredActions.length !== 1 ? "s" : ""}`}
                   {categoryFilter !== "all" ? ` in ${CATEGORY_CONFIG[categoryFilter]?.label || categoryFilter}` : ""}
                 </p>
                 {filteredActions.map(action => (
                   <ActionCard key={action.id} action={action} />
                 ))}
+                {hasMore && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    disabled={isFetching}
+                    onClick={() => setOffset(o => o + PAGE_SIZE)}
+                  >
+                    {isFetching ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Loading...</>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                )}
               </div>
             )}
 
             {/* Info card for empty state */}
-            {!isLoading && allActions.length === 0 && (
+            {!isLoading && accumulated.length === 0 && (
               <Card className="glass-card border-violet-500/20 bg-violet-500/5">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">

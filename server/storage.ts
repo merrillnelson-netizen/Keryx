@@ -96,7 +96,8 @@ export interface IStorage {
   getOnThisDayMemories(userId: string, userTimezone?: string): Promise<LogEntry[]>;
   
   // AI Actions (user-scoped)
-  getAiActions(userId: string, status?: string[], limit?: number): Promise<AiAction[]>;
+  getAiActions(userId: string, status?: string[], limit?: number, offset?: number, since?: Date): Promise<AiAction[]>;
+  getAiActionsCount(userId: string, status?: string[], since?: Date): Promise<number>;
   getAiAction(id: string, userId: string): Promise<AiAction | undefined>;
   createAiAction(action: InsertAiAction): Promise<AiAction>;
   updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined>;
@@ -1369,11 +1370,14 @@ export class DatabaseStorage implements IStorage {
    * Handle AI-proposed and executed actions with approval workflows
    */
 
-  async getAiActions(userId: string, status?: string[], limit = 50): Promise<AiAction[]> {
+  async getAiActions(userId: string, status?: string[], limit = 50, offset = 0, since?: Date): Promise<AiAction[]> {
     try {
       const conditions = [eq(aiActions.userId, userId)];
       if (status && status.length > 0) {
         conditions.push(inArray(aiActions.status, status));
+      }
+      if (since) {
+        conditions.push(gte(aiActions.createdAt, since));
       }
       
       return await db
@@ -1381,10 +1385,31 @@ export class DatabaseStorage implements IStorage {
         .from(aiActions)
         .where(and(...conditions))
         .orderBy(desc(aiActions.createdAt))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
     } catch (error) {
       console.error('Failed to fetch AI actions:', error);
       throw new Error('Database error while fetching AI actions');
+    }
+  }
+
+  async getAiActionsCount(userId: string, status?: string[], since?: Date): Promise<number> {
+    try {
+      const conditions = [eq(aiActions.userId, userId)];
+      if (status && status.length > 0) {
+        conditions.push(inArray(aiActions.status, status));
+      }
+      if (since) {
+        conditions.push(gte(aiActions.createdAt, since));
+      }
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(aiActions)
+        .where(and(...conditions));
+      return row?.count ?? 0;
+    } catch (error) {
+      console.error('Failed to count AI actions:', error);
+      return 0;
     }
   }
 
