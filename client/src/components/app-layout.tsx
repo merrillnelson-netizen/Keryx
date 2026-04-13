@@ -24,14 +24,14 @@ const navigation = [
   { name: "History", href: "/history", icon: History },
   { name: "Insights", href: "/insights", icon: Brain },
   { name: "Synthesis", href: "/synthesis", icon: Sparkles },
-  { name: "Ideas", href: "/ideas", icon: Lightbulb },
-  { name: "Goals", href: "/goals", icon: Target },
+  { name: "Agent", href: "/agent", icon: Bot },
   { name: "Reminders", href: "/reminders", icon: Bell },
   { name: "People", href: "/people", icon: Users },
   { name: "Timeline", href: "/timeline", icon: Calendar },
   { name: "Messages", href: "/messages", icon: MessageCircle },
   { name: "Locations", href: "/locations", icon: MapPin },
-  { name: "Agent", href: "/agent", icon: Bot },
+  { name: "Ideas", href: "/ideas", icon: Lightbulb },
+  { name: "Goals", href: "/goals", icon: Target },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 
