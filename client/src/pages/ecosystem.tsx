@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,6 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   RefreshCw,
   Loader2,
@@ -22,6 +30,13 @@ import {
   Minus,
   CheckCircle2,
   Circle,
+  Eye,
+  EyeOff,
+  CreditCard,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Clock,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +56,39 @@ import {
   ResponsiveContainer,
   ReferenceArea,
 } from "recharts";
+
+interface SpendingCategory {
+  category: string;
+  amount: number;
+}
+
+interface SpendingSummary {
+  totalSpending: number;
+  transactionCount: number;
+  categoryBreakdown: SpendingCategory[];
+  topMerchants: Array<{ merchant: string; amount: number }>;
+}
+
+interface FinancialAccount {
+  id: string;
+  accountId: string;
+  name: string;
+  mask: string | null;
+  type: string;
+  isHidden: boolean;
+}
+
+interface Transaction {
+  id: string;
+  accountId: string;
+  amount: number;
+  date: string;
+  name: string;
+  merchantName: string | null;
+  primaryCategory: string | null;
+  pending: boolean | null;
+  paymentChannel: string | null;
+}
 
 interface EcosystemCaptions {
   memoryPulse: string;
@@ -102,6 +150,18 @@ interface EcosystemStats {
 const TOPIC_COLORS = [
   "#6366f1", "#f59e0b", "#10b981", "#3b82f6",
   "#ec4899", "#8b5cf6", "#f97316", "#14b8a6",
+];
+
+const SPENDING_COLORS = [
+  "#10b981", "#06b6d4", "#3b82f6", "#8b5cf6",
+  "#ec4899", "#f97316", "#eab308", "#84cc16",
+];
+
+const TX_DAYS_OPTIONS = [
+  { value: "7", label: "7 days" },
+  { value: "14", label: "14 days" },
+  { value: "30", label: "30 days" },
+  { value: "90", label: "90 days" },
 ];
 
 const VELOCITY_COLORS: Record<string, string> = {
@@ -240,6 +300,88 @@ export default function Ecosystem() {
       data.systemHealth.patternAlerts.insight +
       data.systemHealth.patternAlerts.neutral
     : 0;
+
+  // ── Financial detail state ──
+  const [txDays, setTxDays] = useState("30");
+  const [selectedAccount, setSelectedAccount] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [privacyMode, setPrivacyMode] = useState(false);
+
+  const fmt = (amount: number) =>
+    privacyMode ? "••••••" : `$${amount.toFixed(2)}`;
+
+  const isFinancialConnected = !!data?.financial.connected;
+
+  const { data: spendingSummary, isLoading: spendingLoading } = useQuery<SpendingSummary>({
+    queryKey: ["/api/plaid/spending-summary", txDays],
+    queryFn: async () => {
+      const res = await fetch(`/api/plaid/spending-summary?days=${txDays}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch spending summary");
+      return res.json();
+    },
+    enabled: isFinancialConnected,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const { data: accounts = [] } = useQuery<FinancialAccount[]>({
+    queryKey: ["/api/plaid/accounts"],
+    queryFn: async () => {
+      const res = await fetch("/api/plaid/accounts", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch accounts");
+      return res.json();
+    },
+    enabled: isFinancialConnected,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const { data: categoryOptions = [] } = useQuery<string[]>({
+    queryKey: ["/api/plaid/transaction-categories"],
+    queryFn: async () => {
+      const res = await fetch("/api/plaid/transaction-categories", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      return res.json();
+    },
+    enabled: isFinancialConnected,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const { data: transactions = [], isLoading: txLoading } = useQuery<Transaction[]>({
+    queryKey: ["/api/plaid/transactions", txDays, selectedAccount, selectedCategory],
+    queryFn: async () => {
+      const params = new URLSearchParams({ days: txDays, limit: "200" });
+      if (selectedAccount !== "all") params.set("accountId", selectedAccount);
+      if (selectedCategory !== "all") params.set("category", selectedCategory);
+      const res = await fetch(`/api/plaid/transactions?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch transactions");
+      return res.json();
+    },
+    enabled: isFinancialConnected,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const accountNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of accounts) {
+      map[a.id] = a.mask ? `${a.name} ····${a.mask}` : a.name;
+    }
+    return map;
+  }, [accounts]);
+
+  const visibleAccounts = useMemo(() => accounts.filter(a => !a.isHidden), [accounts]);
+
+  const txTotal = useMemo(
+    () => transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0),
+    [transactions]
+  );
+
+  const spendingChartData = useMemo(() => {
+    if (!spendingSummary?.categoryBreakdown) return [];
+    return spendingSummary.categoryBreakdown.slice(0, 8).map((cat, i) => ({
+      name: cat.category,
+      value: cat.amount,
+      fill: SPENDING_COLORS[i % SPENDING_COLORS.length],
+    }));
+  }, [spendingSummary?.categoryBreakdown]);
 
   return (
     <AppLayout>
@@ -744,14 +886,48 @@ export default function Ecosystem() {
             </Card>
 
             {/* ── Financial Pulse ── */}
-            <Card className="glass-card border-white/20">
+            <Card className="glass-card border-white/20 overflow-hidden">
               <CardHeader className="pb-1">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Wallet className="w-4 h-4 text-teal-400" />
-                  Financial Pulse
-                </CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wallet className="w-4 h-4 text-teal-400" />
+                    Financial Pulse
+                  </CardTitle>
+                  {data.financial.connected && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPrivacyMode(p => !p)}
+                        className="h-8 w-8 p-0"
+                        title={privacyMode ? "Show numbers" : "Hide numbers"}
+                      >
+                        {privacyMode
+                          ? <Eye className="w-4 h-4 text-muted-foreground" />
+                          : <EyeOff className="w-4 h-4 text-muted-foreground" />}
+                      </Button>
+                      <Select
+                        value={txDays}
+                        onValueChange={(v) => {
+                          setTxDays(v);
+                          setSelectedAccount("all");
+                          setSelectedCategory("all");
+                        }}
+                      >
+                        <SelectTrigger className="w-28 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TX_DAYS_OPTIONS.map(o => (
+                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-1">
+              <CardContent className="space-y-4">
                 <SectionCaption text={data.captions.financial} />
                 {!data.financial.connected ? (
                   <div className="text-center py-6 space-y-2">
@@ -761,74 +937,271 @@ export default function Ecosystem() {
                       Connect your bank in Settings to see spending insights here.
                     </p>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      <KpiBadge
-                        value={`$${(data.financial.totalSpending ?? 0).toLocaleString("en-US", {
-                          maximumFractionDigits: 0,
-                        })}`}
-                        label="Spent"
-                        icon={TrendingDown}
-                        color="text-red-400"
-                      />
-                      <KpiBadge
-                        value={`$${(data.financial.totalIncome ?? 0).toLocaleString("en-US", {
-                          maximumFractionDigits: 0,
-                        })}`}
-                        label="Income"
-                        icon={TrendingUp}
-                        color="text-emerald-400"
-                      />
-                      <KpiBadge
-                        value={data.financial.transactionCount ?? 0}
-                        label="Transactions"
-                        icon={Activity}
-                        color="text-teal-400"
-                      />
+                ) : spendingLoading ? (
+                  <div className="h-40 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-teal-400" />
+                  </div>
+                ) : !spendingSummary || spendingSummary.transactionCount === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                      <p className="text-sm">No transaction data for this period.</p>
                     </div>
-                    {data.financial.categoryBreakdown &&
-                      data.financial.categoryBreakdown.length > 0 && (
-                        <ResponsiveContainer width="100%" height={160}>
-                          <BarChart
-                            data={data.financial.categoryBreakdown}
-                            layout="vertical"
-                            margin={{ top: 4, right: 8, left: 4, bottom: 0 }}
-                          >
-                            <CartesianGrid
-                              strokeDasharray="3 3"
-                              stroke="rgba(255,255,255,0.06)"
-                              horizontal={false}
-                            />
-                            <XAxis
-                              type="number"
-                              tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
-                              tickFormatter={(v: number) => `$${v}`}
-                            />
-                            <YAxis
-                              type="category"
-                              dataKey="category"
-                              width={90}
-                              tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
-                              tickFormatter={(v: string) =>
-                                v
-                                  .replace(/_/g, " ")
-                                  .replace(/\b\w/g, (c) => c.toUpperCase())
-                                  .slice(0, 14)
-                              }
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                background: "rgba(15,15,25,0.9)",
-                                border: "1px solid rgba(255,255,255,0.1)",
-                                borderRadius: 8,
-                              }}
-                              formatter={(val: number) => [`$${val.toFixed(2)}`, "Spent"]}
-                            />
-                            <Bar dataKey="amount" fill="#14b8a6" radius={[0, 4, 4, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* Summary KPI tiles */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div className="glass-card p-3 rounded-xl text-center">
+                        <p className="text-lg font-bold text-emerald-500">
+                          {fmt(spendingSummary.totalSpending)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Total Spent</p>
+                      </div>
+                      <div className="glass-card p-3 rounded-xl text-center">
+                        <p className="text-lg font-bold text-primary">
+                          {spendingSummary.transactionCount}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Transactions</p>
+                      </div>
+                      <div className="glass-card p-3 rounded-xl text-center">
+                        <p className="text-lg font-bold text-cyan-500">
+                          {fmt(spendingSummary.totalSpending / spendingSummary.transactionCount)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Avg / Txn</p>
+                      </div>
+                      <div className="glass-card p-3 rounded-xl text-center">
+                        <p className="text-lg font-bold text-violet-500">
+                          {spendingSummary.categoryBreakdown.length}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Categories</p>
+                      </div>
+                    </div>
+
+                    {/* Charts: spending pie + top merchants */}
+                    <div className="grid md:grid-cols-2 gap-5">
+                      {spendingChartData.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                            By Category <span className="opacity-60 normal-case">(tap to filter)</span>
+                          </h4>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <PieChart>
+                              <Pie
+                                data={spendingChartData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={72}
+                                cursor="pointer"
+                                label={({ name, percent }) =>
+                                  `${name} ${(percent * 100).toFixed(0)}%`
+                                }
+                                labelLine={{ stroke: "rgba(255,255,255,0.3)" }}
+                                onClick={(entry) => {
+                                  const cat = entry?.name as string;
+                                  setSelectedCategory(prev => prev === cat ? "all" : cat);
+                                  const txEl = document.getElementById("eco-tx-browser");
+                                  if (txEl) txEl.scrollIntoView({ behavior: "smooth" });
+                                }}
+                              >
+                                {spendingChartData.map((entry, idx) => (
+                                  <Cell
+                                    key={`cell-${idx}`}
+                                    fill={entry.fill}
+                                    opacity={selectedCategory === "all" || selectedCategory === entry.name ? 1 : 0.4}
+                                    stroke={selectedCategory === entry.name ? "#fff" : "transparent"}
+                                    strokeWidth={2}
+                                  />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: number) => [
+                                  privacyMode ? "••••••" : `$${value.toFixed(2)}`,
+                                  "Amount",
+                                ]}
+                                contentStyle={{
+                                  backgroundColor: "rgba(0,0,0,0.8)",
+                                  border: "1px solid rgba(255,255,255,0.2)",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
                       )}
+
+                      {spendingSummary.topMerchants.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                            Top Merchants
+                          </h4>
+                          <div className="space-y-2">
+                            {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
+                              <div
+                                key={i}
+                                className="glass-card p-2.5 rounded-lg flex items-center justify-between gap-2"
+                              >
+                                <p className="text-xs text-foreground break-words flex-1">
+                                  {merchant.merchant}
+                                </p>
+                                <span className="text-xs font-semibold text-emerald-500 shrink-0">
+                                  {fmt(merchant.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Transaction Browser */}
+                    <div id="eco-tx-browser" className="space-y-3 pt-2 border-t border-white/10">
+                      <h4 className="text-xs font-semibold text-foreground flex items-center gap-2 uppercase tracking-wide">
+                        <CreditCard className="w-4 h-4 text-teal-400" />
+                        Transactions
+                      </h4>
+
+                      {/* Filters */}
+                      <div className="flex flex-wrap gap-2">
+                        {visibleAccounts.length > 1 && (
+                          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                            <SelectTrigger className="h-8 text-xs flex-1 min-w-32">
+                              <SelectValue placeholder="All Accounts" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Accounts</SelectItem>
+                              {visibleAccounts.map(a => (
+                                <SelectItem key={a.id} value={a.id}>
+                                  {a.name}{a.mask ? ` ····${a.mask}` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+
+                        {categoryOptions.length > 0 && (
+                          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                            <SelectTrigger className="h-8 text-xs flex-1 min-w-36">
+                              <SelectValue placeholder="All Categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Categories</SelectItem>
+                              {categoryOptions.map(c => (
+                                <SelectItem key={c} value={c}>{c}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+
+                        {(selectedAccount !== "all" || selectedCategory !== "all") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setSelectedAccount("all");
+                              setSelectedCategory("all");
+                            }}
+                          >
+                            Clear filters
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Count + total */}
+                      {!txLoading && transactions.length > 0 && (
+                        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                          <span>
+                            {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
+                          </span>
+                          <span className="font-medium text-emerald-500">
+                            {fmt(txTotal)} spent
+                          </span>
+                        </div>
+                      )}
+
+                      {/* List */}
+                      {txLoading ? (
+                        <div className="space-y-2">
+                          {[...Array(5)].map((_, i) => (
+                            <div key={i} className="glass-card p-3 rounded-lg animate-pulse">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-muted/40" />
+                                <div className="flex-1 space-y-1">
+                                  <div className="h-3 bg-muted/40 rounded w-2/3" />
+                                  <div className="h-2.5 bg-muted/30 rounded w-1/3" />
+                                </div>
+                                <div className="h-3 bg-muted/40 rounded w-16" />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : transactions.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">No transactions match your filters</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                          {transactions.map(tx => {
+                            const isDebit = tx.amount > 0;
+                            return (
+                              <div
+                                key={tx.id}
+                                className="glass-card p-3 rounded-lg flex items-center gap-3"
+                              >
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                  isDebit ? "bg-red-500/10" : "bg-emerald-500/10"
+                                )}>
+                                  {isDebit
+                                    ? <ArrowDownCircle className="w-4 h-4 text-red-400" />
+                                    : <ArrowUpCircle className="w-4 h-4 text-emerald-400" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground truncate">
+                                    {tx.merchantName || tx.name}
+                                  </p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(tx.date).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                      })}
+                                    </span>
+                                    {tx.primaryCategory && (
+                                      <span className="text-xs bg-white/10 text-muted-foreground rounded px-1.5 py-0.5">
+                                        {tx.primaryCategory}
+                                      </span>
+                                    )}
+                                    {tx.pending && (
+                                      <span className="text-xs bg-yellow-500/20 text-yellow-400 rounded px-1.5 py-0.5 flex items-center gap-1">
+                                        <Clock className="w-2.5 h-2.5" />Pending
+                                      </span>
+                                    )}
+                                  </div>
+                                  {accountNameMap[tx.accountId] && (
+                                    <p className="text-xs text-muted-foreground/60 truncate">
+                                      {accountNameMap[tx.accountId]}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className={cn(
+                                  "text-sm font-semibold shrink-0",
+                                  isDebit ? "text-red-400" : "text-emerald-400"
+                                )}>
+                                  {privacyMode
+                                    ? "••••••"
+                                    : `${isDebit ? "-" : "+"}$${Math.abs(tx.amount).toFixed(2)}`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
