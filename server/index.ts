@@ -217,11 +217,9 @@ app.use((req, res, next) => {
 
     // ─── Proactive Analysis Scheduler ────────────────────────────────────────
     // Run proactive analysis once per day for all users who have recently been active.
-    // Also fires the daily.schedule automation trigger every hour.
     setInterval(async () => {
       try {
         const { runProactiveAnalysis } = await import('./proactive-service');
-        const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
         const activeUsers = await pool.query(
           `SELECT DISTINCT le.user_id, s.user_timezone
            FROM log_entries le
@@ -234,22 +232,45 @@ app.use((req, res, next) => {
           } catch (e) {
             console.error(`[proactive-scheduler] Failed for user ${row.user_id?.slice(0, 8)}:`, e instanceof Error ? e.message : e);
           }
-          // Fire daily.schedule automation trigger for this user (non-blocking)
-          setImmediate(async () => {
-            try {
-              const tz = row.user_timezone || 'America/Denver';
-              const localHour = new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-              await fireTrigger(row.user_id, AUTOMATION_TRIGGERS.DAILY_SCHEDULE, {
-                userId: row.user_id,
-                localHour: parseInt(localHour, 10),
-              });
-            } catch { /* non-fatal */ }
-          });
         }
       } catch (err) {
         console.error('[proactive-scheduler] Cycle error:', err instanceof Error ? err.message : err);
       }
     }, 24 * 60 * 60 * 1000); // once per day
+
+    // ─── Daily Schedule Automation Trigger ───────────────────────────────────
+    // Fire the daily.schedule trigger every hour so rules can match any local hour.
+    // The automation engine's per-day run limit (default 3) prevents duplicate fires.
+    setInterval(async () => {
+      try {
+        const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
+        const activeUsers = await pool.query(
+          `SELECT DISTINCT le.user_id, s.user_timezone
+           FROM log_entries le
+           LEFT JOIN settings s ON s.user_id = le.user_id
+           WHERE le.timestamp >= NOW() - INTERVAL '14 days'`
+        );
+        for (const row of activeUsers.rows) {
+          setImmediate(async () => {
+            try {
+              const tz = row.user_timezone || 'America/Denver';
+              const localHourStr = new Date().toLocaleString('en-US', {
+                hour: 'numeric',
+                hour12: false,
+                timeZone: tz,
+              });
+              const localHour = parseInt(localHourStr, 10);
+              await fireTrigger(row.user_id, AUTOMATION_TRIGGERS.DAILY_SCHEDULE, {
+                userId: row.user_id,
+                localHour,
+              });
+            } catch { /* non-fatal */ }
+          });
+        }
+      } catch (err) {
+        console.error('[daily-schedule-trigger] Cycle error:', err instanceof Error ? err.message : err);
+      }
+    }, 60 * 60 * 1000); // every hour
     // ─────────────────────────────────────────────────────────────────────────
 
     // ─── Reminder Daemon ─────────────────────────────────────────────────────
