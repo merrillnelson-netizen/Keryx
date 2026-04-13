@@ -39,6 +39,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceArea,
 } from "recharts";
 
 interface EcosystemCaptions {
@@ -464,6 +465,24 @@ export default function Ecosystem() {
                         }}
                         labelFormatter={formatDate}
                         formatter={(val: number) => [val, "Mood Score"]}
+                      />
+                      {/* Positive band: ≥30 */}
+                      <ReferenceArea
+                        y1={30}
+                        y2={100}
+                        fill="#10b981"
+                        fillOpacity={0.07}
+                        strokeOpacity={0}
+                        label={undefined}
+                      />
+                      {/* Negative band: ≤-30 */}
+                      <ReferenceArea
+                        y1={-100}
+                        y2={-30}
+                        fill="#ef4444"
+                        fillOpacity={0.07}
+                        strokeOpacity={0}
+                        label={undefined}
                       />
                       <Line
                         type="monotone"

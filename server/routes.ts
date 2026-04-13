@@ -3628,9 +3628,9 @@ Respond with JSON only.`
         }
       }
 
-      // Goal avg progress
+      // Goal avg progress — use progressPercent (the actual DB column)
       const avgGoalProgress = goals.length > 0
-        ? Math.round(goals.reduce((s, g) => s + (g.progress ?? 0), 0) / goals.length)
+        ? Math.round(goals.reduce((s, g) => s + (g.progressPercent ?? 0), 0) / goals.length)
         : 0;
 
       // Build captions in parallel with response prep (fire-and-forget if slow, use defaults)
