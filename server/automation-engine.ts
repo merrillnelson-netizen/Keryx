@@ -296,6 +296,15 @@ function interpolate(template: string, ctx: TriggerContext): string {
 const MAX_CHAIN_DEPTH = 3;
 
 /**
+ * In-memory dedup tracker for loop-limit warnings.
+ * Tracks the last time a loop-limit insight was created per "userId:trigger" key.
+ * Prevents repeated system actions when a misconfigured circular rule fires repeatedly.
+ * Cooldown: 5 minutes per user+trigger pair.
+ */
+const loopLimitLastNotified = new Map<string, number>();
+const LOOP_LIMIT_NOTIFY_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
  * Fire a trigger event. Fetches matching enabled rules, evaluates conditions,
  * then executes actions asynchronously (fire-and-forget with error isolation).
  *
@@ -319,27 +328,33 @@ export async function fireTrigger(
         `at depth ${depth} — aborting to prevent runaway loop. ` +
         `Check for circular automation rules (e.g. action.completed → create_ai_action → action.completed).`
       );
-      // Surface a user-visible warning so they can identify and fix the circular rule
-      storage.createAiAction({
-        userId,
-        actionType: 'INSIGHT_SURFACE',
-        actionCategory: 'SYSTEM',
-        sourceType: 'automation_engine',
-        sourceId: `chain_limit:${trigger}:${Date.now()}`,
-        title: 'Automation loop detected — chain limit reached',
-        description: `A chain of automation rules tried to fire more than ${MAX_CHAIN_DEPTH} times in a row (trigger: "${trigger}"). ` +
-          `Execution was stopped to prevent a runaway loop. Review your automation rules for cycles ` +
-          `(e.g. a rule whose action creates another action that re-triggers the same rule).`,
-        payload: { trigger, depth },
-        aiReasoning: 'Automatic loop protection.',
-        confidence: 1,
-        status: 'pending',
-        rollbackAvailable: false,
-        rollbackData: null,
-        resultData: null,
-        errorMessage: null,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      }).catch(() => {}); // fire-and-forget; don't block
+      // Surface a user-visible warning — but deduplicate so a misconfigured circular rule
+      // doesn't spam the Agent dashboard. One notification per user+trigger per 5 minutes.
+      const dedupKey = `${userId}:${trigger}`;
+      const lastNotified = loopLimitLastNotified.get(dedupKey) ?? 0;
+      if (Date.now() - lastNotified > LOOP_LIMIT_NOTIFY_COOLDOWN_MS) {
+        loopLimitLastNotified.set(dedupKey, Date.now());
+        storage.createAiAction({
+          userId,
+          actionType: 'INSIGHT_SURFACE',
+          actionCategory: 'SYSTEM',
+          sourceType: 'automation_engine',
+          sourceId: `chain_limit:${trigger}:${userId}`,
+          title: 'Automation loop detected — chain limit reached',
+          description: `A chain of automation rules tried to fire more than ${MAX_CHAIN_DEPTH} times in a row (trigger: "${trigger}"). ` +
+            `Execution was stopped to prevent a runaway loop. Review your automation rules for cycles ` +
+            `(e.g. a rule whose action creates another action that re-triggers the same rule).`,
+          payload: { trigger, depth },
+          aiReasoning: 'Automatic loop protection.',
+          confidence: 1,
+          status: 'pending',
+          rollbackAvailable: false,
+          rollbackData: null,
+          resultData: null,
+          errorMessage: null,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        }).catch(() => {}); // fire-and-forget; don't block
+      }
       return;
     }
 
