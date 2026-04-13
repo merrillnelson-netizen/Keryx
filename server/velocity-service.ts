@@ -195,7 +195,7 @@ export async function runVelocityRecalculation(): Promise<{
               userId,
               actionType: "person_decay_audit",
               actionCategory: "people",
-              sourceType: "memory",
+              sourceType: "velocity",
               sourceId: person.id,
               sourceText: null,
               title: `Relationship check: ${person.name}`,
