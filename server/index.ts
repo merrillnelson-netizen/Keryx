@@ -241,30 +241,43 @@ app.use((req, res, next) => {
     // ─── Daily Schedule Automation Trigger ───────────────────────────────────
     // Fire the daily.schedule trigger every hour so rules can match any local hour.
     // The automation engine's per-day run limit (default 3) prevents duplicate fires.
+    // Active users = anyone with a memory in the last 14 days OR a settings row with
+    // at least one automation rule. We query both to avoid excluding dormant-memory users
+    // who still rely on time-based automations.
     setInterval(async () => {
       try {
         const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
+        // Include users with recent memories AND users who have active automation rules
         const activeUsers = await pool.query(
-          `SELECT DISTINCT le.user_id, s.user_timezone
-           FROM log_entries le
-           LEFT JOIN settings s ON s.user_id = le.user_id
-           WHERE le.timestamp >= NOW() - INTERVAL '14 days'`
+          `SELECT DISTINCT u.id as user_id, s.user_timezone
+           FROM users u
+           LEFT JOIN settings s ON s.user_id = u.id
+           WHERE u.id IN (
+             SELECT DISTINCT user_id FROM log_entries WHERE timestamp >= NOW() - INTERVAL '14 days'
+             UNION
+             SELECT DISTINCT user_id FROM automation_rules WHERE enabled = true
+           )`
         );
         for (const row of activeUsers.rows) {
           setImmediate(async () => {
             try {
               const tz = row.user_timezone || 'America/Denver';
-              const localHourStr = new Date().toLocaleString('en-US', {
-                hour: 'numeric',
-                hour12: false,
-                timeZone: tz,
-              });
-              const localHour = parseInt(localHourStr, 10);
+              // Use Intl.DateTimeFormat with hourCycle:'h23' to guarantee 0-23 range
+              const localHour = parseInt(
+                new Intl.DateTimeFormat('en-US', {
+                  hour: 'numeric',
+                  hourCycle: 'h23',
+                  timeZone: tz,
+                }).format(new Date()),
+                10
+              );
               await fireTrigger(row.user_id, AUTOMATION_TRIGGERS.DAILY_SCHEDULE, {
                 userId: row.user_id,
                 localHour,
               });
-            } catch { /* non-fatal */ }
+            } catch (err) {
+              console.warn(`[daily-schedule-trigger] Failed for user ${String(row.user_id).slice(0, 8)}:`, err instanceof Error ? err.message : err);
+            }
           });
         }
       } catch (err) {
@@ -311,7 +324,9 @@ app.use((req, res, next) => {
                   reminderId: reminder.id,
                   reminderContent: reminder.content,
                 });
-              } catch { /* automation error is non-fatal */ }
+              } catch (err) {
+                console.warn(`[reminder-daemon] Automation trigger failed for reminder ${reminder.id}:`, err instanceof Error ? err.message : err);
+              }
             });
           } catch (err) {
             console.error(`[reminder-daemon] Failed to fire reminder ${reminder.id}:`, err);
