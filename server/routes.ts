@@ -2,7 +2,7 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
 import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -7268,7 +7268,8 @@ Respond with JSON only.`
     description: z.string().optional(),
     enabled: z.boolean().optional(),
     triggerType: z.string().min(1),
-    triggerConditions: z.record(z.any()).optional().nullable(),
+    // Use automationConditionsSchema for typed validation; passthrough keeps forward compat
+    triggerConditions: automationConditionsSchema.optional().nullable(),
     actionType: z.string().min(1),
     actionPayload: z.record(z.any()),
     maxRunsPerDay: z.number().int().min(1).max(50).optional(),
