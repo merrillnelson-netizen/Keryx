@@ -190,6 +190,7 @@ export async function runVelocityRecalculation(): Promise<{
 
           const hasDuplicate = await hasDuplicateRecentAudit(userId, person.id);
           if (!hasDuplicate) {
+            // Primary: person_decay_audit card
             await storage.createAiAction({
               userId,
               actionType: "person_decay_audit",
@@ -217,6 +218,50 @@ export async function runVelocityRecalculation(): Promise<{
               expiresAt: null,
             });
             pendingActionsCreated++;
+
+            // Companion: people.note — "Draft a message to keep in touch"
+            try {
+              const companionDupeCheck = await db
+                .select({ id: aiActions.id })
+                .from(aiActions)
+                .where(
+                  and(
+                    eq(aiActions.userId, userId),
+                    eq(aiActions.actionType, "people.note"),
+                    eq(aiActions.sourceId, `vel_note_${person.id}`),
+                    gte(aiActions.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+                  )
+                )
+                .limit(1);
+              if (companionDupeCheck.length === 0) {
+                await storage.createAiAction({
+                  userId,
+                  actionType: "people.note",
+                  actionCategory: "people",
+                  sourceType: "velocity",
+                  sourceId: `vel_note_${person.id}`,
+                  sourceText: null,
+                  title: `Keep in touch with ${person.name}`,
+                  description: `${person.name}'s interaction dropped — jot a note to reconnect or draft a quick message.`,
+                  payload: {
+                    personId: person.id,
+                    personName: person.name,
+                    note: `Relationship check-in — velocity dropped from ${prevTier} to ${newTier}. Haven't connected in 30+ days.`,
+                  },
+                  status: "pending",
+                  aiReasoning: `Velocity companion for ${person.name}: tier dropped to ${newTier}. Suggested as follow-up to the decay audit card.`,
+                  confidence: 0.78,
+                  rollbackAvailable: false,
+                  rollbackData: null,
+                  resultData: null,
+                  errorMessage: null,
+                  expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                });
+                pendingActionsCreated++;
+              }
+            } catch (companionErr) {
+              console.warn(`[velocity] Companion note creation failed for ${person.name}:`, companionErr instanceof Error ? companionErr.message : companionErr);
+            }
           }
         }
       }

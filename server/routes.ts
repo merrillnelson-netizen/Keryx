@@ -2913,8 +2913,15 @@ Respond with JSON only.`
       // Background: Run proactive analysis after briefing is generated
       setImmediate(async () => {
         try {
-          const { runProactiveAnalysis } = await import('./proactive-service');
-          await runProactiveAnalysis(user.id, userTimezone);
+          const { runProactiveAnalysis, generateBriefingActionProposals } = await import('./proactive-service');
+          await Promise.allSettled([
+            runProactiveAnalysis(user.id, userTimezone),
+            generateBriefingActionProposals(user.id, {
+              focusAreas: briefing.focusAreas,
+              reminders: briefing.reminders,
+              summary: briefing.summary,
+            }),
+          ]);
         } catch (err) {
           console.error('[briefing] Background proactive analysis failed (non-fatal):', err instanceof Error ? err.message : err);
         }
@@ -3418,25 +3425,49 @@ Respond with JSON only.`
         error: discoveries.error
       });
 
-      // Background: Send push notification for high-signal alerts
-      if (highSignalAlerts.length > 0 && isPushConfigured()) {
+      // Background: Send push notification for high-signal alerts + companion people.note
+      if (highSignalAlerts.length > 0) {
         setImmediate(async () => {
           try {
-            const topAlert = highSignalAlerts[0];
-            const alertMessage = formatHighSignalAlert(topAlert);
-            await sendPushToAllUserDevices(user.id, {
-              type: 'discovery',
-              title: `🚨 ${topAlert.person.name} mentioned`,
-              body: alertMessage.body.substring(0, 120),
-              url: '/dashboard',
-              requireInteraction: topAlert.person.priority >= 9,
-            });
+            if (isPushConfigured()) {
+              const topAlert = highSignalAlerts[0];
+              const alertMessage = formatHighSignalAlert(topAlert);
+              await sendPushToAllUserDevices(user.id, {
+                type: 'discovery',
+                title: `🚨 ${topAlert.person.name} mentioned`,
+                body: alertMessage.body.substring(0, 120),
+                url: '/dashboard',
+                requireInteraction: topAlert.person.priority >= 9,
+              });
+            }
+            // Companion: create a people.note proposal for each alertable match
+            const { createHighSignalCompanionProposals } = await import('./proactive-service');
+            await createHighSignalCompanionProposals(
+              user.id,
+              highSignalAlerts.map((m) => ({
+                person: { id: m.person.id, name: m.person.name, priority: m.person.priority, relationship: m.person.relationship },
+                discovery: { id: m.discovery.id, title: m.discovery.title, url: m.discovery.url, content: m.discovery.content },
+                confidence: m.confidence,
+              }))
+            );
           } catch (err) {
-            console.error('High-signal push notification error:', err);
+            console.error('High-signal push notification or companion error:', err);
           }
         });
       }
-      
+
+      // Background: Discovery → action bridge
+      if (discoveries.discoveries.length > 0) {
+        setImmediate(async () => {
+          try {
+            const { generateDiscoveryActionProposals } = await import('./proactive-service');
+            await generateDiscoveryActionProposals(user.id, discoveries.discoveries);
+          } catch (err) {
+            console.error('[discoveries] Action proposal generation failed (non-fatal):', err instanceof Error ? err.message : err);
+          }
+        });
+      }
+
       return;
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to fetch contextual discoveries", error);

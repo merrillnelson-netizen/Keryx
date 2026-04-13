@@ -19,7 +19,11 @@ import {
   Brain,
   DollarSign,
   UserPen,
-  Target
+  Target,
+  Newspaper,
+  Sunrise,
+  TrendingDown,
+  Zap
 } from "lucide-react";
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -115,6 +119,40 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
       return <DollarSign className="w-4 h-4 text-yellow-500" />;
     }
     return <Bot className="w-4 h-4 text-violet-500" />;
+  };
+
+  const getSourceBadge = (sourceType: string | null | undefined) => {
+    if (!sourceType) return null;
+    const config: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+      briefing: {
+        label: 'Morning briefing',
+        className: 'bg-orange-500/15 text-orange-400 border-orange-500/20',
+        icon: <Sunrise className="w-2.5 h-2.5" />,
+      },
+      discovery: {
+        label: 'From discovery',
+        className: 'bg-sky-500/15 text-sky-400 border-sky-500/20',
+        icon: <Newspaper className="w-2.5 h-2.5" />,
+      },
+      velocity: {
+        label: 'Relationship trend',
+        className: 'bg-rose-500/15 text-rose-400 border-rose-500/20',
+        icon: <TrendingDown className="w-2.5 h-2.5" />,
+      },
+      high_signal: {
+        label: 'VIP alert',
+        className: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+        icon: <Zap className="w-2.5 h-2.5" />,
+      },
+    };
+    const c = config[sourceType];
+    if (!c) return null;
+    return (
+      <Badge variant="outline" className={`flex items-center gap-1 text-[10px] px-1.5 py-0 h-4 ${c.className}`}>
+        {c.icon}
+        {c.label}
+      </Badge>
+    );
   };
 
   const getActionCategoryBadge = (category: string) => {
@@ -233,6 +271,7 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
                     >
                       {action.actionCategory}
                     </Badge>
+                    {getSourceBadge(action.sourceType)}
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {formatPayloadPreview(action)}
