@@ -453,14 +453,16 @@
 <ul>
 <li><code>moodBelow: 4</code> — only fire if mood score &lt; 4</li>
 <li><code>moodAbove: 8</code> — only fire if mood score &gt; 8</li>
-<li><code>keyword: "stress"</code> — only fire if memory text contains "stress"</li>
+<li><code>keyword: "stress"</code> — word-boundary match: "stress" catches "stressed", "stressful" but NOT "distress"</li>
+<li><code>aiSentiment: "negative"</code> — AI-derived sentiment label: <code>positive</code>, <code>neutral</code>, or <code>negative</code> (mapped from mood score; more intent-aware than moodBelow)</li>
+<li><code>topic: "Health"</code> — only fire if the AI assigns this topic tag to the memory</li>
 <li><code>personName: "Sarah"</code> — only fire if Sarah is mentioned</li>
-<li><code>topic: "work"</code> — only fire if a "work" topic is detected</li>
 <li><code>progressAbove: 75</code> — only fire for goal updates above 75%</li>
 <li><code>progressBelow: 20</code> — only fire for goal updates below 20%</li>
 <li><code>atHour: 7</code> — only fire the daily schedule rule at 7am local time</li>
 <li><code>actionType: "calendar.create"</code> — only fire for completed calendar create actions</li>
 </ul>
+<p style="font-size:0.82em;color:#aaa;margin-top:6px;">Tip: <code>aiSentiment</code> and <code>topic</code> are AI-extracted — they match intent, not just raw text. <code>keyword</code> now uses word-boundary matching, so it handles inflections automatically.</p>
 </div>
 
 <div class="detail">

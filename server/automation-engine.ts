@@ -25,6 +25,7 @@ export interface TriggerContext {
   moodScore?: number;        // 1-10
   topics?: string[];
   peopleNames?: string[];    // people mentioned
+  aiSentiment?: 'positive' | 'neutral' | 'negative'; // derived from moodScore
   // keyword.detected
   keyword?: string;
   // person.mentioned
@@ -71,14 +72,23 @@ function evaluateConditions(conditions: any, ctx: TriggerContext): boolean {
     if (ctx.moodScore <= conditions.moodAbove) return false;
   }
 
-  // Keyword match (case-insensitive substring)
-  if (conditions.keyword && ctx.memoryContent) {
-    const kw = String(conditions.keyword).toLowerCase();
-    if (!ctx.memoryContent.toLowerCase().includes(kw)) return false;
-  }
-  if (conditions.keyword && ctx.keyword) {
-    const kw = String(conditions.keyword).toLowerCase();
-    if (!ctx.keyword.toLowerCase().includes(kw)) return false;
+  // Keyword match — word-boundary aware (handles inflections like stress→stressed)
+  // Falls back to substring match for multi-word phrases or special characters.
+  if (conditions.keyword) {
+    const kw = String(conditions.keyword).trim();
+    const isSimpleWord = /^[a-zA-Z0-9'-]+$/.test(kw);
+    const matchText = (haystack: string): boolean => {
+      const h = haystack.toLowerCase();
+      const k = kw.toLowerCase();
+      if (isSimpleWord) {
+        // Word-boundary regex: "stress" matches "stressed", "stressful" but not "distress"
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(haystack);
+      }
+      // Phrase or special chars: fall back to substring
+      return h.includes(k);
+    };
+    if (ctx.memoryContent && !matchText(ctx.memoryContent)) return false;
+    if (!ctx.memoryContent && ctx.keyword && !matchText(ctx.keyword)) return false;
   }
 
   // Person name match
@@ -93,6 +103,11 @@ function evaluateConditions(conditions: any, ctx: TriggerContext): boolean {
     const target = String(conditions.topic).toLowerCase();
     const topics = (ctx.topics || []).map(t => t.toLowerCase());
     if (!topics.some(t => t.includes(target) || target.includes(t))) return false;
+  }
+
+  // AI Sentiment match (positive | neutral | negative)
+  if (conditions.aiSentiment && ctx.aiSentiment) {
+    if (ctx.aiSentiment !== String(conditions.aiSentiment).toLowerCase()) return false;
   }
 
   // Progress threshold (for goal triggers)

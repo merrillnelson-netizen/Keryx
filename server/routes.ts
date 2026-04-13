@@ -626,12 +626,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Fire automation triggers for memory.logged (and keyword.detected, person.mentioned, mood.*)
           import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
+            const moodScore = extracted.moodScore ?? undefined;
+            const aiSentiment: 'positive' | 'neutral' | 'negative' =
+              moodScore !== undefined
+                ? moodScore >= 7 ? 'positive' : moodScore <= 3 ? 'negative' : 'neutral'
+                : 'neutral';
             const ctx = {
               userId: user.id,
               memoryContent: memoryText,
-              moodScore: extracted.moodScore ?? undefined,
+              moodScore,
               topics: extracted.topicTag ? [extracted.topicTag] : [],
               peopleNames: extracted.detectedPeople || [],
+              aiSentiment,
             };
 
             // memory.logged

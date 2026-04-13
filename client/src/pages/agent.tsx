@@ -641,9 +641,11 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
       case AUTOMATION_TRIGGERS.PERSON_MENTIONED:
         return '{ "personName": "Alice" }';
       case AUTOMATION_TRIGGERS.KEYWORD_DETECTED:
-        return '{ "keyword": "stressed" }';
+        return '{ "keyword": "stress" }';
       case AUTOMATION_TRIGGERS.DAILY_SCHEDULE:
         return '{ "atHour": 8 }';
+      case AUTOMATION_TRIGGERS.MEMORY_LOGGED:
+        return '{ "aiSentiment": "negative", "topic": "Health" }';
       default:
         return '';
     }
@@ -736,11 +738,14 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
           Conditions (JSON, optional){conditionPlaceholder && ` — e.g., ${conditionPlaceholder}`}
         </Label>
         <Textarea
-          placeholder={conditionPlaceholder || 'Leave empty to always trigger, or: { "keyword": "stressed" }'}
+          placeholder={conditionPlaceholder || 'Leave empty to always trigger, or: { "keyword": "stress" }'}
           value={conditionJson}
           onChange={e => setConditionJson(e.target.value)}
           className="text-xs font-mono h-16 resize-none"
         />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Available fields: <code className="bg-muted px-1 rounded">keyword</code> (word-boundary match — "stress" catches "stressed"), <code className="bg-muted px-1 rounded">topic</code> (AI-detected topic), <code className="bg-muted px-1 rounded">aiSentiment</code> (positive / neutral / negative), <code className="bg-muted px-1 rounded">moodBelow</code> / <code className="bg-muted px-1 rounded">moodAbove</code> (1–10), <code className="bg-muted px-1 rounded">personName</code>.
+        </p>
       </div>
 
       <div className="space-y-1">
