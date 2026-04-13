@@ -462,7 +462,7 @@ async function executeCalendarCreate(action: AiAction): Promise<ActionExecutionR
     return {
       success: true,
       resultData: { eventId: createdEvent.id, title: createdEvent.title },
-      rollbackData: { eventId: createdEvent.id, action: 'delete' },
+      rollbackData: { eventId: createdEvent.id, action: 'delete', provider },
     };
   } catch (error) {
     return { 

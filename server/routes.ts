@@ -4324,10 +4324,16 @@ Respond with JSON only.`
         const rd = action.rollbackData as Record<string, unknown>;
         
         if (action.actionType === 'calendar.create' && rd.action === 'delete' && rd.eventId) {
-          // Delete the created calendar event — must succeed before marking rolled back
-          const { deleteCalendarEventById } = await import('./ai-actions-service.js');
-          await deleteCalendarEventById(String(rd.eventId), user.id);
-          compensationNote = `Calendar event deleted (id: ${rd.eventId})`;
+          // Delete the created calendar event (provider-aware) — must succeed before marking rolled back
+          const provider = (rd.provider as string) || 'google';
+          if (provider === 'outlook') {
+            const { deleteOutlookCalendarEvent } = await import('./outlook-calendar-service.js');
+            await deleteOutlookCalendarEvent(String(rd.eventId), user.id);
+          } else {
+            const { deleteCalendarEventById } = await import('./ai-actions-service.js');
+            await deleteCalendarEventById(String(rd.eventId), user.id);
+          }
+          compensationNote = `Calendar event deleted (id: ${rd.eventId}, provider: ${provider})`;
         } else if (action.actionType === 'log.create' && rd.entryId) {
           // Delete the created log entry — must succeed before marking rolled back
           await storage.deleteLogEntry(String(rd.entryId), user.id);

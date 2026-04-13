@@ -230,3 +230,12 @@ export async function createOutlookCalendarEvent(
     throw new Error(`Outlook Calendar error: ${detail}`);
   }
 }
+
+/**
+ * Delete an Outlook calendar event by ID.
+ * Used for rollback compensation after a calendar.create action.
+ */
+export async function deleteOutlookCalendarEvent(eventId: string, userId: string): Promise<void> {
+  const client = await getOutlookClient(userId);
+  await client.api(`/me/calendar/events/${eventId}`).delete();
+}
