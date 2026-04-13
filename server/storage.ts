@@ -229,7 +229,7 @@ export interface IStorage {
   createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
   updateAutomationRule(id: string, userId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
   deleteAutomationRule(id: string, userId: string): Promise<void>;
-  recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void>;
+  recordRuleExecution(id: string, userId: string, success: boolean, error?: string, chainDepth?: number): Promise<void>;
   countRuleRunsToday(id: string, userId: string): Promise<number>;
 }
 
@@ -2913,7 +2913,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
   }
 
-  async recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void> {
+  async recordRuleExecution(id: string, userId: string, success: boolean, error?: string, chainDepth?: number): Promise<void> {
     const nowUtc = new Date();
     const todayUtc = nowUtc.toISOString().slice(0, 10); // YYYY-MM-DD UTC
 
@@ -2933,6 +2933,7 @@ export class DatabaseStorage implements IStorage {
         lastRunAt: nowUtc,
         lastRunResult: success ? 'success' : 'error',
         lastRunError: error ?? null,
+        lastChainDepth: chainDepth ?? 0,
         runCount: sql`${automationRules.runCount} + 1`,
         todayRunDate: todayUtc,
         todayRunCount: newTodayCount,

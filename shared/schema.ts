@@ -1326,6 +1326,8 @@ export const automationRules = pgTable("automation_rules", {
   todayRunCount: integer("today_run_count").default(0).notNull(),
   // Limits to prevent infinite loops
   maxRunsPerDay: integer("max_runs_per_day").default(3),
+  // Chain depth of the most recent execution (0 = top-level; 1+ = fired by another rule's action)
+  lastChainDepth: integer("last_chain_depth").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
@@ -1339,6 +1341,7 @@ export const insertAutomationRuleSchema = createInsertSchema(automationRules).om
   lastRunAt: true,
   lastRunResult: true,
   lastRunError: true,
+  lastChainDepth: true,
   todayRunDate: true,
   todayRunCount: true,
   createdAt: true,

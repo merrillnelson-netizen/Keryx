@@ -4329,6 +4329,9 @@ Respond with JSON only.`
   app.post("/api/actions/:id/approve", requireAuth, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
+
+      // Fetch the action before executing so we can recover _automationChainDepth if present
+      const pendingAction = await storage.getAiAction(req.params.id, user.id);
       
       const result = await approveAction(req.params.id, user.id);
       
@@ -4338,6 +4341,24 @@ Respond with JSON only.`
           message: result.errorMessage,
           timestamp: new Date().toISOString()
         });
+      }
+
+      // Fire action.completed trigger — if this action was created by an automation rule via
+      // CREATE_AI_ACTION, recover the chain depth stored in payload._automationChainDepth so
+      // the depth limit is properly enforced across the async approval boundary.
+      if (pendingAction) {
+        const storedPayload = pendingAction.payload as Record<string, unknown> | null ?? {};
+        const recoveredDepth = typeof storedPayload._automationChainDepth === 'number'
+          ? storedPayload._automationChainDepth
+          : 0;
+        import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
+          fireTrigger(user.id, AUTOMATION_TRIGGERS.ACTION_COMPLETED, {
+            userId: user.id,
+            actionId: req.params.id,
+            actionType: pendingAction.actionType,
+            chainDepth: recoveredDepth,
+          }).catch(() => {});
+        }).catch(() => {});
       }
       
       res.json({

@@ -186,6 +186,9 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
 
     case AUTOMATION_ACTIONS.CREATE_AI_ACTION: {
       // InsertAiAction requires: userId, actionType, actionCategory, sourceType, title, payload, status
+      // _automationChainDepth is stored in payload so when action.completed fires later,
+      // the depth can be recovered and passed to fireTrigger to continue ancestry tracking.
+      const actionData = (payload.actionData as object) || {};
       await storage.createAiAction({
         userId: ctx.userId,
         actionType: (payload.actionType as string) || 'INSIGHT_SURFACE',
@@ -194,7 +197,7 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
         sourceId: `rule:${rule.id}`,
         title: interpolate((payload.title as string) || rule.name, ctx),
         description: interpolate((payload.description as string) || '', ctx),
-        payload: (payload.actionData as object) || {},
+        payload: { ...actionData, _automationChainDepth: ctx.chainDepth ?? 0 },
         aiReasoning: `Automation rule "${rule.name}" triggered this action.`,
         confidence: (payload.confidence as number) ?? 0.8,
         status: 'pending',
@@ -222,6 +225,17 @@ async function executeRuleAction(rule: AutomationRule, ctx: TriggerContext): Pro
         detectedPeople: meta.detectedPeople || [],
         metadataJson: meta.metadataJson || {},
       });
+      // Fire MEMORY_LOGGED trigger with propagated chainDepth so rules reacting to this
+      // automation-created memory respect the depth limit (prevents LOG_MEMORY → rule → LOG_MEMORY loops).
+      // chainDepth is already incremented in ctx (passed as childCtx from fireTrigger).
+      fireTrigger(ctx.userId, AUTOMATION_TRIGGERS.MEMORY_LOGGED, {
+        userId: ctx.userId,
+        memoryContent: content,
+        moodScore: meta.moodScore ?? undefined,
+        topics: meta.topicTag ? [meta.topicTag] : [],
+        peopleNames: meta.detectedPeople || [],
+        chainDepth: ctx.chainDepth, // carries the incremented depth from parent
+      }).catch(() => {});
       break;
     }
 
@@ -352,12 +366,12 @@ export async function fireTrigger(
       setImmediate(async () => {
         try {
           await executeRuleAction(rule, childCtx);
-          await storage.recordRuleExecution(rule.id, userId, true);
+          await storage.recordRuleExecution(rule.id, userId, true, undefined, depth);
           const depthTag = depth > 0 ? ` [chain depth: ${depth}]` : '';
           console.log(`[automation-engine] Rule "${rule.name}" executed successfully${depthTag}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          await storage.recordRuleExecution(rule.id, userId, false, msg).catch(() => {});
+          await storage.recordRuleExecution(rule.id, userId, false, msg, depth).catch(() => {});
           console.error(`[automation-engine] Rule "${rule.name}" failed:`, msg);
         }
       });
