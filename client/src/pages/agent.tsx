@@ -192,6 +192,7 @@ function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () =>
       return res.json();
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       toast({ title: "Action executed", description: data.message || "Completed successfully." });
@@ -208,6 +209,7 @@ function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () =>
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       toast({ title: "Action rejected", description: "The proposed action was declined." });
@@ -224,6 +226,7 @@ function ActionCard({ action, onMutated }: { action: AiAction; onMutated?: () =>
       return res.json();
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
       toast({ title: "Action rolled back", description: data.message });
       onMutated?.();

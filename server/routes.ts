@@ -4316,41 +4316,34 @@ Respond with JSON only.`
         return sendErrorResponse(res, 400, "Action has already been rolled back");
       }
 
-      // Execute compensating actions based on rollbackData
-      let compensationNote: string | undefined;
+      // Execute compensating actions before marking rolled back.
+      // Only set rolledBackAt after compensation succeeds (or is best-effort for unknown types).
+      let compensationNote: string = 'Action rolled back';
+      
       if (action.rollbackData) {
         const rd = action.rollbackData as Record<string, unknown>;
         
         if (action.actionType === 'calendar.create' && rd.action === 'delete' && rd.eventId) {
-          // Delete the created calendar event
-          try {
-            const { deleteCalendarEventById } = await import('./ai-actions-service.js');
-            await deleteCalendarEventById(String(rd.eventId), user.id);
-            compensationNote = `Calendar event deleted (id: ${rd.eventId})`;
-          } catch (compErr) {
-            const errMsg = compErr instanceof Error ? compErr.message : String(compErr);
-            compensationNote = `Event deletion attempted but may have failed: ${errMsg}. The action is marked as rolled back.`;
-          }
+          // Delete the created calendar event — must succeed before marking rolled back
+          const { deleteCalendarEventById } = await import('./ai-actions-service.js');
+          await deleteCalendarEventById(String(rd.eventId), user.id);
+          compensationNote = `Calendar event deleted (id: ${rd.eventId})`;
         } else if (action.actionType === 'log.create' && rd.entryId) {
-          // Delete the created log entry
-          try {
-            await storage.deleteLogEntry(String(rd.entryId), user.id);
-            compensationNote = `Memory entry removed (id: ${rd.entryId})`;
-          } catch {
-            compensationNote = 'Memory entry removal attempted. The action is marked as rolled back.';
-          }
+          // Delete the created log entry — must succeed before marking rolled back
+          await storage.deleteLogEntry(String(rd.entryId), user.id);
+          compensationNote = `Memory entry removed (id: ${rd.entryId})`;
         } else {
-          // For other action types with rollbackData, record that compensation was attempted
+          // For other action types: best-effort, note manual verification needed
           compensationNote = `Rollback recorded. Manual verification may be needed for action type: ${action.actionType}`;
         }
       }
 
-      // Mark as rolled back in DB
+      // Mark as rolled back only after compensation has completed
       await storage.markActionRolledBack(action.id, user.id);
 
       res.json({
         status: 'success',
-        message: compensationNote || 'Action rolled back',
+        message: compensationNote,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
