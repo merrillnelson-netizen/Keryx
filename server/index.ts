@@ -221,11 +221,14 @@ app.use((req, res, next) => {
       try {
         const { runProactiveAnalysis } = await import('./proactive-service');
         const activeUsers = await pool.query(
-          `SELECT DISTINCT user_id FROM log_entries WHERE timestamp >= NOW() - INTERVAL '14 days'`
+          `SELECT DISTINCT le.user_id, s.user_timezone
+           FROM log_entries le
+           LEFT JOIN settings s ON s.user_id = le.user_id
+           WHERE le.timestamp >= NOW() - INTERVAL '14 days'`
         );
         for (const row of activeUsers.rows) {
           try {
-            await runProactiveAnalysis(row.user_id);
+            await runProactiveAnalysis(row.user_id, row.user_timezone || 'UTC');
           } catch (e) {
             console.error(`[proactive-scheduler] Failed for user ${row.user_id?.slice(0, 8)}:`, e instanceof Error ? e.message : e);
           }

@@ -16,6 +16,7 @@ import { aiActions, people, goals } from "@shared/schema";
 import { eq, and, gte, lte, isNull, or } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { AI_ACTION_TYPES, AI_ACTION_CATEGORIES, AI_ACTION_STATUSES } from "@shared/schema";
+import { buildTemporalContext } from "./temporal-context";
 
 const DEDUP_WINDOW_DAYS = 7; // Don't re-create the same action type within 7 days
 const REACH_OUT_MIN_PRIORITY = 7; // Only suggest reach-outs for priority 7+
@@ -122,7 +123,8 @@ async function generateReachOutProposals(
  */
 async function generateGoalUpdateProposals(
   userId: string,
-  created: { count: number }
+  created: { count: number },
+  userTimezone: string = 'UTC'
 ): Promise<void> {
   if (created.count >= MAX_PROACTIVE_PER_RUN) return;
 
@@ -164,7 +166,7 @@ async function generateGoalUpdateProposals(
           targetDate: goal.targetDate,
         },
         status: AI_ACTION_STATUSES.PENDING,
-        aiReasoning: `Goal "${goal.title}" (${goal.progressPercent}% complete) has not been updated since ${staleThreshold.toLocaleDateString()}. A progress check-in keeps momentum.`,
+        aiReasoning: `Goal "${goal.title}" (${goal.progressPercent}% complete) has not been updated since ${buildTemporalContext(userTimezone, staleThreshold).localDate}. A progress check-in keeps momentum.`,
         confidence: 0.75,
         rollbackAvailable: false,
         rollbackData: null,
@@ -248,15 +250,16 @@ export async function createInsightSurfaceActions(
 /**
  * Main entry point — run all proactive proposal generators for a user.
  * Called after morning briefing and on a daily schedule.
+ * @param userTimezone IANA timezone string from settings.userTimezone (e.g. "America/Denver")
  */
-export async function runProactiveAnalysis(userId: string): Promise<{
+export async function runProactiveAnalysis(userId: string, userTimezone: string = 'UTC'): Promise<{
   actionsCreated: number;
 }> {
   const created = { count: 0 };
 
   await Promise.allSettled([
     generateReachOutProposals(userId, created),
-    generateGoalUpdateProposals(userId, created),
+    generateGoalUpdateProposals(userId, created, userTimezone),
   ]);
 
   if (created.count > 0) {

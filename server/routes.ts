@@ -2914,7 +2914,7 @@ Respond with JSON only.`
       setImmediate(async () => {
         try {
           const { runProactiveAnalysis } = await import('./proactive-service');
-          await runProactiveAnalysis(user.id);
+          await runProactiveAnalysis(user.id, userTimezone);
         } catch (err) {
           console.error('[briefing] Background proactive analysis failed (non-fatal):', err instanceof Error ? err.message : err);
         }

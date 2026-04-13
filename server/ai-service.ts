@@ -1258,8 +1258,10 @@ export async function detectCalendarEvent(
   currentDate: Date = new Date(),
   userTimezone: string = 'UTC'
 ): Promise<DetectedCalendarEvent> {
-  // Use shared temporal context helper for consistent date/time handling
-  const temporal = buildTemporalContext(userTimezone);
+  // Pass currentDate as referenceDate so relative expressions ("tomorrow", "next week")
+  // resolve correctly when callers supply a specific reference point (e.g. in tests or
+  // when scheduling future analysis with a known anchor date).
+  const temporal = buildTemporalContext(userTimezone, currentDate);
 
   try {
     const response = await openai.chat.completions.create({

@@ -46,9 +46,8 @@ export function formatTimeInTimezone(
 /**
  * Compute the UTC offset string for a given timezone, e.g. "UTC-6" or "UTC+5:30".
  */
-function getUtcOffsetString(tz: string): string {
+function getUtcOffsetString(tz: string, now: Date = new Date()): string {
   try {
-    const now = new Date();
     const utcMs = now.getTime();
     // Get local time in that tz by parsing the locale string trick
     const localStr = now.toLocaleString('en-US', { timeZone: tz, hour12: false,
@@ -84,7 +83,7 @@ function getUtcOffsetString(tz: string): string {
  *     TIME:  ${temporal.localTime}  ZONE: ${temporal.timezone} (${temporal.utcOffset})
  *   `;
  */
-export function buildTemporalContext(tz: string = DEFAULT_TZ): {
+export function buildTemporalContext(tz: string = DEFAULT_TZ, referenceDate?: Date): {
   year: number;
   month: string;
   localDate: string;     // YYYY-MM-DD in user's timezone
@@ -94,7 +93,7 @@ export function buildTemporalContext(tz: string = DEFAULT_TZ): {
   utcOffset: string;     // e.g. "UTC-6"
   criticalRules: string; // Ready-to-paste CRITICAL DATE RULES block for AI prompts
 } {
-  const now = new Date();
+  const now = referenceDate ?? new Date();
   const localDate = now.toLocaleDateString('en-CA', { timeZone: tz });
   const localTime = now.toLocaleTimeString('en-US', {
     timeZone: tz,
@@ -103,9 +102,9 @@ export function buildTemporalContext(tz: string = DEFAULT_TZ): {
     hour12: true,
   });
   const dayOfWeek = now.toLocaleDateString('en-US', { timeZone: tz, weekday: 'long' });
-  const year = getYearInTimezone(tz);
-  const month = getMonthNameInTimezone(tz);
-  const utcOffset = getUtcOffsetString(tz);
+  const year = parseInt(now.toLocaleDateString('en-CA', { timeZone: tz, year: 'numeric' }), 10);
+  const month = now.toLocaleDateString('en-US', { timeZone: tz, month: 'long' });
+  const utcOffset = getUtcOffsetString(tz, now);
 
   const criticalRules = `CRITICAL DATE RULES:
 - Today's date is ${localDate} (${dayOfWeek}), ${localTime} ${tz} (${utcOffset}).
