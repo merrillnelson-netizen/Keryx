@@ -756,12 +756,12 @@ function CreateRuleForm({ onCreated }: { onCreated: () => void }) {
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-violet-400">AI Sentiment filter</Label>
-          <Select value={aiSentimentFilter} onValueChange={setAiSentimentFilter}>
+          <Select value={aiSentimentFilter || "any"} onValueChange={v => setAiSentimentFilter(v === "any" ? "" : v)}>
             <SelectTrigger className="h-8 text-sm">
               <SelectValue placeholder="Any sentiment" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Any sentiment</SelectItem>
+              <SelectItem value="any">Any sentiment</SelectItem>
               <SelectItem value="positive">Positive</SelectItem>
               <SelectItem value="neutral">Neutral</SelectItem>
               <SelectItem value="negative">Negative</SelectItem>
