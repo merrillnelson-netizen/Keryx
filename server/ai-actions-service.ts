@@ -840,13 +840,32 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
       include_answer: true,
     }) as TavilySearchResponse;
 
-    const discoveries = (response.results ?? []).map((r) => ({
-      title: r.title,
-      url: r.url,
-      content: r.content?.slice(0, 400) ?? '',
-      score: r.score ?? 0.5,
-      source: new URL(r.url).hostname.replace(/^www\./, ''),
-    }));
+    const rawResults = response.results ?? [];
+    const discoveryItems = rawResults.map((r) => {
+      let sourceHost = r.url;
+      try { sourceHost = new URL(r.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+      return {
+        id: `ws-${action.id}-${Math.random().toString(36).slice(2, 8)}`,
+        title: r.title,
+        content: r.content?.slice(0, 400) ?? '',
+        url: r.url,
+        source: sourceHost,
+        insightContext: `Searched for: ${payload.query}${payload.context ? ` (${payload.context})` : ''}`,
+        category: 'general' as const,
+        relevanceScore: r.score ?? 0.5,
+        urgency: 'general' as const,
+      };
+    });
+
+    // Persist as cached discoveries so they surface on the Discoveries page
+    const cacheKey = `agent_search_${action.id}`;
+    await storage.setAiCache(action.userId, 'discoveries', cacheKey, {
+      discoveries: discoveryItems,
+      insights: [],
+      generatedAt: new Date().toISOString(),
+      source: 'agent_web_search',
+      query: payload.query,
+    }, `agent_${action.id}`, 0, 60 * 24 * 7); // 7-day TTL
 
     return {
       success: true,
@@ -854,8 +873,9 @@ async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult
         query: payload.query,
         context: payload.context ?? null,
         answer: response.answer ?? null,
-        discoveries,
-        resultCount: discoveries.length,
+        discoveries: discoveryItems,
+        resultCount: discoveryItems.length,
+        cachedAsDiscoveries: true,
       },
     };
   } catch (error) {
