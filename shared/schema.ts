@@ -646,11 +646,11 @@ export const financialAlertPayloadSchema = z.object({
 });
 
 export const goalUpdatePayloadSchema = z.object({
-  goalId: z.string().optional(),   // ID of the goal to update (optional; fallback is fuzzy title match)
+  goalId: z.string().nullish(),    // ID of the goal to update (optional; fallback is fuzzy title match)
   goalTitle: z.string(),           // Title of the goal (for display / fuzzy matching)
-  newProgress: z.number().int().min(0).max(100).optional(), // New progress percent (0-100); required to execute
-  currentProgress: z.number().int().min(0).max(100).optional(), // Previous progress
-  progressNote: z.string().optional(), // Optional note about the progress update
+  newProgress: z.number().int().min(0).max(100).nullish(), // New progress percent (0-100); required to execute
+  currentProgress: z.number().int().min(0).max(100).nullish(), // Previous progress
+  progressNote: z.string().nullish(), // Optional note about the progress update
 });
 
 export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
