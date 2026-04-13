@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, isToday, isWithinInterval, subDays } from "date-fns";
+import AppLayout from "@/components/app-layout";
 import {
   Bot,
   Calendar,
@@ -41,6 +42,8 @@ import {
   Power,
   Settings2,
   Workflow,
+  RotateCcw,
+  Filter,
 } from "lucide-react";
 import { type AiAction, AI_ACTION_TYPES, AUTOMATION_TRIGGERS, AUTOMATION_ACTIONS } from "@shared/schema";
 
@@ -158,6 +161,22 @@ function formatPayloadPreview(action: AiAction): string {
   }
 }
 
+// ─── Helper: source type label ─────────────────────────────────────────────────
+
+function getSourceLabel(sourceType: string): string {
+  const labels: Record<string, string> = {
+    voice_input: "Voice",
+    memory: "Memory",
+    briefing: "Briefing",
+    manual: "Manual",
+    discovery: "Discovery",
+    velocity: "Velocity",
+    automation: "Automation",
+    proactive: "Proactive",
+  };
+  return labels[sourceType] || sourceType;
+}
+
 // ─── ActionCard ───────────────────────────────────────────────────────────────
 
 function ActionCard({ action }: { action: AiAction }) {
@@ -197,9 +216,28 @@ function ActionCard({ action }: { action: AiAction }) {
     },
   });
 
+  const rollbackMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/actions/${action.id}/rollback`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/actions/stats"] });
+      toast({ title: "Action rolled back" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Rollback failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const isPending = action.status === "pending";
+  const isCompleted = action.status === "completed";
+  const isRolledBack = !!action.rolledBackAt;
+  const hasRollback = isCompleted && action.rollbackAvailable && !isRolledBack;
   const statusCfg = STATUS_CONFIG[action.status] || STATUS_CONFIG.pending;
   const catCfg = CATEGORY_CONFIG[action.actionCategory];
+  const anyMutating = approveMutation.isPending || rejectMutation.isPending || rollbackMutation.isPending;
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${statusCfg.bg}`}>
@@ -211,20 +249,28 @@ function ActionCard({ action }: { action: AiAction }) {
               <span className="font-medium text-sm">{action.title}</span>
               <Badge
                 variant="outline"
-                className={`text-xs ${catCfg ? `bg-${catCfg.color.replace('text-', '')}/10 ${catCfg.color}` : 'bg-muted text-muted-foreground'}`}
+                className={`text-xs ${catCfg ? `bg-muted/40 ${catCfg.color}` : 'bg-muted text-muted-foreground'}`}
               >
                 {catCfg?.label || action.actionCategory}
               </Badge>
-              <Badge variant="outline" className={`text-xs ${statusCfg.color}`}>
-                {statusCfg.label}
-              </Badge>
+              {isRolledBack ? (
+                <Badge variant="outline" className="text-xs bg-gray-500/10 text-gray-400 border-gray-500/30">
+                  Rolled back
+                </Badge>
+              ) : (
+                <Badge variant="outline" className={`text-xs ${statusCfg.color}`}>
+                  {statusCfg.label}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground truncate mt-0.5">
               {formatPayloadPreview(action)}
             </p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
               <Clock className="w-3 h-3" />
               {formatDistanceToNow(new Date(action.createdAt), { addSuffix: true })}
+              <span>•</span>
+              <span className="bg-white/5 px-1.5 py-0.5 rounded capitalize">{getSourceLabel(action.sourceType)}</span>
               {action.confidence != null && (
                 <>
                   <span>•</span>
@@ -232,6 +278,11 @@ function ActionCard({ action }: { action: AiAction }) {
                 </>
               )}
             </div>
+            {action.errorMessage && action.status === "failed" && (
+              <p className="mt-1.5 text-xs text-red-400 bg-red-500/10 rounded px-2 py-1">
+                Error: {action.errorMessage}
+              </p>
+            )}
           </div>
         </div>
 
@@ -243,8 +294,9 @@ function ActionCard({ action }: { action: AiAction }) {
                 variant="ghost"
                 className="h-8 w-8 p-0 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
                 onClick={() => approveMutation.mutate()}
-                disabled={approveMutation.isPending || rejectMutation.isPending}
+                disabled={anyMutating}
                 title="Approve"
+                data-testid={`approve-action-${action.id}`}
               >
                 {approveMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -257,12 +309,26 @@ function ActionCard({ action }: { action: AiAction }) {
                 variant="ghost"
                 className="h-8 w-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
                 onClick={() => rejectMutation.mutate()}
-                disabled={approveMutation.isPending || rejectMutation.isPending}
+                disabled={anyMutating}
                 title="Reject"
+                data-testid={`reject-action-${action.id}`}
               >
                 <X className="w-4 h-4" />
               </Button>
             </>
+          )}
+          {hasRollback && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+              onClick={() => rollbackMutation.mutate()}
+              disabled={anyMutating}
+              title="Undo this action"
+              data-testid={`rollback-action-${action.id}`}
+            >
+              {rollbackMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+            </Button>
           )}
           <Button
             size="sm"
@@ -270,6 +336,7 @@ function ActionCard({ action }: { action: AiAction }) {
             className="h-8 w-8 p-0"
             onClick={() => setExpanded(!expanded)}
             title={expanded ? "Collapse" : "Expand"}
+            data-testid={`expand-action-${action.id}`}
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
@@ -301,6 +368,27 @@ function ActionCard({ action }: { action: AiAction }) {
               <p className="text-xs italic mt-0.5">"{action.sourceText}"</p>
             </div>
           )}
+          {action.executedAt && (
+            <div className="text-xs text-muted-foreground">
+              Executed: {format(new Date(action.executedAt), "MMM d, yyyy h:mm a")}
+            </div>
+          )}
+          {action.rolledBackAt && (
+            <div className="text-xs text-gray-400">
+              Rolled back: {format(new Date(action.rolledBackAt), "MMM d, yyyy h:mm a")}
+            </div>
+          )}
+          {isCompleted && action.resultData != null && (() => {
+            const rd = action.resultData as Record<string, unknown> | string;
+            const msg = typeof rd === "object"
+              ? ((rd.message as string) || (rd.summary as string) || "Completed successfully")
+              : String(rd);
+            return (
+              <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-xs text-emerald-400">{msg}</span>
+              </div>
+            );
+          })()}
           {action.errorMessage && (
             <div className="p-2 rounded bg-red-500/10 border border-red-500/20">
               <span className="text-xs text-red-400">{action.errorMessage}</span>
@@ -729,12 +817,33 @@ function RulesTab() {
   );
 }
 
+// ─── Time range filter helper ─────────────────────────────────────────────────
+
+function filterByTime(actions: AiAction[], timeFilter: string): AiAction[] {
+  const now = new Date();
+  if (timeFilter === "today") {
+    return actions.filter(a => isToday(new Date(a.createdAt)));
+  }
+  if (timeFilter === "7d") {
+    return actions.filter(a =>
+      isWithinInterval(new Date(a.createdAt), { start: subDays(now, 7), end: now })
+    );
+  }
+  if (timeFilter === "30d") {
+    return actions.filter(a =>
+      isWithinInterval(new Date(a.createdAt), { start: subDays(now, 30), end: now })
+    );
+  }
+  return actions; // "all"
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AgentPage() {
   const [mainTab, setMainTab] = useState<"actions" | "rules">("actions");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [timeFilter, setTimeFilter] = useState<string>("7d");
 
   const { data: statsData } = useQuery<{ status: string; data: ActionStats }>({
     queryKey: ["/api/actions/stats"],
@@ -746,7 +855,7 @@ export default function AgentPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      params.set("limit", "100");
+      params.set("limit", "200");
       const res = await apiRequest("GET", `/api/actions?${params.toString()}`);
       return res.json();
     },
@@ -754,37 +863,34 @@ export default function AgentPage() {
   });
 
   const stats = statsData?.data;
-  const actions: AiAction[] = actionsData?.data || [];
+  const allActions: AiAction[] = actionsData?.data || [];
 
+  const timeFiltered = filterByTime(allActions, timeFilter);
   const filteredActions = categoryFilter === "all"
-    ? actions
-    : actions.filter(a => a.actionCategory === categoryFilter);
+    ? timeFiltered
+    : timeFiltered.filter(a => a.actionCategory === categoryFilter);
 
-  const categories = Array.from(new Set(actions.map(a => a.actionCategory))).sort();
+  const categories = Array.from(new Set(allActions.map(a => a.actionCategory))).sort();
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm border-b border-border/50">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
-            <Link href="/dashboard">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-          </Button>
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-violet-500" />
-            <h1 className="font-semibold text-base">Agent</h1>
+    <AppLayout>
+      <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
+
+        {/* Page header */}
+        <div className="glass-card p-5 rounded-2xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-500 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="font-bold text-lg text-foreground">Agent Activity</h1>
+            <p className="text-xs text-muted-foreground">Full history of every AI action proposed or taken</p>
           </div>
           {stats && stats.pendingCount > 0 && (
-            <Badge className="ml-auto bg-amber-500/20 text-amber-400 border-amber-500/30">
+            <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 flex-shrink-0">
               {stats.pendingCount} pending
             </Badge>
           )}
         </div>
-      </div>
-
-      <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
 
         {/* Stats row */}
         {stats && mainTab === "actions" && (
@@ -858,26 +964,46 @@ export default function AgentPage() {
         {/* ── Actions Tab ── */}
         {mainTab === "actions" && (
           <>
-            {/* Status filter */}
-            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-              <TabsList className="w-full justify-start gap-1 bg-muted/30 p-1 h-auto flex-wrap">
-                {[
-                  { value: "all", label: "All" },
-                  { value: "pending", label: "Pending" },
-                  { value: "completed", label: "Done" },
-                  { value: "rejected", label: "Rejected" },
-                  { value: "failed", label: "Failed" },
-                ].map(tab => (
-                  <TabsTrigger
-                    key={tab.value}
-                    value={tab.value}
-                    className="text-xs px-3 py-1.5 data-[state=active]:bg-background"
-                  >
-                    {tab.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+            {/* Status + time filters */}
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+              <Tabs value={statusFilter} onValueChange={setStatusFilter} className="flex-1">
+                <TabsList className="w-full justify-start gap-1 bg-muted/30 p-1 h-auto flex-wrap">
+                  {[
+                    { value: "all", label: "All" },
+                    { value: "pending", label: "Pending" },
+                    { value: "completed", label: "Done" },
+                    { value: "rejected", label: "Rejected" },
+                    { value: "failed", label: "Failed" },
+                  ].map(tab => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="text-xs px-3 py-1.5 data-[state=active]:bg-background"
+                      data-testid={`filter-status-${tab.value}`}
+                    >
+                      {tab.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+
+              {/* Time range selector */}
+              <Select value={timeFilter} onValueChange={setTimeFilter}>
+                <SelectTrigger
+                  className="h-8 text-xs w-28 border-white/20 bg-transparent flex-shrink-0"
+                  data-testid="filter-time"
+                >
+                  <Filter className="w-3 h-3 mr-1 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today" className="text-xs">Today</SelectItem>
+                  <SelectItem value="7d" className="text-xs">7 days</SelectItem>
+                  <SelectItem value="30d" className="text-xs">30 days</SelectItem>
+                  <SelectItem value="all" className="text-xs">All time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Category filter */}
             {categories.length > 1 && (
@@ -955,7 +1081,7 @@ export default function AgentPage() {
             )}
 
             {/* Info card for empty state */}
-            {!isLoading && actions.length === 0 && (
+            {!isLoading && allActions.length === 0 && (
               <Card className="glass-card border-violet-500/20 bg-violet-500/5">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -981,6 +1107,6 @@ export default function AgentPage() {
         {/* ── Rules Tab ── */}
         {mainTab === "rules" && <RulesTab />}
       </div>
-    </div>
+    </AppLayout>
   );
 }

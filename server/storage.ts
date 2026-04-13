@@ -100,6 +100,7 @@ export interface IStorage {
   getAiAction(id: string, userId: string): Promise<AiAction | undefined>;
   createAiAction(action: InsertAiAction): Promise<AiAction>;
   updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined>;
+  markActionRolledBack(id: string, userId: string): Promise<AiAction | undefined>;
   getPendingActions(userId: string): Promise<AiAction[]>;
   resolvePendingActionsBySource(userId: string, sourceId: string, actionType?: string, resolution?: 'completed' | 'rejected'): Promise<number>;
   
@@ -1424,6 +1425,20 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to update AI action:', error);
       throw new Error('Database error while updating AI action');
+    }
+  }
+
+  async markActionRolledBack(id: string, userId: string): Promise<AiAction | undefined> {
+    try {
+      const [updated] = await db
+        .update(aiActions)
+        .set({ rolledBackAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(aiActions.id, id), eq(aiActions.userId, userId)))
+        .returning();
+      return updated;
+    } catch (error) {
+      console.error('Failed to mark action as rolled back:', error);
+      throw new Error('Database error while rolling back AI action');
     }
   }
 

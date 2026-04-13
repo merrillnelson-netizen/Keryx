@@ -4258,6 +4258,41 @@ Respond with JSON only.`
   });
 
   /**
+   * POST /api/actions/:id/rollback - Roll back a completed action
+   * Only available when rollbackAvailable is true and rolledBackAt is null
+   */
+  app.post("/api/actions/:id/rollback", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const action = await storage.getAiAction(req.params.id, user.id);
+
+      if (!action) {
+        return sendErrorResponse(res, 404, "Action not found");
+      }
+      if (action.status !== 'completed') {
+        return sendErrorResponse(res, 400, "Only completed actions can be rolled back");
+      }
+      if (!action.rollbackAvailable) {
+        return sendErrorResponse(res, 400, "This action does not support rollback");
+      }
+      if (action.rolledBackAt) {
+        return sendErrorResponse(res, 400, "Action has already been rolled back");
+      }
+
+      // Mark as rolled back
+      await storage.markActionRolledBack(action.id, user.id);
+
+      res.json({
+        status: 'success',
+        message: 'Action rolled back',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to roll back action", error);
+    }
+  });
+
+  /**
    * POST /api/actions/resolve-by-source - Resolve pending actions for a specific memory
    * Used when an action is handled inline (e.g., calendar event created from Log screen)
    */

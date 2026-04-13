@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff } from "lucide-react";
+import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
@@ -31,6 +31,7 @@ const navigation = [
   { name: "Timeline", href: "/timeline", icon: Calendar },
   { name: "Messages", href: "/messages", icon: MessageCircle },
   { name: "Locations", href: "/locations", icon: MapPin },
+  { name: "Agent", href: "/agent", icon: Bot },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 

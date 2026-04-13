@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { 
   Sun, 
   Moon, 
@@ -25,6 +25,9 @@ import {
   X,
   ArrowRight,
   Activity,
+  Bot,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
@@ -300,6 +303,71 @@ function FoundingMemberBanner() {
   );
 }
 
+interface ActionStats {
+  pendingCount: number;
+  completedToday: number;
+  completedTotal: number;
+  rejectedTotal: number;
+  failedTotal: number;
+  totalActions: number;
+}
+
+function AgentActivityWidget() {
+  const { data: statsData } = useQuery<{ status: string; data: ActionStats }>({
+    queryKey: ["/api/actions/stats"],
+    staleTime: 60_000,
+  });
+
+  const stats = statsData?.data;
+  if (!stats) return null;
+
+  const hasActivity = stats.totalActions > 0;
+
+  return (
+    <Card className="glass-card border-white/20">
+      <CardContent className="py-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-500 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Agent Activity</p>
+            {hasActivity ? (
+              <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                {stats.completedToday > 0 && (
+                  <span className="flex items-center gap-1 text-green-400">
+                    <CheckCircle2 className="w-3 h-3" />
+                    {stats.completedToday} done today
+                  </span>
+                )}
+                {stats.pendingCount > 0 && (
+                  <span className="flex items-center gap-1 text-amber-400">
+                    <Clock className="w-3 h-3" />
+                    {stats.pendingCount} pending
+                  </span>
+                )}
+                {stats.completedToday === 0 && stats.pendingCount === 0 && (
+                  <span>{stats.completedTotal} total actions taken</span>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                AI actions will appear here as Keryx works for you
+              </p>
+            )}
+          </div>
+          <Button variant="ghost" size="sm" className="flex-shrink-0 gap-1.5 text-xs" asChild>
+            <Link href="/agent">
+              View all
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -513,6 +581,9 @@ export default function Dashboard() {
 
         {/* Pending AI Actions */}
         <PendingActions />
+
+        {/* Agent Activity Summary Widget */}
+        <AgentActivityWidget />
 
         {/* Personal News Feed */}
         <ErrorBoundary fallback={null}>
