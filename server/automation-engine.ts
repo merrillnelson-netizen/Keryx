@@ -39,6 +39,7 @@ export interface TriggerContext {
   goalTitle?: string;
   progressPercent?: number;
   // action.completed
+  actionId?: string;
   actionType?: string;
   actionTitle?: string;
   // briefing.generated
