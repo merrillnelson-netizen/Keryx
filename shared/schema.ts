@@ -532,10 +532,17 @@ export const AI_ACTION_TYPES = {
   // People / Relationship
   PERSON_UPDATE: 'person.update',
   PEOPLE_REACH_OUT: 'people.reach_out',   // Suggest contacting someone
+  PEOPLE_NOTE: 'people.note',             // Add a note to a person's record
   PERSON_DECAY_AUDIT: 'person_decay_audit', // Velocity-decay advisory (pre-existing)
   // Goals
   GOAL_UPDATE: 'goal.update',             // Update goal progress based on evidence
   GOAL_MILESTONE: 'goal.milestone',       // Suggest adding/completing a milestone
+  // Web / Research
+  WEB_SEARCH: 'web.search',              // Perform a Tavily web search and surface results
+  // Memory
+  MEMORY_CREATE: 'memory.create',        // Create a new memory/log entry on behalf of the user
+  // Financial
+  FINANCIAL_ALERT: 'financial.alert',    // Surface a financial pattern or alert (advisory)
   // System / Proactive
   INSIGHT_SURFACE: 'insight.surface',     // Surface a curated insight card
   // Relay / Outbound
@@ -550,6 +557,9 @@ export const AI_ACTION_CATEGORIES = {
   REMINDER: 'reminder',
   PEOPLE: 'people',
   GOALS: 'goals',
+  RESEARCH: 'research',
+  MEMORY: 'memory',
+  FINANCIAL: 'financial',
   SYSTEM: 'system',
   RELAY: 'relay',
 } as const;
@@ -597,9 +607,40 @@ export const reminderCreatePayloadSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const peopleNotePayloadSchema = z.object({
+  personName: z.string(),          // Name to match against contacts
+  note: z.string(),                // The note content to add
+  personId: z.string().optional(), // Pre-resolved person ID if available
+});
+
+export const webSearchPayloadSchema = z.object({
+  query: z.string(),               // The search query to run
+  context: z.string().optional(),  // Why this search was triggered
+  maxResults: z.number().int().min(1).max(5).optional().default(3),
+});
+
+export const memoryCreatePayloadSchema = z.object({
+  memoryText: z.string(),          // The memory content to log
+  topicTag: z.string().optional(), // Optional category tag
+  mood: z.string().optional(),     // Optional mood
+});
+
+export const financialAlertPayloadSchema = z.object({
+  alertType: z.enum(['spending_spike', 'recurring_charge', 'budget_threshold', 'unusual_pattern', 'insight']),
+  title: z.string(),               // Short alert headline
+  details: z.string(),             // Explanation of the alert
+  amount: z.number().optional(),   // Relevant amount if applicable
+  merchant: z.string().optional(), // Merchant name if applicable
+  category: z.string().optional(), // Spending category if applicable
+});
+
 export type CalendarCreatePayload = z.infer<typeof calendarCreatePayloadSchema>;
 export type EmailSendPayload = z.infer<typeof emailSendPayloadSchema>;
 export type ReminderCreatePayload = z.infer<typeof reminderCreatePayloadSchema>;
+export type PeopleNotePayload = z.infer<typeof peopleNotePayloadSchema>;
+export type WebSearchPayload = z.infer<typeof webSearchPayloadSchema>;
+export type MemoryCreatePayload = z.infer<typeof memoryCreatePayloadSchema>;
+export type FinancialAlertPayload = z.infer<typeof financialAlertPayloadSchema>;
 
 /**
  * Ideas table - stores user ideas at various stages of development

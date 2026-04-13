@@ -44,6 +44,10 @@ import {
   Workflow,
   RotateCcw,
   Filter,
+  Search,
+  Brain,
+  DollarSign,
+  UserPen,
 } from "lucide-react";
 import { type AiAction, AI_ACTION_TYPES, AUTOMATION_TRIGGERS, AUTOMATION_ACTIONS } from "@shared/schema";
 
@@ -85,6 +89,9 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Bot; color: 
   reminder: { label: "Reminder", icon: Bell, color: "text-amber-500" },
   people: { label: "People", icon: Users, color: "text-sky-500" },
   goals: { label: "Goals", icon: Target, color: "text-emerald-500" },
+  research: { label: "Research", icon: Search, color: "text-blue-500" },
+  memory: { label: "Memory", icon: Brain, color: "text-emerald-400" },
+  financial: { label: "Financial", icon: DollarSign, color: "text-yellow-500" },
   system: { label: "System", icon: Zap, color: "text-violet-500" },
   relay: { label: "Relay", icon: Radio, color: "text-orange-500" },
 };
@@ -156,6 +163,14 @@ function formatPayloadPreview(action: AiAction): string {
       return payload.summary || payload.content || "Proactive insight";
     case AI_ACTION_TYPES.RELAY_OUTBOUND:
       return `→ ${payload.destination || "relay"}: ${(payload.content || "").slice(0, 60)}`;
+    case AI_ACTION_TYPES.PEOPLE_NOTE:
+      return `${payload.personName}: ${(payload.note || "").slice(0, 60)}`;
+    case AI_ACTION_TYPES.WEB_SEARCH:
+      return `"${payload.query}"`;
+    case AI_ACTION_TYPES.MEMORY_CREATE:
+      return `${(payload.memoryText || "").slice(0, 80)}`;
+    case AI_ACTION_TYPES.FINANCIAL_ALERT:
+      return `${payload.title || "Financial Alert"}`;
     case "person_decay_audit":
       return `Relationship check: ${payload.personName || ""}`;
     default:

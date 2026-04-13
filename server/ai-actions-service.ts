@@ -25,9 +25,18 @@ import {
   type AiActionPreference,
   type CalendarCreatePayload,
   type EmailSendPayload,
+  type PeopleNotePayload,
+  type WebSearchPayload,
+  type MemoryCreatePayload,
+  type FinancialAlertPayload,
   calendarCreatePayloadSchema,
   emailSendPayloadSchema,
+  peopleNotePayloadSchema,
+  webSearchPayloadSchema,
+  memoryCreatePayloadSchema,
+  financialAlertPayloadSchema,
 } from "@shared/schema";
+import { tavily } from "@tavily/core";
 import { createCalendarEvent, isGoogleCalendarConnected, deleteGoogleCalendarEvent } from "./calendar-service";
 import { sendEmail as sendGmailEmail, isGmailConnected, getGmailCapabilities } from "./gmail-service";
 import { isOutlookConnected } from "./outlook-calendar-service";
@@ -122,6 +131,34 @@ export const ACTION_DEFINITIONS = {
     examples: ['add milestone', 'complete milestone'],
     supported: true,
   },
+  // — People note —
+  [AI_ACTION_TYPES.PEOPLE_NOTE]: {
+    category: AI_ACTION_CATEGORIES.PEOPLE,
+    description: 'Add a note to a person\'s contact record',
+    examples: ['add note about', 'note that John said', 'remember about Sarah'],
+    supported: true,
+  },
+  // — Web Search —
+  [AI_ACTION_TYPES.WEB_SEARCH]: {
+    category: AI_ACTION_CATEGORIES.RESEARCH,
+    description: 'Search the web and surface results',
+    examples: ['search for', 'look up', 'find information about', 'research'],
+    supported: true,
+  },
+  // — Memory Create —
+  [AI_ACTION_TYPES.MEMORY_CREATE]: {
+    category: AI_ACTION_CATEGORIES.MEMORY,
+    description: 'Create a new memory log entry',
+    examples: ['log that', 'remember that', 'note that', 'record this'],
+    supported: true,
+  },
+  // — Financial Alert —
+  [AI_ACTION_TYPES.FINANCIAL_ALERT]: {
+    category: AI_ACTION_CATEGORIES.FINANCIAL,
+    description: 'Surface a financial pattern or spending alert',
+    examples: ['spending alert', 'budget warning', 'unusual charge'],
+    supported: true,
+  },
   // — System / Proactive —
   [AI_ACTION_TYPES.INSIGHT_SURFACE]: {
     category: AI_ACTION_CATEGORIES.SYSTEM,
@@ -167,6 +204,9 @@ AVAILABLE ACTIONS:
 1. calendar.create - Create a calendar event (schedule meeting, book appointment, set up call)
 2. email.send - Send a new email to someone
 3. reminder.create - Set a reminder for the user
+4. people.note - Add a note to a person's contact record (e.g. "note that Sarah said she's moving to Denver")
+5. web.search - Search the web for information (e.g. "search for best restaurants in Denver", "look up the latest on X")
+6. memory.create - Explicitly log a new memory entry (e.g. "log that I finished the report", "record that I met with the team")
 
 NOT SUPPORTED (do not detect these):
 - calendar.update - Updating existing events is not yet supported
@@ -180,10 +220,13 @@ CURRENT CONTEXT:
 - Email provider: ${providers.email || 'not connected'}
 
 DETECTION RULES:
-- Look for imperative phrases like "schedule", "send", "remind me", "set up", "book", "email"
+- Look for imperative phrases like "schedule", "send", "remind me", "set up", "book", "email", "search for", "look up", "find", "note that", "log that", "record that", "remember about"
 - Look for future-oriented requests that require external action
-- Do NOT flag simple memory logging or queries as actions
-- Do NOT flag reflective statements or observations
+- For people.note: detect when user wants to annotate a contact with context (conversations, preferences, facts about them)
+- For web.search: detect explicit search requests or "look up X" / "find info on X" phrasing
+- For memory.create: detect explicit logging requests ("log that", "record that", "note that I did X")
+- Do NOT flag simple reflective statements or observations as memory.create — only explicit logging requests
+- Do NOT flag general information queries as actions (only explicit "search for" / "find" phrasing)
 
 If an action is detected, extract:
 1. The specific action type
@@ -194,8 +237,8 @@ If an action is detected, extract:
 Respond with JSON:
 {
   "detected": boolean,
-  "actionType": "calendar.create" | "email.send" | "reminder.create" | null,
-  "actionCategory": "calendar" | "email" | "reminder" | null,
+  "actionType": "calendar.create" | "email.send" | "reminder.create" | "people.note" | "web.search" | "memory.create" | null,
+  "actionCategory": "calendar" | "email" | "reminder" | "people" | "research" | "memory" | null,
   "title": "Brief description of the action",
   "description": "Detailed explanation of what will be done",
   "payload": {
@@ -217,6 +260,20 @@ Respond with JSON:
     "title": "Reminder title",
     "dueDateTime": "ISO 8601 datetime",
     "notes": "optional notes"
+
+    // For people.note:
+    "personName": "Name of the person",
+    "note": "The note content to add to their record"
+
+    // For web.search:
+    "query": "The exact search query",
+    "context": "Why the user wants this searched",
+    "maxResults": 3
+
+    // For memory.create:
+    "memoryText": "The full memory text to log",
+    "topicTag": "optional topic category",
+    "mood": "optional mood (happy/sad/neutral/excited/stressed/grateful/anxious/content)"
   },
   "reasoning": "Explanation of why this was detected as an action and how parameters were extracted",
   "confidence": 0.0-1.0
@@ -366,6 +423,19 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
       case AI_ACTION_TYPES.GOAL_MILESTONE:
         // Goal actions are advisory — user confirms in the Goals page.
         result = { success: true, resultData: { acknowledged: true, type: action.actionType } };
+        break;
+      case AI_ACTION_TYPES.PEOPLE_NOTE:
+        result = await executePeopleNote(action);
+        break;
+      case AI_ACTION_TYPES.WEB_SEARCH:
+        result = await executeWebSearch(action);
+        break;
+      case AI_ACTION_TYPES.MEMORY_CREATE:
+        result = await executeMemoryCreate(action);
+        break;
+      case AI_ACTION_TYPES.FINANCIAL_ALERT:
+        // Financial alerts are advisory — approving acknowledges the alert.
+        result = { success: true, resultData: { acknowledged: true, type: 'financial_alert' } };
         break;
       case AI_ACTION_TYPES.INSIGHT_SURFACE:
         // Insight surface actions are informational — approving dismisses the card.
@@ -640,6 +710,148 @@ async function executeChainSequence(action: AiAction): Promise<ActionExecutionRe
   };
 }
 
+/**
+ * Execute people.note action — adds a note to a person's record
+ */
+async function executePeopleNote(action: AiAction): Promise<ActionExecutionResult> {
+  const payload = action.payload as PeopleNotePayload;
+
+  const validation = peopleNotePayloadSchema.safeParse(payload);
+  if (!validation.success) {
+    return { success: false, errorMessage: `Invalid people.note payload: ${validation.error.message}` };
+  }
+
+  try {
+    let personId = payload.personId;
+
+    // If no personId, try to find the person by name
+    if (!personId) {
+      const people = await storage.getPeople(action.userId);
+      const matched = people.find(p =>
+        p.name.toLowerCase().includes(payload.personName.toLowerCase()) ||
+        payload.personName.toLowerCase().includes(p.name.toLowerCase())
+      );
+      if (matched) {
+        personId = matched.id;
+      }
+    }
+
+    if (!personId) {
+      return {
+        success: false,
+        errorMessage: `Could not find a contact named "${payload.personName}". Please add them to your contacts first.`,
+      };
+    }
+
+    // Fetch current person to append note
+    const person = await storage.getPersonById(action.userId, personId);
+    if (!person) {
+      return { success: false, errorMessage: 'Contact not found.' };
+    }
+
+    const timestamp = new Date().toISOString();
+    const noteEntry = `[${timestamp}] ${payload.note}`;
+    const existingNotes = (person.notes as string | null) || '';
+    const updatedNotes = existingNotes ? `${existingNotes}\n${noteEntry}` : noteEntry;
+
+    await storage.updatePerson(action.userId, personId, { notes: updatedNotes });
+
+    return {
+      success: true,
+      resultData: { personId, personName: person.name, note: payload.note },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Failed to add note to contact',
+    };
+  }
+}
+
+/**
+ * Execute web.search action — runs a Tavily search and returns results
+ */
+async function executeWebSearch(action: AiAction): Promise<ActionExecutionResult> {
+  const payload = action.payload as WebSearchPayload;
+
+  const validation = webSearchPayloadSchema.safeParse(payload);
+  if (!validation.success) {
+    return { success: false, errorMessage: `Invalid web.search payload: ${validation.error.message}` };
+  }
+
+  const tavilyApiKey = process.env.TAVILY_API_KEY;
+  if (!tavilyApiKey) {
+    return { success: false, errorMessage: 'Tavily API key not configured. Add TAVILY_API_KEY in settings.' };
+  }
+
+  try {
+    const tvly = tavily({ apiKey: tavilyApiKey });
+    const maxResults = payload.maxResults ?? 3;
+
+    const response = await tvly.search(payload.query, {
+      max_results: maxResults,
+      search_depth: 'basic',
+      include_answer: true,
+    }) as any;
+
+    const results = (response.results || []).map((r: any) => ({
+      title: r.title,
+      url: r.url,
+      content: r.content?.slice(0, 400) || '',
+      score: r.score ?? 0.5,
+    }));
+
+    return {
+      success: true,
+      resultData: {
+        query: payload.query,
+        answer: response.answer || null,
+        results,
+        resultCount: results.length,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Web search failed',
+    };
+  }
+}
+
+/**
+ * Execute memory.create action — creates a new log entry on behalf of the user
+ */
+async function executeMemoryCreate(action: AiAction): Promise<ActionExecutionResult> {
+  const payload = action.payload as MemoryCreatePayload;
+
+  const validation = memoryCreatePayloadSchema.safeParse(payload);
+  if (!validation.success) {
+    return { success: false, errorMessage: `Invalid memory.create payload: ${validation.error.message}` };
+  }
+
+  try {
+    const entry = await storage.createLogEntry({
+      userId: action.userId,
+      memoryText: payload.memoryText,
+      topicTag: payload.topicTag || 'General',
+      mood: (payload.mood as any) || null,
+      importance: 5,
+      metadataJson: { source: 'agent_action', actionId: action.id },
+      embeddingVector: Array(1536).fill(0), // Zero vector; backfill can regenerate
+    });
+
+    return {
+      success: true,
+      resultData: { entryId: entry.id, memoryText: payload.memoryText },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorMessage: error instanceof Error ? error.message : 'Failed to create memory',
+    };
+  }
+}
+
 function getActionCategory(actionType: string): string {
   const categoryMap: Record<string, string> = {
     [AI_ACTION_TYPES.CALENDAR_CREATE]: AI_ACTION_CATEGORIES.CALENDAR,
@@ -648,8 +860,12 @@ function getActionCategory(actionType: string): string {
     [AI_ACTION_TYPES.EMAIL_DRAFT]: AI_ACTION_CATEGORIES.EMAIL,
     [AI_ACTION_TYPES.REMINDER_CREATE]: AI_ACTION_CATEGORIES.REMINDER,
     [AI_ACTION_TYPES.PEOPLE_REACH_OUT]: AI_ACTION_CATEGORIES.PEOPLE,
+    [AI_ACTION_TYPES.PEOPLE_NOTE]: AI_ACTION_CATEGORIES.PEOPLE,
     [AI_ACTION_TYPES.GOAL_UPDATE]: AI_ACTION_CATEGORIES.GOALS,
     [AI_ACTION_TYPES.GOAL_MILESTONE]: AI_ACTION_CATEGORIES.GOALS,
+    [AI_ACTION_TYPES.WEB_SEARCH]: AI_ACTION_CATEGORIES.RESEARCH,
+    [AI_ACTION_TYPES.MEMORY_CREATE]: AI_ACTION_CATEGORIES.MEMORY,
+    [AI_ACTION_TYPES.FINANCIAL_ALERT]: AI_ACTION_CATEGORIES.FINANCIAL,
     [AI_ACTION_TYPES.INSIGHT_SURFACE]: AI_ACTION_CATEGORIES.SYSTEM,
     [AI_ACTION_TYPES.RELAY_OUTBOUND]: AI_ACTION_CATEGORIES.RELAY,
     [AI_ACTION_TYPES.CHAIN_SEQUENCE]: AI_ACTION_CATEGORIES.SYSTEM,
@@ -912,6 +1128,13 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       available: true,
       provider: undefined,
     },
+    {
+      actionType: AI_ACTION_TYPES.PEOPLE_NOTE,
+      category: AI_ACTION_CATEGORIES.PEOPLE,
+      description: 'Add a note to a person\'s contact record',
+      available: true,
+      provider: undefined,
+    },
     // Goals
     {
       actionType: AI_ACTION_TYPES.GOAL_UPDATE,
@@ -924,6 +1147,30 @@ export async function getAvailableActionTypes(userId?: string): Promise<{
       actionType: AI_ACTION_TYPES.GOAL_MILESTONE,
       category: AI_ACTION_CATEGORIES.GOALS,
       description: 'Suggest adding or completing a milestone',
+      available: true,
+      provider: undefined,
+    },
+    // Research
+    {
+      actionType: AI_ACTION_TYPES.WEB_SEARCH,
+      category: AI_ACTION_CATEGORIES.RESEARCH,
+      description: 'Search the web and surface results',
+      available: !!process.env.TAVILY_API_KEY,
+      provider: 'tavily',
+    },
+    // Memory
+    {
+      actionType: AI_ACTION_TYPES.MEMORY_CREATE,
+      category: AI_ACTION_CATEGORIES.MEMORY,
+      description: 'Create a new memory log entry',
+      available: true,
+      provider: undefined,
+    },
+    // Financial
+    {
+      actionType: AI_ACTION_TYPES.FINANCIAL_ALERT,
+      category: AI_ACTION_CATEGORIES.FINANCIAL,
+      description: 'Surface a financial pattern or spending alert',
       available: true,
       provider: undefined,
     },

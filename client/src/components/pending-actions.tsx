@@ -14,7 +14,11 @@ import {
   Clock, 
   ChevronDown,
   ChevronUp,
-  AlertCircle
+  AlertCircle,
+  Search,
+  Brain,
+  DollarSign,
+  UserPen
 } from "lucide-react";
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -88,6 +92,21 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
     if (actionType.startsWith('reminder')) {
       return <Bell className="w-4 h-4 text-amber-500" />;
     }
+    if (actionType === AI_ACTION_TYPES.PEOPLE_NOTE) {
+      return <UserPen className="w-4 h-4 text-sky-500" />;
+    }
+    if (actionType.startsWith('people')) {
+      return <Bot className="w-4 h-4 text-sky-500" />;
+    }
+    if (actionType === AI_ACTION_TYPES.WEB_SEARCH) {
+      return <Search className="w-4 h-4 text-blue-500" />;
+    }
+    if (actionType === AI_ACTION_TYPES.MEMORY_CREATE) {
+      return <Brain className="w-4 h-4 text-emerald-500" />;
+    }
+    if (actionType === AI_ACTION_TYPES.FINANCIAL_ALERT) {
+      return <DollarSign className="w-4 h-4 text-yellow-500" />;
+    }
     return <Bot className="w-4 h-4 text-violet-500" />;
   };
 
@@ -97,6 +116,9 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
       email: 'bg-red-500/20 text-red-500',
       reminder: 'bg-amber-500/20 text-amber-500',
       people: 'bg-sky-500/20 text-sky-500',
+      research: 'bg-blue-500/20 text-blue-500',
+      memory: 'bg-emerald-500/20 text-emerald-500',
+      financial: 'bg-yellow-500/20 text-yellow-500',
     };
     return colors[category] || 'bg-muted text-muted-foreground';
   };
@@ -114,6 +136,18 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
     }
     if (action.actionType === AI_ACTION_TYPES.REMINDER_CREATE) {
       return `${payload.title || 'Reminder'}`;
+    }
+    if (action.actionType === AI_ACTION_TYPES.PEOPLE_NOTE) {
+      return `${payload.personName}: ${payload.note?.slice(0, 60) || ''}`;
+    }
+    if (action.actionType === AI_ACTION_TYPES.WEB_SEARCH) {
+      return `"${payload.query}"`;
+    }
+    if (action.actionType === AI_ACTION_TYPES.MEMORY_CREATE) {
+      return `${payload.memoryText?.slice(0, 80) || ''}`;
+    }
+    if (action.actionType === AI_ACTION_TYPES.FINANCIAL_ALERT) {
+      return `${payload.title || 'Financial Alert'}`;
     }
     return action.title;
   };
