@@ -12,6 +12,7 @@ import { sendPushToAllUserDevices } from "./push-service";
 import { handleWebhookEvent } from "./stripe-service";
 import { getStripeSync } from "./stripe-client";
 import { startVelocityScheduler } from "./velocity-service";
+import { formatTimeInTimezone } from "./temporal-context";
 
 /**
  * Validate required environment variables on startup
@@ -214,6 +215,27 @@ app.use((req, res, next) => {
     startVelocityScheduler();
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ─── Proactive Analysis Scheduler ────────────────────────────────────────
+    // Run proactive analysis once per day for all users who have recently been active.
+    setInterval(async () => {
+      try {
+        const { runProactiveAnalysis } = await import('./proactive-service');
+        const activeUsers = await pool.query(
+          `SELECT DISTINCT user_id FROM log_entries WHERE timestamp >= NOW() - INTERVAL '14 days'`
+        );
+        for (const row of activeUsers.rows) {
+          try {
+            await runProactiveAnalysis(row.user_id);
+          } catch (e) {
+            console.error(`[proactive-scheduler] Failed for user ${row.user_id?.slice(0, 8)}:`, e instanceof Error ? e.message : e);
+          }
+        }
+      } catch (err) {
+        console.error('[proactive-scheduler] Cycle error:', err instanceof Error ? err.message : err);
+      }
+    }, 24 * 60 * 60 * 1000); // once per day
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ─── Reminder Daemon ─────────────────────────────────────────────────────
     log('[reminder-daemon] Started — polling every 60s');
     setInterval(async () => {
@@ -225,8 +247,10 @@ app.use((req, res, next) => {
         for (const reminder of dueReminders) {
           try {
             await storage.triggerReminder(reminder.id, reminder.userId);
+            // Look up the user's timezone so the push body shows local time
+            const userTz = (await storage.getSettings(reminder.userId))?.userTimezone || 'America/Denver';
             const timeStr = reminder.triggerTime
-              ? new Date(reminder.triggerTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+              ? formatTimeInTimezone(new Date(reminder.triggerTime), userTz)
               : '';
             await sendPushToAllUserDevices(reminder.userId, {
               type: 'reminder',
@@ -249,11 +273,13 @@ app.use((req, res, next) => {
         const advanceReminders = await storage.getAdvanceWarningReminders(now, 30);
         for (const reminder of advanceReminders) {
           try {
+            // Look up the user's timezone so the push body shows local time
+            const userTz = (await storage.getSettings(reminder.userId))?.userTimezone || 'America/Denver';
             await sendPushToAllUserDevices(reminder.userId, {
               type: 'reminder',
               title: `🔔 Coming up: ${reminder.content}`,
               body: reminder.triggerTime
-                ? `Due at ${new Date(reminder.triggerTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+                ? `Due at ${formatTimeInTimezone(new Date(reminder.triggerTime), userTz)}`
                 : 'Due in about 30 minutes',
               url: '/reminders',
               requireInteraction: false,

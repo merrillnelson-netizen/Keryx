@@ -519,13 +519,29 @@ export const AI_CACHE_TYPES = {
 
 // Action type constants for type safety
 export const AI_ACTION_TYPES = {
+  // Calendar
   CALENDAR_CREATE: 'calendar.create',
-  CALENDAR_UPDATE: 'calendar.update', 
+  CALENDAR_UPDATE: 'calendar.update',
   CALENDAR_DELETE: 'calendar.delete',
+  // Email
   EMAIL_SEND: 'email.send',
   EMAIL_REPLY: 'email.reply',
+  EMAIL_DRAFT: 'email.draft',
+  // Reminders
   REMINDER_CREATE: 'reminder.create',
+  // People / Relationship
   PERSON_UPDATE: 'person.update',
+  PEOPLE_REACH_OUT: 'people.reach_out',   // Suggest contacting someone
+  PERSON_DECAY_AUDIT: 'person_decay_audit', // Velocity-decay advisory (pre-existing)
+  // Goals
+  GOAL_UPDATE: 'goal.update',             // Update goal progress based on evidence
+  GOAL_MILESTONE: 'goal.milestone',       // Suggest adding/completing a milestone
+  // System / Proactive
+  INSIGHT_SURFACE: 'insight.surface',     // Surface a curated insight card
+  // Relay / Outbound
+  RELAY_OUTBOUND: 'relay.outbound',       // Send content via outbound relay
+  // Chaining
+  CHAIN_SEQUENCE: 'chain.sequence',       // Multi-step action chain
 } as const;
 
 export const AI_ACTION_CATEGORIES = {
@@ -533,6 +549,9 @@ export const AI_ACTION_CATEGORIES = {
   EMAIL: 'email',
   REMINDER: 'reminder',
   PEOPLE: 'people',
+  GOALS: 'goals',
+  SYSTEM: 'system',
+  RELAY: 'relay',
 } as const;
 
 export const AI_ACTION_STATUSES = {
@@ -1186,3 +1205,73 @@ export type RelayDestination = typeof relayDestinations.$inferSelect;
 export type InsertRelayDestination = z.infer<typeof insertRelayDestinationSchema>;
 export type RelayEvent = typeof relayEvents.$inferSelect;
 export type InsertRelayEvent = z.infer<typeof insertRelayEventSchema>;
+
+// ─── Automation Rules Engine (IFTTT-style) ───────────────────────────────────
+
+/**
+ * Trigger types — events that can fire an automation rule.
+ */
+export const AUTOMATION_TRIGGERS = {
+  MEMORY_LOGGED:       'memory.logged',        // Any new memory is saved
+  MOOD_DROPPED:        'mood.dropped',          // Mood score falls below threshold
+  MOOD_SPIKED:         'mood.spiked',           // Mood score rises above threshold
+  PERSON_MENTIONED:    'person.mentioned',      // A specific person is mentioned in a memory
+  REMINDER_DUE:        'reminder.due',          // A reminder fires
+  BRIEFING_GENERATED:  'briefing.generated',    // Morning/afternoon briefing is generated
+  GOAL_UPDATED:        'goal.updated',           // Goal progress changes
+  KEYWORD_DETECTED:    'keyword.detected',      // A keyword/phrase appears in a memory
+  DAILY_SCHEDULE:      'daily.schedule',        // Time-based: fires at a specific time of day
+  ACTION_COMPLETED:    'action.completed',      // An AI action is executed successfully
+} as const;
+
+/**
+ * Action types for automation rules (what the rule DOES when triggered).
+ * Distinct from the broader AI_ACTION_TYPES — these are the executable outputs.
+ */
+export const AUTOMATION_ACTIONS = {
+  CREATE_REMINDER:     'create.reminder',       // Create a timed reminder
+  SEND_NOTIFICATION:   'send.notification',     // Push a notification
+  CREATE_AI_ACTION:    'create.ai_action',      // Queue an AI action for approval
+  LOG_MEMORY:          'log.memory',            // Auto-log a structured memory
+  RELAY_OUTBOUND:      'relay.outbound',        // Forward content via the relay API
+  SEND_EMAIL:          'send.email',            // Send an email (if connected)
+} as const;
+
+export const automationRules = pgTable("automation_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").default(true).notNull(),
+  // Trigger configuration
+  triggerType: text("trigger_type").notNull(), // AUTOMATION_TRIGGERS value
+  triggerConditions: jsonb("trigger_conditions"), // Optional condition filters (e.g., {moodBelow: 4, keyword: "stressed"})
+  // Action configuration
+  actionType: text("action_type").notNull(), // AUTOMATION_ACTIONS value
+  actionPayload: jsonb("action_payload").notNull(), // What to do (e.g., {content: "Take a break", minutesFromNow: 30})
+  // Execution metadata
+  runCount: integer("run_count").default(0).notNull(),
+  lastRunAt: timestamp("last_run_at"),
+  lastRunResult: text("last_run_result"), // 'success' | 'error'
+  lastRunError: text("last_run_error"),
+  // Limits to prevent infinite loops
+  maxRunsPerDay: integer("max_runs_per_day").default(3),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("automation_rules_user_id_idx").on(table.userId),
+  enabledIdx: index("automation_rules_enabled_idx").on(table.userId, table.enabled),
+}));
+
+export const insertAutomationRuleSchema = createInsertSchema(automationRules).omit({
+  id: true,
+  runCount: true,
+  lastRunAt: true,
+  lastRunResult: true,
+  lastRunError: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type AutomationRule = typeof automationRules.$inferSelect;
+export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;

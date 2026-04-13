@@ -623,6 +623,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
               .catch(err => console.error('Failed to check location reminders:', err));
           }
+
+          // Fire automation triggers for memory.logged (and keyword.detected, person.mentioned, mood.*)
+          import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
+            const ctx = {
+              userId: user.id,
+              memoryContent: memoryText,
+              moodScore: extracted.moodScore ?? undefined,
+              topics: extracted.topicTag ? [extracted.topicTag] : [],
+              peopleNames: extracted.detectedPeople || [],
+            };
+
+            // memory.logged
+            fireTrigger(user.id, AUTOMATION_TRIGGERS.MEMORY_LOGGED, ctx).catch(() => {});
+
+            // mood.dropped / mood.spiked
+            if (extracted.moodScore !== undefined && extracted.moodScore !== null) {
+              if (extracted.moodScore <= 3) {
+                fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_DROPPED, ctx).catch(() => {});
+              } else if (extracted.moodScore >= 8) {
+                fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_SPIKED, ctx).catch(() => {});
+              }
+            }
+
+            // person.mentioned — fire once per person
+            for (const personName of (extracted.detectedPeople || [])) {
+              fireTrigger(user.id, AUTOMATION_TRIGGERS.PERSON_MENTIONED, { ...ctx, personName }).catch(() => {});
+            }
+
+            // keyword.detected — check if any keywords from rules appear in the text
+            // (The engine itself checks conditions; we just fire the trigger)
+            fireTrigger(user.id, AUTOMATION_TRIGGERS.KEYWORD_DETECTED, { ...ctx, keyword: memoryText }).catch(() => {});
+          }).catch(() => {});
         } catch (bgError) {
           console.error('Background processing error (non-fatal):', bgError);
         }
@@ -2877,6 +2909,51 @@ Respond with JSON only.`
           }
         });
       }
+
+      // Background: Run proactive analysis after briefing is generated
+      setImmediate(async () => {
+        try {
+          const { runProactiveAnalysis } = await import('./proactive-service');
+          await runProactiveAnalysis(user.id);
+        } catch (err) {
+          console.error('[briefing] Background proactive analysis failed (non-fatal):', err instanceof Error ? err.message : err);
+        }
+      });
+
+      // Background: Fire briefing.generated automation trigger
+      setImmediate(async () => {
+        try {
+          const { fireTrigger, AUTOMATION_TRIGGERS } = await import('./automation-engine');
+          await fireTrigger(user.id, AUTOMATION_TRIGGERS.BRIEFING_GENERATED, {
+            userId: user.id,
+            briefingSummary: (briefing as any)?.summary || '',
+          });
+        } catch (err) {
+          // Non-fatal
+        }
+      });
+
+      // Background: Create insight.surface actions from pattern alerts
+      setImmediate(async () => {
+        try {
+          if (recentMemories.length >= 5) {
+            const { detectPatternAlerts } = await import('./ai-service');
+            const { createInsightSurfaceActions } = await import('./proactive-service');
+            const briefingTz = (req.userSettings as any)?.userTimezone || 'America/Denver';
+            const alerts = await detectPatternAlerts(
+              briefingMemories,
+              briefingTz,
+              (req.userSettings as any)?.sassLevel,
+              (req.userSettings as any)?.professionalMode
+            );
+            if (alerts.length > 0) {
+              await createInsightSurfaceActions(user.id, alerts);
+            }
+          }
+        } catch (err) {
+          console.error('[briefing] Background insight surfacing failed (non-fatal):', err instanceof Error ? err.message : err);
+        }
+      });
       
       return;
     } catch (error) {
@@ -3286,7 +3363,8 @@ Respond with JSON only.`
         financialData,
         tavilyApiKey,
         locationContext,
-        activeGoals.length > 0 ? activeGoals : undefined
+        activeGoals.length > 0 ? activeGoals : undefined,
+        userSettings?.userTimezone || 'America/Denver'
       );
       
       // Check for high-signal mentions of VIP people
@@ -3974,6 +4052,48 @@ Respond with JSON only.`
       });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to fetch actions", error);
+    }
+  });
+
+  /**
+   * GET /api/actions/stats - Summary stats for Agent Activity dashboard
+   * NOTE: Must be defined BEFORE /api/actions/:id
+   */
+  app.get("/api/actions/stats", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const [all, pending] = await Promise.all([
+        storage.getAiActions(user.id, undefined, 500),
+        storage.getPendingActions(user.id),
+      ]);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completedToday = all.filter(a => 
+        a.status === 'completed' && new Date(a.createdAt) >= today
+      ).length;
+      const rejectedTotal = all.filter(a => a.status === 'rejected').length;
+      const failedTotal = all.filter(a => a.status === 'failed').length;
+      const completedTotal = all.filter(a => a.status === 'completed').length;
+      // Category breakdown of pending actions
+      const categoryBreakdown: Record<string, number> = {};
+      for (const a of pending) {
+        categoryBreakdown[a.actionCategory] = (categoryBreakdown[a.actionCategory] || 0) + 1;
+      }
+      res.json({
+        status: 'success',
+        data: {
+          pendingCount: pending.length,
+          completedToday,
+          completedTotal,
+          rejectedTotal,
+          failedTotal,
+          totalActions: all.length,
+          categoryBreakdown,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch action stats", error);
     }
   });
 
@@ -6936,6 +7056,122 @@ Respond with JSON only.`
       return res.status(404).json({ message: "No APK available. Please trigger a GitHub Actions build." });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to serve APK", error);
+    }
+  });
+
+  // ============================================
+  // AUTOMATION RULES ROUTES
+  // ============================================
+
+  const automationRuleBodySchema = z.object({
+    name: z.string().min(1).max(100),
+    description: z.string().optional(),
+    enabled: z.boolean().optional(),
+    triggerType: z.string().min(1),
+    triggerConditions: z.record(z.any()).optional().nullable(),
+    actionType: z.string().min(1),
+    actionPayload: z.record(z.any()),
+    maxRunsPerDay: z.number().int().min(1).max(50).optional(),
+  });
+
+  /** GET /api/automation/rules — list all rules for the user */
+  app.get("/api/automation/rules", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const rules = await storage.getAutomationRules(user.id);
+      res.json(rules);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch automation rules", error);
+    }
+  });
+
+  /** POST /api/automation/rules — create a new rule */
+  app.post("/api/automation/rules", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = automationRuleBodySchema.parse(req.body);
+      const rule = await storage.createAutomationRule({ userId: user.id, ...data } as any);
+      res.status(201).json(rule);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create automation rule", error);
+    }
+  });
+
+  /** GET /api/automation/rules/:id — get one rule */
+  app.get("/api/automation/rules/:id", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const rule = await storage.getAutomationRule(req.params.id, user.id);
+      if (!rule) return res.status(404).json({ error: 'Rule not found' });
+      res.json(rule);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch automation rule", error);
+    }
+  });
+
+  /** PATCH /api/automation/rules/:id — update a rule (any fields) */
+  app.patch("/api/automation/rules/:id", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const data = automationRuleBodySchema.partial().parse(req.body);
+      const rule = await storage.updateAutomationRule(req.params.id, user.id, data as any);
+      if (!rule) return res.status(404).json({ error: 'Rule not found' });
+      res.json(rule);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update automation rule", error);
+    }
+  });
+
+  /** DELETE /api/automation/rules/:id — delete a rule */
+  app.delete("/api/automation/rules/:id", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      await storage.deleteAutomationRule(req.params.id, user.id);
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete automation rule", error);
+    }
+  });
+
+  /** POST /api/automation/rules/:id/toggle — quick enable/disable */
+  app.post("/api/automation/rules/:id/toggle", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const existing = await storage.getAutomationRule(req.params.id, user.id);
+      if (!existing) return res.status(404).json({ error: 'Rule not found' });
+      const rule = await storage.updateAutomationRule(req.params.id, user.id, { enabled: !existing.enabled });
+      res.json(rule);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to toggle automation rule", error);
+    }
+  });
+
+  /** POST /api/automation/rules/:id/test — manually fire a rule for testing */
+  app.post("/api/automation/rules/:id/test", requireAuth, requireTier('pro'), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const rule = await storage.getAutomationRule(req.params.id, user.id);
+      if (!rule) return res.status(404).json({ error: 'Rule not found' });
+      if (!rule.enabled) return res.status(400).json({ error: 'Rule is disabled' });
+
+      const { fireTrigger } = await import('./automation-engine');
+      // Fire immediately with a test context — bypass daily limit check (test run)
+      const testCtx = {
+        userId: user.id,
+        memoryContent: req.body.memoryContent || 'Test trigger from automation rules UI',
+        moodScore: req.body.moodScore ?? 5,
+        topics: req.body.topics || [],
+        peopleNames: req.body.peopleNames || [],
+        keyword: req.body.keyword || 'test',
+        localHour: new Date().getHours(),
+      };
+
+      // Override the trigger type to match the rule's trigger
+      await fireTrigger(user.id, rule.triggerType, testCtx);
+
+      res.json({ success: true, message: 'Rule triggered (test mode). Check the Agent dashboard for resulting actions.' });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to test automation rule", error);
     }
   });
 

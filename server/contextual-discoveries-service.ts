@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { tavily } from "@tavily/core";
+import { getYearInTimezone, getMonthNameInTimezone } from "./temporal-context";
 
 const openai = new OpenAI({ 
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -100,7 +101,8 @@ export async function extractSearchableInsights(
   emails: Array<{ subject?: string; snippet?: string; from?: string }>,
   financialData?: ExtendedFinancialData,
   locationContext?: CurrentLocationContext,
-  activeGoals?: ExtendedGoal[]
+  activeGoals?: ExtendedGoal[],
+  userTimezone: string = 'America/Denver'
 ): Promise<InsightContext[]> {
   const insights: InsightContext[] = [];
   const now = new Date();
@@ -110,8 +112,8 @@ export async function extractSearchableInsights(
   // 1. LOCATION AWARENESS: If user is visiting a new location, show local discoveries
   if (locationContext?.isAway && locationContext.currentCity) {
     const cityName = locationContext.currentCity.split(',')[0].trim();
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+    const currentYear = getYearInTimezone(userTimezone);
+    const currentMonth = getMonthNameInTimezone(userTimezone);
     
     insights.push({
       type: 'location',
@@ -199,7 +201,7 @@ export async function extractSearchableInsights(
     const activeGoalsList = activeGoals.filter(g => g.status === 'active').slice(0, 2);
     
     for (const goal of activeGoalsList) {
-      const goalTopics = generateGoalTopics(goal.title, goal.description || '');
+      const goalTopics = generateGoalTopics(goal.title, goal.description || '', userTimezone);
       if (goalTopics.length > 0) {
         insights.push({
           type: 'goal',
@@ -236,11 +238,11 @@ function generateLocationSpecificTopics(location: string, daysUntil: number): st
   }
 }
 
-function generateGoalTopics(title: string, description: string): string[] {
+function generateGoalTopics(title: string, description: string, userTimezone: string = 'America/Denver'): string[] {
   // Generate search topics based on goal title and description
   const combined = `${title} ${description}`.toLowerCase();
   const topics: string[] = [];
-  const currentYear = new Date().getFullYear();
+  const currentYear = getYearInTimezone(userTimezone);
   
   // Add a specific search based on the goal
   topics.push(`how to ${title.toLowerCase()} tips ${currentYear}`);
@@ -384,7 +386,8 @@ function generateFinancialInsight(transaction: { name: string; amount: number; d
 
 export async function searchForDiscoveries(
   insights: InsightContext[],
-  tavilyApiKey?: string
+  tavilyApiKey?: string,
+  userTimezone: string = 'America/Denver'
 ): Promise<{ discoveries: Discovery[]; error?: string }> {
   if (!tavilyApiKey) {
     return { discoveries: [], error: 'No Tavily API key configured. Add TAVILY_API_KEY in settings.' };
@@ -401,7 +404,7 @@ export async function searchForDiscoveries(
   
   for (const insight of insights.slice(0, 3)) {
     // Build highly specific search queries
-    const searchQueries = buildPersonalizedSearchQueries(insight);
+    const searchQueries = buildPersonalizedSearchQueries(insight, userTimezone);
     
     for (const searchQuery of searchQueries.slice(0, 2)) {
       try {
@@ -473,9 +476,9 @@ function topicHasLocation(topic: string): boolean {
   return /\bnear\s+\w|\bin\s+[a-z]|\b[A-Z][a-z]+,?\s+[A-Z]{2}\b/i.test(topic);
 }
 
-function buildPersonalizedSearchQueries(insight: InsightContext): string[] {
+function buildPersonalizedSearchQueries(insight: InsightContext, userTimezone: string = 'America/Denver'): string[] {
   const queries: string[] = [];
-  const currentYear = new Date().getFullYear();
+  const currentYear = getYearInTimezone(userTimezone);
   
   if (insight.type === 'location' && insight.location) {
     // Currently visiting - focus on immediate local info
@@ -605,9 +608,10 @@ export async function getContextualDiscoveries(
   financialData?: ExtendedFinancialData,
   tavilyApiKey?: string,
   locationContext?: CurrentLocationContext,
-  activeGoals?: ExtendedGoal[]
+  activeGoals?: ExtendedGoal[],
+  userTimezone: string = 'America/Denver'
 ): Promise<DiscoveriesResponse> {
-  const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData, locationContext, activeGoals);
+  const insights = await extractSearchableInsights(memories, calendarEvents, emails, financialData, locationContext, activeGoals, userTimezone);
   
   // If no high-quality insights, return empty response (intentional - no filler content)
   if (insights.length === 0) {
@@ -618,7 +622,7 @@ export async function getContextualDiscoveries(
     };
   }
   
-  const result = await searchForDiscoveries(insights, tavilyApiKey);
+  const result = await searchForDiscoveries(insights, tavilyApiKey, userTimezone);
   
   return {
     discoveries: result.discoveries,

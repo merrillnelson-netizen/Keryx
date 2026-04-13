@@ -3,6 +3,7 @@ import {
   locationHistory, frequentPlaces, pushSubscriptions, goals, reminders,
   messageConversations, messages, messageImports,
   relayDestinations, relayEvents,
+  automationRules,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -23,7 +24,8 @@ import {
   type Message, type InsertMessage,
   type MessageImport, type InsertMessageImport,
   type RelayDestination, type InsertRelayDestination,
-  type RelayEvent, type InsertRelayEvent
+  type RelayEvent, type InsertRelayEvent,
+  type AutomationRule, type InsertAutomationRule
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
@@ -217,6 +219,16 @@ export interface IStorage {
   deleteRelayDestination(id: string, userId: string): Promise<boolean>;
   createRelayEvent(data: InsertRelayEvent): Promise<RelayEvent>;
   getRelayEvents(userId: string, limit?: number): Promise<RelayEvent[]>;
+
+  // Automation Rules
+  getAutomationRules(userId: string): Promise<AutomationRule[]>;
+  getAutomationRule(id: string, userId: string): Promise<AutomationRule | undefined>;
+  getEnabledRulesByTrigger(userId: string, triggerType: string): Promise<AutomationRule[]>;
+  createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
+  updateAutomationRule(id: string, userId: string, data: Partial<AutomationRule>): Promise<AutomationRule>;
+  deleteAutomationRule(id: string, userId: string): Promise<void>;
+  recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void>;
+  countRuleRunsToday(id: string, userId: string): Promise<number>;
 }
 
 /**
@@ -2818,6 +2830,81 @@ export class DatabaseStorage implements IStorage {
       .where(eq(relayEvents.userId, userId))
       .orderBy(desc(relayEvents.createdAt))
       .limit(limit);
+  }
+
+  // ─── Automation Rules ──────────────────────────────────────────────────────
+
+  async getAutomationRules(userId: string): Promise<AutomationRule[]> {
+    return db.select().from(automationRules)
+      .where(eq(automationRules.userId, userId))
+      .orderBy(desc(automationRules.createdAt));
+  }
+
+  async getAutomationRule(id: string, userId: string): Promise<AutomationRule | undefined> {
+    const [rule] = await db.select().from(automationRules)
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
+    return rule;
+  }
+
+  async getEnabledRulesByTrigger(userId: string, triggerType: string): Promise<AutomationRule[]> {
+    return db.select().from(automationRules)
+      .where(and(
+        eq(automationRules.userId, userId),
+        eq(automationRules.triggerType, triggerType),
+        eq(automationRules.enabled, true)
+      ));
+  }
+
+  async createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule> {
+    const [rule] = await db.insert(automationRules).values(data).returning();
+    return rule;
+  }
+
+  async updateAutomationRule(id: string, userId: string, data: Partial<AutomationRule>): Promise<AutomationRule> {
+    const [rule] = await db.update(automationRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)))
+      .returning();
+    return rule;
+  }
+
+  async deleteAutomationRule(id: string, userId: string): Promise<void> {
+    await db.delete(automationRules)
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
+  }
+
+  async recordRuleExecution(id: string, userId: string, success: boolean, error?: string): Promise<void> {
+    await db.update(automationRules)
+      .set({
+        lastRunAt: new Date(),
+        lastRunResult: success ? 'success' : 'error',
+        lastRunError: error ?? null,
+        runCount: sql`${automationRules.runCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
+  }
+
+  async countRuleRunsToday(id: string, userId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [row] = await db.select({ count: sql<number>`count(*)` }).from(automationRules)
+      .where(and(
+        eq(automationRules.id, id),
+        eq(automationRules.userId, userId),
+        gte(automationRules.lastRunAt, today)
+      ));
+    // lastRunAt is a single timestamp, use runCount delta approach
+    // Instead, query the rule and check if lastRunAt is today — track via a simple heuristic
+    // Since we don't have a run log table, we use the fact that runs are sequential:
+    // return 0 if lastRunAt was before today, else return min(runCount, 999)
+    const [ruleRow] = await db.select({ lastRunAt: automationRules.lastRunAt })
+      .from(automationRules)
+      .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
+    if (!ruleRow?.lastRunAt) return 0;
+    const lastRun = new Date(ruleRow.lastRunAt);
+    lastRun.setHours(0, 0, 0, 0);
+    return lastRun.getTime() === today.getTime() ? 1 : 0;
   }
 }
 
