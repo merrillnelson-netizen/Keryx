@@ -19,7 +19,10 @@ import {
   Target,
   Bell,
   Smartphone,
-  LayoutDashboard
+  LayoutDashboard,
+  Bot,
+  GitBranch,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +52,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "Remind me to call the dentist next Monday at 9am", description: "Sets up a reminder event on your calendar" },
       { phrase: "Block off Friday afternoon for focused work", description: "Creates a time block to protect your schedule" },
       { phrase: "Set up a weekly team standup every Tuesday at 10am", description: "Creates a recurring calendar event" },
-      { phrase: "Schedule a monthly review on the first Monday at 9am", description: "Creates a recurring monthly event" },
+      { phrase: "Cancel my 3pm meeting today", description: "Deletes an existing calendar event by looking up and removing it" },
     ]
   },
   {
@@ -121,7 +124,7 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "How am I doing on my fitness goal?", description: "AI analyzes your memories to assess progress" },
       { phrase: "Suggest milestones for my career goal", description: "Get AI-generated actionable steps" },
       { phrase: "Which of my goals need attention?", description: "Get alerts for stalled or at-risk goals" },
-      { phrase: "Show me my goal achievements this month", description: "Celebrate completed milestones and progress" },
+      { phrase: "Mark my reading goal at 75% complete", description: "Updates your goal's progress percentage via AI action" },
     ]
   },
   {
@@ -178,6 +181,35 @@ const capabilities: CapabilityCategory[] = [
       { phrase: "What should I read about my interests?", description: "Curated content from your memory topics" },
       { phrase: "Find resources for my current challenges", description: "Helpful content based on what's on your mind" },
       { phrase: "Explore topics I've been thinking about", description: "Deep dives into your recurring themes" },
+    ]
+  },
+  {
+    id: "agent",
+    name: "Agent",
+    icon: Bot,
+    color: "text-violet-500",
+    description: "Autonomous AI actions, automation rules, and multi-step task chaining",
+    examples: [
+      { phrase: "Schedule a call with Dr. Chen on Thursday at 10am and draft a confirmation email", description: "Keryx creates the calendar event, then automatically detects and proposes a follow-up email draft via action chaining" },
+      { phrase: "Note that Marcus mentioned he prefers morning meetings", description: "Adds a note directly to Marcus's contact record via a people.note action" },
+      { phrase: "Search for the best productivity frameworks for remote teams", description: "Executes a live web search via Tavily and returns a summary with sources" },
+      { phrase: "Log that I completed my first week of workouts", description: "Explicitly creates a new memory entry and can update your fitness goal's progress in the same turn" },
+      { phrase: "Alert me if I'm spending too much on dining out this month", description: "Creates a financial.alert action surfacing your dining spending pattern from Plaid data" },
+      { phrase: "Show me my pending agent actions", description: "Navigates to the Agent dashboard where you can approve, reject, or review all proposed and completed actions" },
+    ]
+  },
+  {
+    id: "automation",
+    name: "Automation",
+    icon: Workflow,
+    color: "text-rose-400",
+    description: "IFTTT-style rules that run automatically when events happen in your life",
+    examples: [
+      { phrase: "When my mood drops, send me a motivational push notification", description: "Automation rule: trigger = mood.dropped → action = send notification" },
+      { phrase: "Every morning at 7am, create a reminder to review my goals", description: "Daily schedule trigger fires at a set hour and creates a recurring reminder" },
+      { phrase: "When I mention a person, log a note about the interaction", description: "person.mentioned trigger auto-logs a memory entry when someone is detected in your input" },
+      { phrase: "When a goal is updated, relay the progress to my phone", description: "goal.updated trigger fires an outbound relay with your progress summary" },
+      { phrase: "When the keyword 'stress' appears, create a check-in reminder", description: "keyword.detected trigger watches for a word and responds with an automated action" },
     ]
   },
   {
@@ -249,6 +281,13 @@ const hintExamples = [
   "Import my SMS backup from Android",
   "Show me my life dashboard",
   "Which relationships need attention?",
+  "Cancel my 3pm meeting today",
+  "Note that Marcus prefers morning meetings",
+  "Search for the best productivity frameworks",
+  "Alert me if I'm overspending on dining",
+  "Show me my pending agent actions",
+  "When my mood drops, send me a notification",
+  "Mark my reading goal at 75% complete",
 ];
 
 export function useRotatingHints() {
@@ -336,7 +375,7 @@ export function KeryxCapabilitiesModal() {
 
         <Tabs defaultValue="calendar" className="flex flex-col flex-1 min-h-0">
           <div className="px-4 sm:px-6 pt-4 shrink-0">
-            <TabsList className="w-full h-auto grid grid-cols-4 sm:grid-cols-5 bg-white/5 p-1 rounded-xl gap-1">
+            <TabsList className="w-full h-auto grid grid-cols-5 sm:grid-cols-5 bg-white/5 p-1 rounded-xl gap-1">
               {capabilities.map(cat => {
                 const Icon = cat.icon;
                 return (
@@ -371,6 +410,8 @@ export function KeryxCapabilitiesModal() {
                       cat.id === "synthesis" && "bg-indigo-500/20",
                       cat.id === "insights" && "bg-cyan-500/20",
                       cat.id === "discoveries" && "bg-teal-500/20",
+                      cat.id === "agent" && "bg-violet-500/20",
+                      cat.id === "automation" && "bg-rose-400/20",
                       cat.id === "power" && "bg-rose-500/20",
                       cat.id === "messages" && "bg-violet-500/20",
                       cat.id === "ecosystem" && "bg-sky-500/20"
@@ -405,6 +446,32 @@ export function KeryxCapabilitiesModal() {
                     </div>
                   </div>
 
+                  {cat.id === "agent" && (
+                    <div className="glass-card p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                      <div className="flex items-start gap-3">
+                        <GitBranch className="w-5 h-5 text-violet-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Action Chaining</p>
+                          <p className="text-sm text-muted-foreground">
+                            After completing a chainable action (calendar create, email send, people note), Keryx can detect a natural follow-up and propose it automatically — up to 3 hops deep. Child actions appear indented under their parent in the Agent dashboard. Toggle this in Settings → AI Task Execution → Allow Action Chaining.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {cat.id === "automation" && (
+                    <div className="glass-card p-4 rounded-xl bg-rose-400/10 border border-rose-400/20">
+                      <div className="flex items-start gap-3">
+                        <Workflow className="w-5 h-5 text-rose-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Pro feature — set it and forget it</p>
+                          <p className="text-sm text-muted-foreground">
+                            Automation rules run silently in the background whenever a trigger fires. Build them in the Agent page → Automations tab. Each rule can run up to 3 times per day by default. Supports <strong>10 trigger types</strong> and <strong>5 action types</strong> including outbound relay, push notifications, and auto-logged memories.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {cat.id === "power" && (
                     <div className="glass-card p-4 rounded-xl bg-rose-500/10 border border-rose-500/20">
                       <div className="flex items-start gap-3">

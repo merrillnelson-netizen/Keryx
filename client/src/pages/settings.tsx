@@ -1375,6 +1375,14 @@ export default function SettingsPage() {
                   <FileText className="w-4 h-4 mr-2" />
                   View Integration Guide
                 </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open('/keryx-agent-guide.html', '_blank')}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  View Agentic Features Guide
+                </Button>
               </div>
             </CardContent>
           </Card>

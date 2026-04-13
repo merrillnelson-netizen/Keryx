@@ -60,6 +60,9 @@
 <li><a href="#auth">Authentication</a></li>
 <li><a href="#android-bridge">Android Bridge</a></li>
 <li><a href="#ecosystem">Ecosystem Dashboard</a></li>
+<li><a href="#automation-rules">Automation Rules Engine</a></li>
+<li><a href="#action-chaining">Action Chaining</a></li>
+<li><a href="#relay-api">Universal Relay API (Inbound & Outbound)</a></li>
 </ol>
 </nav>
 
@@ -681,9 +684,24 @@
 <p><span class="detail-label">When it activates:</span></p>
 <ul>
 <li>Every time you save a memory: GPT scans input for actionable requests</li>
-<li>Supported actions: Create calendar events, send emails, create reminders</li>
-<li>Policy system: "always ask" (default), "auto-approve", or "never" per action type</li>
-<li>Push notification sent when action needs approval</li>
+<li>Morning briefings, proactive analysis, and automation rules can also generate actions</li>
+<li>Policy system per action type: <strong>Confirm</strong> (default — shows pending card), <strong>Auto</strong> (executes immediately), or <strong>Disabled</strong></li>
+<li>Push notification sent when an action needs approval</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">All 9 supported action types:</span></p>
+<ul>
+<li><code>calendar.create</code> — Create a calendar event (title, date/time, attendees, location, timezone). Requires Google Calendar or Outlook connected.</li>
+<li><code>calendar.delete</code> — Delete an existing calendar event by its event ID. Use when you say "cancel my dentist appointment."</li>
+<li><code>email.send</code> — Send a new email via Gmail or Outlook. Requires the respective email integration connected.</li>
+<li><code>reminder.create</code> — Set a time-based or location-based reminder. Stored in Keryx and delivered via push notification.</li>
+<li><code>people.note</code> — Add a note to a person's contact record (e.g. "note that Sarah said she's moving to Denver").</li>
+<li><code>web.search</code> — Search the web via Tavily AI Search and return a summary with sources. Requires <code>TAVILY_API_KEY</code>.</li>
+<li><code>memory.create</code> — Explicitly log a new memory entry from an action rather than the main input flow.</li>
+<li><code>goal.update</code> — Update the progress percentage on one of your tracked goals (e.g. "mark my fitness goal at 60%").</li>
+<li><code>financial.alert</code> — Surface a financial spending pattern or budget concern from your Plaid transaction data.</li>
 </ul>
 </div>
 
@@ -692,21 +710,23 @@
 <ul>
 <li>GPT analyzes memory text for action intent with structured JSON output</li>
 <li>Detected actions include: type, title, description, payload, confidence score, reasoning</li>
-<li>User preference system controls approval policy per action type</li>
-<li>Execution routes to the appropriate service (Calendar, Gmail/Outlook, Reminders)</li>
+<li>User preference system controls approval policy per action type (Settings → AI Task Execution)</li>
+<li>Execution routes to the appropriate service (Calendar, Gmail/Outlook, Reminders, Tavily, etc.)</li>
 <li>Full audit trail: every action logged with status, timestamps, and results</li>
-<li>Actions have statuses: pending &rarr; approved/denied &rarr; executed/failed</li>
+<li>Actions have statuses: pending &rarr; approved/rejected &rarr; executing &rarr; completed/failed</li>
+<li>Rollback available for calendar and email actions after execution</li>
+<li>Action Chaining: after a chainable action completes, GPT may propose one natural follow-up automatically (see section 23)</li>
 </ul>
 </div>
 
 <div class="detail">
 <p><span class="detail-label">Key files:</span></p>
-<p class="file-ref">server/ai-actions-service.ts</p>
+<p class="file-ref">server/ai-actions-service.ts, server/calendar-service.ts, server/gmail-service.ts</p>
 </div>
 
 <div class="detail">
 <span class="tag green">Active</span>
-<span class="tag">Requires: OpenAI + Calendar/Email connected</span>
+<span class="tag">Requires: OpenAI + at least one integration</span>
 </div>
 </div>
 
@@ -1141,6 +1161,209 @@ npm run ios</pre>
 <li><strong>Android Bridge</strong> &rarr; requires a Relay API key (generated in Settings); relayed messages appear alongside SMS archive imports in the Messages page</li>
 <li><strong>Ecosystem Dashboard</strong> &rarr; requires Pro tier + OpenAI; enriched by Calendar, Plaid (Life OS), People, Goals, Reminders, Actions</li>
 </ul>
+</div>
+
+<!-- ====== 22. AUTOMATION RULES ENGINE ====== -->
+<div class="section" id="automation-rules">
+<h2>22. Automation Rules Engine</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Agent page (/agent) → Automations tab. CRUD management via API at <code>GET/POST/PATCH/DELETE /api/automation/rules</code>.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Set it and forget it. Instead of manually tracking life events, you configure rules that fire automatically. "When my mood drops, send me a motivating push notification." "Every morning at 7am, create a goal review reminder." No code required.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>A trigger event fires anywhere in the app (memory saved, briefing generated, reminder due, etc.)</li>
+<li>The engine checks all enabled rules matching that trigger</li>
+<li>Conditions are evaluated against event context</li>
+<li>If conditions pass and the daily run limit isn't reached, the action executes immediately</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">10 supported trigger types:</span></p>
+<ul>
+<li><code>memory.logged</code> — fires every time a memory is saved</li>
+<li><code>mood.dropped</code> — fires when mood score drops below a threshold</li>
+<li><code>mood.spiked</code> — fires when mood score spikes high</li>
+<li><code>person.mentioned</code> — fires when a specific person is detected in a memory</li>
+<li><code>keyword.detected</code> — fires when a specific word is found in memory text</li>
+<li><code>reminder.due</code> — fires when a reminder becomes due</li>
+<li><code>briefing.generated</code> — fires after each morning briefing is created</li>
+<li><code>goal.updated</code> — fires when a goal's progress changes</li>
+<li><code>daily.schedule</code> — fires on a daily cron at a configured hour (0–23)</li>
+<li><code>action.completed</code> — fires when a specific AI action type finishes successfully</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">5 supported action types:</span></p>
+<ul>
+<li><code>send.notification</code> — sends a push notification to all your devices</li>
+<li><code>create.reminder</code> — creates a new time-based reminder (supports <code>minutesFromNow</code> or <code>dueAt</code>)</li>
+<li><code>create.ai_action</code> — queues a new AI action for approval or auto-execution</li>
+<li><code>log.memory</code> — automatically saves a memory with AI-extracted metadata</li>
+<li><code>relay.outbound</code> — queues an outbound relay message for a configured destination</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Rules stored in <code>automation_rules</code> table with trigger type, conditions (JSONB), action type, and action payload (JSONB)</li>
+<li>Condition fields include: <code>moodBelow</code>, <code>moodAbove</code>, <code>keyword</code>, <code>personName</code>, <code>topic</code>, <code>progressAbove/Below</code>, <code>atHour</code>, <code>actionType</code></li>
+<li>Action payloads support <code>{{variable}}</code> interpolation (e.g. <code>{{memoryContent}}</code>, <code>{{personName}}</code>, <code>{{goalTitle}}</code>)</li>
+<li>Daily run limit per rule (default: 3). Configurable up to any value.</li>
+<li>Enable/disable toggle per rule. Test button fires rule immediately for debugging.</li>
+<li>Execution is non-blocking (setImmediate) — rules never slow down the main request flow</li>
+<li>Each execution is logged with success/failure status and recorded on the rule's last-run timestamp</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/automation-engine.ts, client/src/pages/agent.tsx (Automations tab)</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag orange">Pro tier required</span>
+</div>
+</div>
+
+<!-- ====== 23. ACTION CHAINING ====== -->
+<div class="section" id="action-chaining">
+<h2>23. Action Chaining</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Agent page (/agent) → Actions tab. Child actions appear indented under their parent with a chain badge. Toggle: Settings → AI Task Execution → Allow Action Chaining.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Complex tasks involve multiple steps. Instead of you manually chaining "create calendar event → send invite → add contact note," Keryx detects the natural follow-up after each step and proposes it automatically. You stay in control with a single approve/reject per step.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">When it activates:</span></p>
+<ul>
+<li>After a chainable action completes successfully</li>
+<li>GPT analyzes the completed action's context and source text for a likely follow-up</li>
+<li>A follow-up is only proposed if confidence ≥ 0.75</li>
+<li>Chaining stops at depth 3 (root → child → grandchild maximum)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Chainable action types (only these can spawn children):</span></p>
+<ul>
+<li><code>calendar.create</code> — may chain to an invite email (<code>email.send</code>) or contact note (<code>people.note</code>)</li>
+<li><code>email.send</code> — may chain to a reminder for follow-up or a contact note</li>
+<li><code>people.note</code> — may chain to a goal update or reminder</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>On action completion, <code>maybeSpawnChainedAction()</code> is called with the completed action as context</li>
+<li>GPT is prompted with the parent action details and source text to detect one natural follow-up</li>
+<li>The spawned child action records <code>parentActionId</code> (FK → parent) and <code>chainDepth</code> (integer)</li>
+<li>Child actions inherit the parent's source context in their <code>sourceText</code> field, prefixed with "Chained from: [parent title]"</li>
+<li>The Agent dashboard shows child actions indented under their parent with a violet left border and a "→ spawned from" badge</li>
+<li>Toggle: <code>allowActionChaining</code> boolean in the <code>settings</code> table (default: true)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/ai-actions-service.ts (maybeSpawnChainedAction), client/src/pages/agent.tsx (nested chain UI)</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Controlled by: Settings → Allow Action Chaining</span>
+</div>
+</div>
+
+<!-- ====== 24. RELAY API ====== -->
+<div class="section" id="relay-api">
+<h2>24. Universal Relay API (Inbound & Outbound)</h2>
+
+<div class="detail">
+<p><span class="detail-label">Where:</span> Inbound gateway at <code>POST /api/relay/inbound</code>. Destination management and event log at Agent page → Relay tab. API key managed in Settings.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Why:</span> Acts as a universal message bus between external systems and Keryx. Your Android phone, Meta glasses, SMS gateway, or any custom script can push data into Keryx without a browser session. Keryx can also push data back out — relaying briefings, action results, or custom messages to any configured HTTP endpoint.</p>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Inbound — when it activates:</span></p>
+<ul>
+<li>Any system makes a <code>POST</code> to <code>/api/relay/inbound</code> with the <code>X-API-Key</code> header set to your Relay API key</li>
+<li>The gateway accepts three payload types: <code>sms</code>, <code>command</code>, and <code>event</code></li>
+<li><code>sms</code> — stores the message in the messages system; fan-out to all enabled destinations</li>
+<li><code>command</code> — triggers AI action detection on the command text; queues resulting actions for approval</li>
+<li><code>event</code> — logs an event to the relay event log; fan-out to configured inbound destinations</li>
+<li>Every inbound request is logged in the relay event table (visible in the Agent → Relay tab)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Outbound — when it activates:</span></p>
+<ul>
+<li>A destination with <code>outboundEnabled = true</code> is configured</li>
+<li>An AI action of type <code>RELAY_OUTBOUND</code> is approved and executes</li>
+<li>An automation rule fires the <code>relay.outbound</code> action type</li>
+<li>The <code>outboundBriefingRelay</code> flag is set — morning briefings are automatically pushed to that destination</li>
+<li>Outbound format per destination: <code>json</code> (full payload envelope) or <code>text</code> (plain string only)</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">How it works:</span></p>
+<ul>
+<li>Relay API key: generated UUID stored in <code>settings.relayApiKey</code>. Regenerate anytime in Settings.</li>
+<li>Destinations: stored in <code>relay_destinations</code> table with a URL, name, enabled flag, and outbound config</li>
+<li>Fan-out: inbound events are dispatched to all enabled destinations via HTTP POST (non-blocking)</li>
+<li>Retry logic: failed outbound delivery attempts are logged but do not block the inbound response</li>
+<li>Session-authenticated test endpoint: <code>POST /api/relay/test</code> (for browser-based testing without API key)</li>
+<li>Event log: all inbound events stored per-user in the relay event table, visible in the Agent → Relay tab</li>
+<li>Android Bridge uses this API: the Kotlin APK relays Google Messages to <code>/api/relay/inbound</code> in real time</li>
+</ul>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Payload format (inbound):</span></p>
+<pre style="background:#f0f0f5;padding:10px;border-radius:6px;font-size:0.82em;overflow-x:auto">POST /api/relay/inbound
+X-API-Key: &lt;your-relay-api-key&gt;
+Content-Type: application/json
+
+{
+  "type": "sms",              // "sms" | "command" | "event"
+  "source": "android-bridge",
+  "payload": {
+    "from": "+15551234567",
+    "body": "Dinner at 7pm tonight?",
+    "timestamp": "2026-04-13T14:32:00Z"
+  }
+}</pre>
+</div>
+
+<div class="detail">
+<p><span class="detail-label">Key files:</span></p>
+<p class="file-ref">server/routes.ts (/api/relay/*), client/src/pages/agent.tsx (Relay tab), client/src/components/settings/relay-settings-card.tsx</p>
+</div>
+
+<div class="detail">
+<span class="tag green">Active</span>
+<span class="tag">Auth: X-API-Key header (no session required for inbound)</span>
+</div>
 </div>
 
 <footer>
