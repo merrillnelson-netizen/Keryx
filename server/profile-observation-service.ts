@@ -36,8 +36,9 @@ export async function generateObservations(userId: string): Promise<number> {
     if (allMemories.length < 5) return 0; // Not enough data at all
 
     // Prefer last 30 days; fall back to most recent 60 if recent window is thin
+    // NOTE: logEntries uses `timestamp`, not `createdAt`
     const last30 = allMemories.filter(
-      m => m.createdAt && new Date(m.createdAt) >= thirtyDaysAgo
+      m => m.timestamp && new Date(m.timestamp) >= thirtyDaysAgo
     );
     const recentMemories = last30.length >= 10 ? last30 : allMemories.slice(0, 60);
     const windowLabel = last30.length >= 10 ? 'last 30 days' : 'most recent memories (all time)';
@@ -47,10 +48,10 @@ export async function generateObservations(userId: string): Promise<number> {
     if (pendingCount >= 6) return 0;
     const maxNew = Math.min(3, 6 - pendingCount);
 
-    // Build context
+    // Build context — logEntries field is `memoryText`, not `content`
     const memorySample = recentMemories
       .slice(0, 50)
-      .map(m => `[${m.topicTag}] ${m.content.slice(0, 150)}`)
+      .map(m => `[${m.topicTag}] ${(m.memoryText || '').slice(0, 150)}`)
       .join('\n');
 
     const goalsText = goals.length > 0
