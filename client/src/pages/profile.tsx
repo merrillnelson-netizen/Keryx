@@ -9,7 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import type { Settings, ProfileObservation } from "@shared/schema";
-import { UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save, Brain } from "lucide-react";
+import { UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save, Brain, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
   habits: "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -75,6 +75,103 @@ function ObservationCard({ obs, onConfirm, onDismiss, isPending }: {
   );
 }
 
+function ConfirmedObservationsList({ confirmed, onRemove, onUndone, isPending }: {
+  confirmed: ProfileObservation[];
+  onRemove: (id: string) => void;
+  onUndone: (id: string) => void;
+  isPending: boolean;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <Card className="glass-card border-white/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Check className="w-4 h-4 text-green-400" />
+          Confirmed
+          <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+            {confirmed.length}
+          </Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Tap any item to read it fully. These are fed into Keryx's AI context. Remove any that no longer apply.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y divide-white/5">
+          {confirmed.map(obs => {
+            const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
+            const isExpanded = expandedId === obs.id;
+            return (
+              <div key={obs.id} className="px-4 py-0">
+                {/* Row — always visible */}
+                <button
+                  className="w-full flex items-start gap-3 py-3 text-left"
+                  onClick={() => setExpandedId(isExpanded ? null : obs.id)}
+                >
+                  <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full border ${colorClass}`} />
+                  <span className="flex-1 text-sm text-foreground leading-snug">
+                    {obs.observation}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground mt-0.5">
+                    {isExpanded
+                      ? <ChevronUp className="w-3.5 h-3.5" />
+                      : <ChevronDown className="w-3.5 h-3.5" />
+                    }
+                  </span>
+                </button>
+
+                {/* Expanded detail */}
+                {isExpanded && (
+                  <div className="pb-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`text-xs ${colorClass}`}>
+                        {obs.category}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {Math.round((obs.confidence ?? 0.7) * 100)}% confidence
+                      </span>
+                    </div>
+
+                    {obs.evidenceSummary && (
+                      <p className="text-xs text-muted-foreground leading-relaxed border-l-2 border-white/10 pl-3">
+                        {obs.evidenceSummary}
+                      </p>
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                        disabled={isPending}
+                        onClick={() => { onUndone(obs.id); setExpandedId(null); }}
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Move back to pending
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2.5 text-xs gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        disabled={isPending}
+                        onClick={() => { onRemove(obs.id); setExpandedId(null); }}
+                      >
+                        <X className="w-3 h-3" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProfilePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -109,7 +206,7 @@ export default function ProfilePage() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'denied' }) =>
+    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'denied' | 'pending' }) =>
       apiRequest("PATCH", `/api/profile/observations/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/profile/observations"] });
@@ -240,41 +337,12 @@ export default function ProfilePage() {
 
         {/* Confirmed Observations */}
         {confirmed.length > 0 && (
-          <Card className="glass-card border-white/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Check className="w-4 h-4 text-green-400" />
-                Confirmed
-                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-                  {confirmed.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {confirmed.map(obs => {
-                  const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
-                  return (
-                    <div
-                      key={obs.id}
-                      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${colorClass}`}
-                    >
-                      <span className="max-w-[240px] truncate" title={obs.observation}>
-                        {obs.observation}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 hover:text-red-400"
-                        title="Remove"
-                        onClick={() => reviewMutation.mutate({ id: obs.id, status: 'denied' })}
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+          <ConfirmedObservationsList
+            confirmed={confirmed}
+            onRemove={(id) => reviewMutation.mutate({ id, status: 'denied' })}
+            onUndone={(id) => reviewMutation.mutate({ id, status: 'pending' })}
+            isPending={reviewMutation.isPending}
+          />
         )}
       </div>
     </AppLayout>

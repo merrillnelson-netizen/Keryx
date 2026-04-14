@@ -7583,8 +7583,8 @@ Respond with JSON only.`
       const user = req.user!;
       const { id } = req.params;
       const { status } = req.body;
-      if (!['confirmed', 'denied'].includes(status)) {
-        return res.status(400).json({ error: "Status must be 'confirmed' or 'denied'" });
+      if (!['confirmed', 'denied', 'pending'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'confirmed', 'denied', or 'pending'" });
       }
       const updated = await storage.updateProfileObservationStatus(id, user.id, status);
       if (!updated) return res.status(404).json({ error: "Observation not found" });
