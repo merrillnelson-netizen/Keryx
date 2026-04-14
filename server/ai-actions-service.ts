@@ -1492,11 +1492,23 @@ export async function processUserInputForActions(
   autoExecuted?: boolean;
   executionResult?: ActionExecutionResult;
 }> {
+  // Build enriched user profile with confirmed AI observations
+  let enrichedProfile = contextInfo?.userProfile || '';
+  try {
+    const { storage } = await import('./storage');
+    const confirmedObs = await storage.getConfirmedObservationsText(userId);
+    if (confirmedObs) {
+      enrichedProfile = enrichedProfile
+        ? `${enrichedProfile}\n\nKeryx's confirmed observations about this user:\n${confirmedObs}`
+        : `Keryx's confirmed observations about this user:\n${confirmedObs}`;
+    }
+  } catch (_) {}
+
   // Detect action from input with user's timezone and profile context
   const detected = await detectActionFromInput(userInput, {
     currentTime: new Date(),
     timezone: contextInfo?.timezone,
-    userProfile: contextInfo?.userProfile,
+    userProfile: enrichedProfile || null,
   });
   
   if (!detected) {

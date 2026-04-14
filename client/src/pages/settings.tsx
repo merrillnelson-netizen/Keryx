@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, Loader2, FileText, Gauge, UserCircle } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, Loader2, FileText, Gauge, UserCircle, Brain, ArrowRight } from "lucide-react";
 import { SassOMeter } from "@/components/sass-o-meter";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,60 @@ interface BackfillStatus {
   embeddingsGenerated?: number;
   message?: string;
   toProcess?: number;
+}
+
+function ProfileSummaryCard({ navigate }: { navigate: (to: string) => void }) {
+  const { data: observations = [] } = useQuery<{ id: string; status: string }[]>({
+    queryKey: ["/api/profile/observations"],
+    staleTime: 60_000,
+  });
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+    staleTime: 60_000,
+  });
+  const pending = observations.filter(o => o.status === 'pending').length;
+  const confirmed = observations.filter(o => o.status === 'confirmed').length;
+  const hasProfile = !!(settings?.userProfile?.trim());
+
+  return (
+    <Card className="glass-card border-white/20">
+      <CardContent className="pt-5 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/30 to-purple-500/30 flex items-center justify-center shrink-0">
+            <UserCircle className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-foreground">Your Profile</span>
+              {confirmed > 0 && (
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                  {confirmed} confirmed
+                </Badge>
+              )}
+              {pending > 0 && (
+                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs animate-pulse">
+                  {pending} pending
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {hasProfile ? "Profile set" : "No profile text yet"}{confirmed > 0 ? ` · ${confirmed} AI observation${confirmed !== 1 ? 's' : ''} confirmed` : ''}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 text-xs shrink-0 h-8"
+            onClick={() => navigate("/profile")}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            View
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SettingsPage() {
@@ -367,39 +421,8 @@ export default function SettingsPage() {
 
         {/* Settings Cards */}
         <div className="max-w-2xl space-y-6">
-          {/* User Profile Card */}
-          <Card className="glass-card border-white/20">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserCircle className="w-5 h-5 text-primary" />
-                About You
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Tell Keryx about your habits, preferences, and communication style. The AI uses this when suggesting actions — for example, whether to text or email someone, how you prefer to be reminded, or what topics matter most to you.
-              </p>
-              <Textarea
-                value={settings.userProfile ?? ""}
-                onChange={(e) => setSettings(prev => ({ ...prev, userProfile: e.target.value }))}
-                placeholder={`Examples:\n• I text friends and family — never email them\n• I prefer email for business contacts and acquaintances\n• I work in Mountain Time and keep evenings free\n• I'm training for a marathon and tracking nutrition`}
-                className="min-h-[130px] glass-card border-white/20 text-sm resize-none"
-              />
-              <Button
-                onClick={() => updateSettingsMutation.mutate({ userProfile: settings.userProfile ?? null })}
-                disabled={updateSettingsMutation.isPending}
-                size="sm"
-                className="w-full sm:w-auto"
-              >
-                {updateSettingsMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Save Profile
-              </Button>
-            </CardContent>
-          </Card>
+          {/* User Profile Card — compact summary linking to /profile */}
+          <ProfileSummaryCard navigate={navigate} />
 
           {/* AI Personality Card */}
           <Card className="glass-card border-white/20">

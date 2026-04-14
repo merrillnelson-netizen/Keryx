@@ -36,6 +36,7 @@ import Billing from "@/pages/billing";
 import FounderDashboard from "@/pages/founder";
 import Ecosystem from "@/pages/ecosystem";
 import AgentPage from "@/pages/agent";
+import ProfilePage from "@/pages/profile";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -200,6 +201,9 @@ function Router() {
       </Route>
       <Route path="/agent">
         {() => <ProtectedRoute component={AgentPage} />}
+      </Route>
+      <Route path="/profile">
+        {() => <ProtectedRoute component={ProfilePage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

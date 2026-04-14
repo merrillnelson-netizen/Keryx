@@ -7543,6 +7543,51 @@ Respond with JSON only.`
     }
   });
 
+  // ─── Profile Observations ───────────────────────────────────────────────────
+
+  /** GET /api/profile/observations — list all observations (optionally filtered by status) */
+  app.get("/api/profile/observations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      // Expire stale pending observations before returning
+      await storage.expireOldPendingObservations(user.id);
+      const observations = await storage.getProfileObservations(user.id, status);
+      res.json(observations);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch profile observations", error);
+    }
+  });
+
+  /** PATCH /api/profile/observations/:id — update observation status (confirmed/denied) */
+  app.patch("/api/profile/observations/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const { id } = req.params;
+      const { status } = req.body;
+      if (!['confirmed', 'denied'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'confirmed' or 'denied'" });
+      }
+      const updated = await storage.updateProfileObservationStatus(id, user.id, status);
+      if (!updated) return res.status(404).json({ error: "Observation not found" });
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update observation", error);
+    }
+  });
+
+  /** POST /api/profile/observations/generate — manually trigger observation generation */
+  app.post("/api/profile/observations/generate", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const { generateObservations } = await import('./profile-observation-service');
+      const count = await generateObservations(user.id);
+      res.json({ generated: count });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to generate observations", error);
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

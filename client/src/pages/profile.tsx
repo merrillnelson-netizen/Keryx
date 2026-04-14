@@ -1,0 +1,282 @@
+import AppLayout from "@/components/app-layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from "react";
+import type { Settings, ProfileObservation } from "@shared/schema";
+import { UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save, Brain } from "lucide-react";
+
+const CATEGORY_COLORS: Record<string, string> = {
+  habits: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  relationships: "bg-pink-500/20 text-pink-400 border-pink-500/30",
+  patterns: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  interests: "bg-green-500/20 text-green-400 border-green-500/30",
+  goals: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  communication: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+};
+
+function ObservationCard({ obs, onConfirm, onDismiss, isPending }: {
+  obs: ProfileObservation;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  isPending: boolean;
+}) {
+  const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
+  return (
+    <div className="glass-card p-4 rounded-xl border border-white/10 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground leading-snug">{obs.observation}</p>
+          {obs.evidenceSummary && (
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{obs.evidenceSummary}</p>
+          )}
+        </div>
+        <Badge variant="outline" className={`text-xs shrink-0 ${colorClass}`}>
+          {obs.category}
+        </Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Confidence</span>
+            <span className="text-xs text-muted-foreground">{Math.round((obs.confidence ?? 0.7) * 100)}%</span>
+          </div>
+          <Progress value={(obs.confidence ?? 0.7) * 100} className="h-1.5" />
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-3 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            onClick={onDismiss}
+            disabled={isPending}
+          >
+            <X className="w-3.5 h-3.5 mr-1" />
+            Dismiss
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 px-3 bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30"
+            variant="outline"
+            onClick={onConfirm}
+            disabled={isPending}
+          >
+            <Check className="w-3.5 h-3.5 mr-1" />
+            Confirm
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [userProfile, setUserProfile] = useState("");
+
+  const { data: settings } = useQuery<Settings>({
+    queryKey: ["/api/settings"],
+    staleTime: 60_000,
+  });
+
+  const { data: observations = [], isLoading: obsLoading } = useQuery<ProfileObservation[]>({
+    queryKey: ["/api/profile/observations"],
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    if (settings?.userProfile !== undefined) {
+      setUserProfile(settings.userProfile ?? "");
+    }
+  }, [settings?.userProfile]);
+
+  const pending = observations.filter(o => o.status === 'pending');
+  const confirmed = observations.filter(o => o.status === 'confirmed');
+
+  const saveProfileMutation = useMutation({
+    mutationFn: () => apiRequest("PUT", "/api/settings", { userProfile }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      toast({ title: "Profile saved" });
+    },
+    onError: () => toast({ title: "Failed to save profile", variant: "destructive" }),
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'denied' }) =>
+      apiRequest("PATCH", `/api/profile/observations/${id}`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/observations"] });
+    },
+    onError: () => toast({ title: "Failed to update observation", variant: "destructive" }),
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/profile/observations/generate", {}),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/observations"] });
+      toast({
+        title: data.generated > 0
+          ? `Generated ${data.generated} new observation${data.generated !== 1 ? 's' : ''}`
+          : "No new observations — check back after logging more memories",
+      });
+    },
+    onError: () => toast({ title: "Failed to generate observations", variant: "destructive" }),
+  });
+
+  return (
+    <AppLayout>
+      <div className="space-y-6 animate-fade-in max-w-2xl">
+        {/* Header */}
+        <div className="glass-card p-6 rounded-2xl">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary via-secondary to-accent flex items-center justify-center">
+              <UserCircle className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">My Profile</h2>
+              <p className="text-sm text-muted-foreground">How Keryx knows you</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Your Words */}
+        <Card className="glass-card border-white/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <UserCircle className="w-4 h-4 text-primary" />
+              Your Words
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Tell Keryx about your habits, preferences, and communication style. The AI uses this when suggesting actions.
+            </p>
+            <Textarea
+              value={userProfile}
+              onChange={(e) => setUserProfile(e.target.value)}
+              placeholder={`Examples:\n• I text friends and family — never email them\n• I prefer email for business contacts\n• I work in Mountain Time and keep evenings free\n• I'm rebuilding track confidence on my KTM`}
+              className="min-h-[120px] glass-card border-white/20 text-sm resize-none"
+            />
+            <Button
+              onClick={() => saveProfileMutation.mutate()}
+              disabled={saveProfileMutation.isPending}
+              size="sm"
+            >
+              {saveProfileMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Save
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* What Keryx Has Noticed */}
+        <Card className="glass-card border-white/20">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Brain className="w-4 h-4 text-purple-400" />
+                What Keryx Has Noticed
+                {pending.length > 0 && (
+                  <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
+                    {pending.length} pending
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+              >
+                {generateMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                Generate
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {obsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : pending.length === 0 ? (
+              <div className="text-center py-8 space-y-2">
+                <Sparkles className="w-8 h-8 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">No pending observations.</p>
+                <p className="text-xs text-muted-foreground/60">
+                  Keryx generates these automatically after your morning briefing, or you can generate them manually above.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pending.map(obs => (
+                  <ObservationCard
+                    key={obs.id}
+                    obs={obs}
+                    onConfirm={() => reviewMutation.mutate({ id: obs.id, status: 'confirmed' })}
+                    onDismiss={() => reviewMutation.mutate({ id: obs.id, status: 'denied' })}
+                    isPending={reviewMutation.isPending}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Confirmed Observations */}
+        {confirmed.length > 0 && (
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Check className="w-4 h-4 text-green-400" />
+                Confirmed
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                  {confirmed.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {confirmed.map(obs => {
+                  const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
+                  return (
+                    <div
+                      key={obs.id}
+                      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border ${colorClass}`}
+                    >
+                      <span className="max-w-[240px] truncate" title={obs.observation}>
+                        {obs.observation}
+                      </span>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 hover:text-red-400"
+                        title="Remove"
+                        onClick={() => reviewMutation.mutate({ id: obs.id, status: 'denied' })}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </AppLayout>
+  );
+}

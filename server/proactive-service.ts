@@ -266,6 +266,14 @@ export async function runProactiveAnalysis(userId: string, userTimezone: string 
   await Promise.allSettled([
     generateReachOutProposals(userId, created),
     generateGoalUpdateProposals(userId, created, userTimezone),
+    (async () => {
+      try {
+        const { generateObservations } = await import('./profile-observation-service');
+        await generateObservations(userId);
+      } catch (e) {
+        console.error('[proactive] profile observations error:', e);
+      }
+    })(),
   ]);
 
   if (created.count > 0) {

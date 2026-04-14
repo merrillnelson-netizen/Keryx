@@ -1383,3 +1383,46 @@ export type AutomationConditions = z.infer<typeof automationConditionsSchema>;
 
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
+
+// ─── Profile Observations ─────────────────────────────────────────────────────
+// AI-generated observations about the user, confirmed/dismissed via /profile page.
+
+export const OBSERVATION_CATEGORIES = {
+  HABITS: 'habits',
+  RELATIONSHIPS: 'relationships',
+  PATTERNS: 'patterns',
+  INTERESTS: 'interests',
+  GOALS: 'goals',
+  COMMUNICATION: 'communication',
+} as const;
+
+export const OBSERVATION_STATUS = {
+  PENDING: 'pending',
+  CONFIRMED: 'confirmed',
+  DENIED: 'denied',
+} as const;
+
+export const profileObservations = pgTable("profile_observations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  observation: text("observation").notNull(),
+  category: text("category").notNull().default('patterns'),
+  evidenceSummary: text("evidence_summary"),
+  status: text("status").notNull().default('pending'),
+  confidence: real("confidence").default(0.7),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  userIdIdx: index("profile_observations_user_id_idx").on(table.userId),
+  statusIdx: index("profile_observations_status_idx").on(table.userId, table.status),
+}));
+
+export const insertProfileObservationSchema = createInsertSchema(profileObservations).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+
+export type ProfileObservation = typeof profileObservations.$inferSelect;
+export type InsertProfileObservation = z.infer<typeof insertProfileObservationSchema>;

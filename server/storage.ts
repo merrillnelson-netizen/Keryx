@@ -25,7 +25,9 @@ import {
   type MessageImport, type InsertMessageImport,
   type RelayDestination, type InsertRelayDestination,
   type RelayEvent, type InsertRelayEvent,
-  type AutomationRule, type InsertAutomationRule
+  type AutomationRule, type InsertAutomationRule,
+  profileObservations,
+  type ProfileObservation, type InsertProfileObservation
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
@@ -232,6 +234,13 @@ export interface IStorage {
   deleteAutomationRule(id: string, userId: string): Promise<void>;
   recordRuleExecution(id: string, userId: string, success: boolean, error?: string, chainDepth?: number): Promise<void>;
   countRuleRunsToday(id: string, userId: string): Promise<number>;
+
+  // Profile Observations
+  getProfileObservations(userId: string, status?: string): Promise<ProfileObservation[]>;
+  createProfileObservation(data: InsertProfileObservation): Promise<ProfileObservation>;
+  updateProfileObservationStatus(id: string, userId: string, status: string): Promise<ProfileObservation | undefined>;
+  getConfirmedObservationsText(userId: string): Promise<string>;
+  expireOldPendingObservations(userId: string): Promise<void>;
 }
 
 /**
@@ -3086,6 +3095,50 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(automationRules.id, id), eq(automationRules.userId, userId)));
     if (!row || row.todayRunDate !== todayUtc) return 0;
     return row.todayRunCount ?? 0;
+  }
+
+  // ─── Profile Observations ──────────────────────────────────────────────────
+
+  async getProfileObservations(userId: string, status?: string): Promise<ProfileObservation[]> {
+    const conditions = [eq(profileObservations.userId, userId)];
+    if (status) conditions.push(eq(profileObservations.status, status));
+    return db.select().from(profileObservations)
+      .where(and(...conditions))
+      .orderBy(desc(profileObservations.createdAt));
+  }
+
+  async createProfileObservation(data: InsertProfileObservation): Promise<ProfileObservation> {
+    const [obs] = await db.insert(profileObservations).values(data).returning();
+    return obs;
+  }
+
+  async updateProfileObservationStatus(id: string, userId: string, status: string): Promise<ProfileObservation | undefined> {
+    const [updated] = await db.update(profileObservations)
+      .set({ status, reviewedAt: new Date() })
+      .where(and(eq(profileObservations.id, id), eq(profileObservations.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async getConfirmedObservationsText(userId: string): Promise<string> {
+    const confirmed = await db.select({ observation: profileObservations.observation })
+      .from(profileObservations)
+      .where(and(eq(profileObservations.userId, userId), eq(profileObservations.status, 'confirmed')))
+      .orderBy(desc(profileObservations.createdAt));
+    if (confirmed.length === 0) return '';
+    return confirmed.map(r => `• ${r.observation}`).join('\n');
+  }
+
+  async expireOldPendingObservations(userId: string): Promise<void> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    await db.update(profileObservations)
+      .set({ status: 'denied', reviewedAt: new Date() })
+      .where(and(
+        eq(profileObservations.userId, userId),
+        eq(profileObservations.status, 'pending'),
+        lte(profileObservations.createdAt, cutoff)
+      ));
   }
 }
 
