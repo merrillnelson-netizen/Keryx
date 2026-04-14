@@ -588,46 +588,46 @@ export const AI_ACTION_POLICIES = {
 // Payload schemas for different action types
 export const calendarCreatePayloadSchema = z.object({
   summary: z.string(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   startDateTime: z.string(), // ISO datetime
   endDateTime: z.string(), // ISO datetime
-  attendees: z.array(z.string()).optional(), // Email addresses
-  location: z.string().optional(),
-  provider: z.enum(['google', 'outlook']).optional(),
-  timezone: z.string().optional(), // IANA timezone (e.g., 'America/New_York')
+  attendees: z.array(z.string()).nullable().optional(), // Email addresses
+  location: z.string().nullable().optional(),
+  provider: z.enum(['google', 'outlook']).nullable().optional(),
+  timezone: z.string().nullable().optional(), // IANA timezone (e.g., 'America/New_York')
 });
 
 export const calendarDeletePayloadSchema = z.object({
   eventId: z.string(),             // Calendar event ID to delete
-  eventTitle: z.string().optional(), // Human-readable title for display/confirmation
-  provider: z.enum(['google', 'outlook']).optional(),
+  eventTitle: z.string().nullable().optional(), // Human-readable title for display/confirmation
+  provider: z.enum(['google', 'outlook']).nullable().optional(),
 });
 
 export const emailSendPayloadSchema = z.object({
   to: z.array(z.string()), // Email addresses
   subject: z.string(),
   body: z.string(),
-  cc: z.array(z.string()).optional(),
-  bcc: z.array(z.string()).optional(),
-  provider: z.enum(['gmail', 'outlook']).optional(),
+  cc: z.array(z.string()).nullable().optional(),
+  bcc: z.array(z.string()).nullable().optional(),
+  provider: z.enum(['gmail', 'outlook']).nullable().optional(),
 });
 
 export const reminderCreatePayloadSchema = z.object({
   title: z.string(),
   dueDateTime: z.string(), // ISO datetime
-  notes: z.string().optional(),
+  notes: z.string().nullable().optional(),
 });
 
 export const peopleNotePayloadSchema = z.object({
   personName: z.string(),          // Name to match against contacts
   note: z.string(),                // The note content to add
-  personId: z.string().optional(), // Pre-resolved person ID if available
+  personId: z.string().nullable().optional(), // Pre-resolved person ID if available
 });
 
 export const webSearchPayloadSchema = z.object({
   query: z.string(),               // The search query to run
-  context: z.string().optional(),  // Why this search was triggered
-  maxResults: z.number().int().min(1).max(5).optional().default(3),
+  context: z.string().nullable().optional(),  // Why this search was triggered
+  maxResults: z.number().int().min(1).max(5).nullable().optional().default(3),
 });
 
 export const memoryCreatePayloadSchema = z.object({
@@ -640,9 +640,9 @@ export const financialAlertPayloadSchema = z.object({
   alertType: z.enum(['spending_spike', 'recurring_charge', 'budget_threshold', 'unusual_pattern', 'insight']),
   title: z.string(),               // Short alert headline
   details: z.string(),             // Explanation of the alert
-  amount: z.number().optional(),   // Relevant amount if applicable
-  merchant: z.string().optional(), // Merchant name if applicable
-  category: z.string().optional(), // Spending category if applicable
+  amount: z.number().nullable().optional(),   // Relevant amount if applicable
+  merchant: z.string().nullable().optional(), // Merchant name if applicable
+  category: z.string().nullable().optional(), // Spending category if applicable
 });
 
 export const goalUpdatePayloadSchema = z.object({
