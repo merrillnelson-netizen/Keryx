@@ -1256,11 +1256,11 @@ For each pattern:
 - actionSuggestion: Optional — only if it's genuinely actionable, not filler
 
 MANDATORY PROTOCOL:
-- DAAAAADDD! Protocol: If the pattern is a repeated trivial complaint (roommates, kitchen, minor inconvenience), you MUST call it out. The description should say: "This has appeared [N] times. That's a decision you haven't made, not a pattern worth grieving."
+- DAAAAADDD! Protocol: ONLY fires for repeated *emotional complaints* or wallowing — the same personal grievance appearing 3+ times (a bad pool game, a roommate annoyance, minor kitchen drama). Do NOT fire this for normal life management activities. Appointment scheduling, health tracking, rescheduling tasks, following through on calendar events, and home/car maintenance tracking are all EXPECTED behaviors. If the user logs multiple entries about managing a medical appointment or a car service, that is diligence — not chaos. Only flag it if there is a pattern of *avoidance* or *unresolved emotional fixation*, not routine task completion.
 - WEIGHTED WIN AUDITOR: If the data shows real wins being overshadowed by noise, name the wins first. Description: "The KTM went out 3 times this week and the app shipped a feature. That's the actual story — don't let [minor issue] reframe it."
 - If neither applies, the insight must still be written in Keryx's voice — not a clinical summary.
 
-Only flag genuinely significant patterns. Empty array is fine.
+Only flag genuinely significant patterns. Empty array is fine. When in doubt, return an empty array rather than manufacturing a negative pattern from normal behavior.
 
 CRITICAL OUTPUT RULE: Write clean, direct text only. Do NOT include labels like "KERYX VOICE:", "NOT:", or any meta-annotation in your response.
 

@@ -3708,16 +3708,19 @@ Respond with JSON only.`
         timestamp: new Date().toISOString()
       });
 
-      // Background: Push notification for most important alert
-      if (alerts.length > 0) {
+      // Background: Push notification only for positive/insight patterns — not negative.
+      // Negative patterns are available in the app at the user's own pace; pushing them
+      // feels like a scolding notification and creates a negative feedback loop.
+      const pushableAlerts = alerts.filter(a => a.type === 'positive' || a.type === 'insight');
+      if (pushableAlerts.length > 0) {
         setImmediate(async () => {
           try {
             if (isPushConfigured()) {
-              const topAlert = alerts[0];
+              const topAlert = pushableAlerts[0];
               if (topAlert) {
                 const result = await sendPushToAllUserDevices(user.id, {
                   type: 'alert',
-                  title: `Pattern Alert: ${topAlert.type}`,
+                  title: `💡 Keryx noticed something`,
                   body: topAlert.description.substring(0, 120) + (topAlert.description.length > 120 ? '...' : ''),
                   url: '/dashboard',
                 });
