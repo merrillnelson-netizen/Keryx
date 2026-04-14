@@ -7549,10 +7549,14 @@ Respond with JSON only.`
   app.get("/api/profile/observations", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
-      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const ALLOWED_STATUSES = ['pending', 'confirmed', 'denied'];
+      const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
+      if (rawStatus && !ALLOWED_STATUSES.includes(rawStatus)) {
+        return res.status(400).json({ error: "Invalid status filter. Allowed: pending, confirmed, denied" });
+      }
       // Expire stale pending observations before returning
       await storage.expireOldPendingObservations(user.id);
-      const observations = await storage.getProfileObservations(user.id, status);
+      const observations = await storage.getProfileObservations(user.id, rawStatus);
       res.json(observations);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to fetch profile observations", error);

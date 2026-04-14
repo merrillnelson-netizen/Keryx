@@ -117,11 +117,24 @@ Generate up to ${maxNew} new observations.`;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14);
 
+    // Build normalized existing observation set for server-side dedup
+    const normalizeText = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    const existingNormalized = new Set(existingObs.map(o => normalizeText(o.observation)));
+
     let created = 0;
     for (const item of rawObservations.slice(0, maxNew)) {
       if (!item || typeof item !== 'object') continue;
       const obs = item as Record<string, unknown>;
       if (!obs.observation || typeof obs.observation !== 'string') continue;
+
+      const observationText = obs.observation.trim();
+
+      // Server-side dedup: skip if normalized text matches any existing observation
+      if (existingNormalized.has(normalizeText(observationText))) {
+        console.log(`[profile-obs] Skipping duplicate observation for user ${userId.slice(0, 8)}`);
+        continue;
+      }
+      existingNormalized.add(normalizeText(observationText));
 
       // Validate category without `as any`
       const rawCategory = typeof obs.category === 'string' ? obs.category : '';
@@ -137,7 +150,7 @@ Generate up to ${maxNew} new observations.`;
 
       await storage.createProfileObservation({
         userId,
-        observation: obs.observation.trim(),
+        observation: observationText,
         category,
         evidenceSummary,
         status: 'pending',
