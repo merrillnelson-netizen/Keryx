@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle, Activity } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mail, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle, Activity } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,7 @@ export default function People() {
   const [deletingPerson, setDeletingPerson] = useState<Person | null>(null);
   const [editName, setEditName] = useState("");
   const [editRelationship, setEditRelationship] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editPriority, setEditPriority] = useState(DEFAULT_PRIORITY_VALUE);
   const [editAliases, setEditAliases] = useState<string[]>([]);
@@ -397,6 +398,7 @@ export default function People() {
     setEditingPerson(person);
     setEditName(person.name);
     setEditRelationship(person.relationship || "");
+    setEditEmail((person as any).email || "");
     setEditNotes(person.notes || "");
     setEditPriority(person.priority || DEFAULT_PRIORITY_VALUE);
     setEditAliases(person.aliases || []);
@@ -420,6 +422,7 @@ export default function People() {
       const data: Record<string, any> = { priority: editPriority, aliases: editAliases };
       if (editName && editName !== editingPerson.name) data.name = editName;
       if (editRelationship) data.relationship = editRelationship;
+      data.email = editEmail.trim() || null;
       if (editNotes) data.notes = editNotes;
       updatePersonMutation.mutate({ id: editingPerson.id, data });
     }
@@ -729,6 +732,12 @@ export default function People() {
                                     {person.phoneNumber}
                                   </span>
                                 )}
+                                {(person as any).email && (
+                                  <span className="flex items-center gap-1">
+                                    <Mail className="w-3 h-3" />
+                                    {(person as any).email}
+                                  </span>
+                                )}
                                 {person.relationship && <span>{person.relationship}</span>}
                                 <span>{person.mentionCount} mentions</span>
                               </div>
@@ -865,12 +874,20 @@ export default function People() {
                                 </Badge>
                               )}
                             </div>
-                            {person.phoneNumber && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3" />
-                                {person.phoneNumber}
-                              </p>
-                            )}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              {person.phoneNumber && (
+                                <span className="flex items-center gap-1">
+                                  <Phone className="w-3 h-3" />
+                                  {person.phoneNumber}
+                                </span>
+                              )}
+                              {(person as any).email && (
+                                <span className="flex items-center gap-1">
+                                  <Mail className="w-3 h-3" />
+                                  {(person as any).email}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
@@ -1030,12 +1047,20 @@ export default function People() {
                             </Badge>
                           )}
                         </CardTitle>
-                        {person.phoneNumber && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Phone className="w-3 h-3" />
-                            {person.phoneNumber}
-                          </p>
-                        )}
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          {person.phoneNumber && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              {person.phoneNumber}
+                            </p>
+                          )}
+                          {(person as any).email && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Mail className="w-3 h-3" />
+                              {(person as any).email}
+                            </p>
+                          )}
+                        </div>
                         {person.relationship && (
                           <Badge variant="outline" className="mt-1 text-xs border-primary/30 text-primary">
                             {person.relationship}
@@ -1401,6 +1426,19 @@ export default function People() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="contact@example.com"
+                className="glass-card border-white/20"
+                data-testid="input-email"
+              />
+              <p className="text-xs text-muted-foreground">Used by the AI when sending reach-out emails.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="priority">Priority (Closeness Score)</Label>

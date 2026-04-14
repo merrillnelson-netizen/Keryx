@@ -472,6 +472,12 @@ ONLY suggest a follow-up if:
 
 Do NOT suggest follow-ups for exploratory or advisory actions, or if there is no clear compelling next step.
 
+Payload shapes (MUST match exactly):
+- email.send: { "to": ["user@example.com"], "subject": "...", "body": "...", "recipientId": "<personId if known>" }
+  IMPORTANT: "to" must be an array of real email addresses. If you only know a recipientId (person UUID), include it alongside an empty "to" array: { "to": [], "recipientId": "..." }
+- calendar.create: { "title": "...", "startDateTime": "ISO8601", "endDateTime": "ISO8601", "description": "..." }
+- people.note: { "personName": "...", "note": "...", "personId": "<if known>" }
+
 Respond with JSON:
 {
   "followUp": boolean,
@@ -479,7 +485,7 @@ Respond with JSON:
   "actionCategory": "calendar" | "email" | "people" | null,
   "title": "Brief title",
   "description": "What this follow-up does and why",
-  "payload": { /* action-specific params */ },
+  "payload": { /* use exact shape above */ },
   "reasoning": "Why this is a natural next step",
   "confidence": 0.0-1.0
 }`;
@@ -773,8 +779,25 @@ async function executeCalendarDelete(action: AiAction): Promise<ActionExecutionR
  * Execute email send action
  */
 async function executeEmailSend(action: AiAction): Promise<ActionExecutionResult> {
-  const payload = action.payload as EmailSendPayload;
-  
+  const raw = action.payload as Record<string, unknown>;
+
+  // Resolve recipientId → actual email address if `to` is missing
+  if ((!raw.to || (Array.isArray(raw.to) && raw.to.length === 0)) && raw.recipientId) {
+    const person = await storage.getPersonById(action.userId, raw.recipientId as string);
+    if (!person) {
+      return { success: false, errorMessage: `Could not find person with id "${raw.recipientId}" to send email to.` };
+    }
+    if (!person.email) {
+      return {
+        success: false,
+        errorMessage: `No email address on file for ${person.name}. Add their email on the People page first.`,
+      };
+    }
+    raw.to = [person.email];
+  }
+
+  const payload = raw as unknown as EmailSendPayload;
+
   // Validate payload
   const validation = emailSendPayloadSchema.safeParse(payload);
   if (!validation.success) {

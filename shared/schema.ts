@@ -195,6 +195,7 @@ export const people = pgTable("people", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   phoneNumber: text("phone_number"),
+  email: text("email"),
   relationship: text("relationship"),
   notes: text("notes"),
   aliases: text("aliases").array().default(sql`'{}'::text[]`),
