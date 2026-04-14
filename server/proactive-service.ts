@@ -187,9 +187,70 @@ async function generateGoalUpdateProposals(
   }
 }
 
+// Stop words to ignore when comparing insight topics
+const INSIGHT_STOP_WORDS = new Set([
+  'a','an','the','and','or','but','in','on','at','to','for','of','with',
+  'is','are','was','were','has','have','had','be','been','being',
+  'you','your','i','my','we','our','it','its','this','that','they','their',
+  'from','by','as','up','out','if','about','so','just','than','then','also',
+]);
+
+/**
+ * Extract meaningful topic keywords from an insight title + description.
+ * Used to detect duplicate alerts about the same topic even when phrased differently.
+ */
+function extractTopicKeywords(title: string, description: string = ''): Set<string> {
+  const text = `${title} ${description}`.toLowerCase();
+  const words = text.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
+  return new Set(words.filter(w => w.length > 3 && !INSIGHT_STOP_WORDS.has(w)));
+}
+
+/**
+ * Check if a pending insight already covers the same topic as the proposed alert.
+ * Returns true if there is ≥ 2 keyword overlap with any existing pending insight.
+ */
+async function hasSimilarPendingInsight(
+  userId: string,
+  title: string,
+  description: string
+): Promise<boolean> {
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const existing = await db
+      .select({ id: aiActions.id, title: aiActions.title, description: aiActions.description })
+      .from(aiActions)
+      .where(
+        and(
+          eq(aiActions.userId, userId),
+          eq(aiActions.actionType, AI_ACTION_TYPES.INSIGHT_SURFACE),
+          or(
+            eq(aiActions.status, AI_ACTION_STATUSES.PENDING),
+            gte(aiActions.createdAt, cutoff)
+          )
+        )
+      )
+      .limit(20);
+
+    const newKeywords = extractTopicKeywords(title, description);
+    for (const row of existing) {
+      const existingKeywords = extractTopicKeywords(row.title || '', row.description || '');
+      let overlap = 0;
+      for (const kw of newKeywords) {
+        if (existingKeywords.has(kw)) overlap++;
+      }
+      if (overlap >= 2) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 3. INSIGHT SURFACE — Create insight.surface action cards from pattern alerts
  * Accepts pre-computed pattern alerts and stores notable ones as action proposals.
+ * Guards against piling-on: caps pending insights at 2 and uses keyword dedup
+ * to catch the same topic rephrased across multiple briefing runs.
  */
 export async function createInsightSurfaceActions(
   userId: string,
@@ -202,6 +263,22 @@ export async function createInsightSurfaceActions(
 ): Promise<void> {
   if (!patternAlerts || patternAlerts.length === 0) return;
 
+  // Hard cap: if the user already has 2+ pending insight cards, don't pile on
+  try {
+    const pendingInsights = await db
+      .select({ id: aiActions.id })
+      .from(aiActions)
+      .where(
+        and(
+          eq(aiActions.userId, userId),
+          eq(aiActions.actionType, AI_ACTION_TYPES.INSIGHT_SURFACE),
+          eq(aiActions.status, AI_ACTION_STATUSES.PENDING)
+        )
+      )
+      .limit(2);
+    if (pendingInsights.length >= 2) return;
+  } catch { /* proceed */ }
+
   const created = { count: 0 };
 
   // Only surface "negative" or "insight" patterns as proactive actions
@@ -212,14 +289,19 @@ export async function createInsightSurfaceActions(
   for (const alert of actionable.slice(0, 2)) {
     if (created.count >= MAX_PROACTIVE_PER_RUN) break;
 
+    // Primary dedup: exact sourceId match within 7 days
     const sourceId = `insight_${Buffer.from(alert.title).toString("base64").slice(0, 20)}`;
     const hasDupe = await hasDuplicateRecentAction(
       userId,
       AI_ACTION_TYPES.INSIGHT_SURFACE,
       sourceId,
-      3 // shorter window for insights — they're time-sensitive
+      7 // extended to 7 days so same-topic alerts don't reappear in days following
     );
     if (hasDupe) continue;
+
+    // Secondary dedup: keyword overlap catches the same topic with a different AI-generated title
+    const hasSimilar = await hasSimilarPendingInsight(userId, alert.title, alert.description);
+    if (hasSimilar) continue;
 
     try {
       await storage.createAiAction({
@@ -244,7 +326,7 @@ export async function createInsightSurfaceActions(
         rollbackData: null,
         resultData: null,
         errorMessage: null,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h expiry (was 24h)
       });
       created.count++;
     } catch (err) {
