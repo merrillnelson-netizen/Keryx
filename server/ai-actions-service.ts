@@ -1502,7 +1502,9 @@ export async function processUserInputForActions(
         ? `${enrichedProfile}\n\nKeryx's confirmed observations about this user:\n${confirmedObs}`
         : `Keryx's confirmed observations about this user:\n${confirmedObs}`;
     }
-  } catch (_) {}
+  } catch (obsErr) {
+    console.warn('[ai-actions] Could not load confirmed profile observations:', obsErr instanceof Error ? obsErr.message : obsErr);
+  }
 
   // Detect action from input with user's timezone and profile context
   const detected = await detectActionFromInput(userInput, {
