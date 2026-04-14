@@ -15,10 +15,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useSessionCategory } from "@/hooks/use-session-category";
 import SpeechDebug from "@/components/speech-debug";
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt";
-import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, Loader2, FileText, Gauge } from "lucide-react";
+import { Settings as SettingsIcon, Mic, Volume2, Save, RefreshCw, Database, Tag, Calendar, Mail, CheckCircle2, XCircle, Target, X, Plus, Bot, Zap, ShieldCheck, ShieldOff, ShieldQuestion, Loader2, FileText, Gauge, UserCircle } from "lucide-react";
 import { SassOMeter } from "@/components/sass-o-meter";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { RelayApiCard } from "@/components/settings/relay-api-card";
 import { PushNotificationCard } from "@/components/settings/push-notification-card";
@@ -366,6 +367,40 @@ export default function SettingsPage() {
 
         {/* Settings Cards */}
         <div className="max-w-2xl space-y-6">
+          {/* User Profile Card */}
+          <Card className="glass-card border-white/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle className="w-5 h-5 text-primary" />
+                About You
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Tell Keryx about your habits, preferences, and communication style. The AI uses this when suggesting actions — for example, whether to text or email someone, how you prefer to be reminded, or what topics matter most to you.
+              </p>
+              <Textarea
+                value={settings.userProfile ?? ""}
+                onChange={(e) => setSettings(prev => ({ ...prev, userProfile: e.target.value }))}
+                placeholder={`Examples:\n• I text friends and family — never email them\n• I prefer email for business contacts and acquaintances\n• I work in Mountain Time and keep evenings free\n• I'm training for a marathon and tracking nutrition`}
+                className="min-h-[130px] glass-card border-white/20 text-sm resize-none"
+              />
+              <Button
+                onClick={() => updateSettingsMutation.mutate({ userProfile: settings.userProfile ?? null })}
+                disabled={updateSettingsMutation.isPending}
+                size="sm"
+                className="w-full sm:w-auto"
+              >
+                {updateSettingsMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Save Profile
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* AI Personality Card */}
           <Card className="glass-card border-white/20">
             <CardHeader>

@@ -248,6 +248,8 @@ export const settings = pgTable("settings", {
   professionalMode: boolean("professional_mode").default(false), // Overrides sassLevel to muted/professional mode
   // Relay API
   relayApiKey: text("relay_api_key"), // Static API key for inbound relay endpoint (no session required)
+  // User Profile — freeform context about the user for AI decision-making
+  userProfile: text("user_profile"), // e.g. "I text friends/family; I email businesses"
   // Action Chaining
   allowActionChaining: boolean("allow_action_chaining").default(true), // Allow agent to spawn follow-up child actions after successful completion
   createdAt: timestamp("created_at").defaultNow(),

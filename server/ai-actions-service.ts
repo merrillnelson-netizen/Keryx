@@ -211,12 +211,14 @@ export async function detectActionFromInput(
     recentMemories?: string[];
     connectedProviders?: { calendar?: string; email?: string };
     timezone?: string;
+    userProfile?: string | null;
   }
 ): Promise<DetectedAction | null> {
   try {
     const currentTime = contextInfo?.currentTime || new Date();
     const providers = contextInfo?.connectedProviders || {};
     const userTimezone = contextInfo?.timezone || 'UTC';
+    const userProfileNote = contextInfo?.userProfile ? `\n- User profile: ${contextInfo.userProfile}` : '';
     
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -244,7 +246,7 @@ CURRENT CONTEXT:
 - Current time: ${currentTime.toISOString()}
 - User's timezone: ${userTimezone}
 - Calendar provider: ${providers.calendar || 'not connected'}
-- Email provider: ${providers.email || 'not connected'}
+- Email provider: ${providers.email || 'not connected'}${userProfileNote}
 
 DETECTION RULES:
 - Look for imperative phrases like "schedule", "send", "remind me", "set up", "book", "email", "search for", "look up", "find", "note that", "log that", "record that", "remember about", "update goal", "mark progress"
@@ -451,19 +453,21 @@ export async function createPendingAction(
 async function detectFollowUpAction(
   completedAction: AiAction,
   resultData: unknown,
+  userProfile?: string | null,
 ): Promise<DetectedAction | null> {
   try {
     const payload = completedAction.payload as Record<string, unknown>;
     const sourceContext = completedAction.sourceText
       ? `\n- Original context: "${completedAction.sourceText.slice(0, 300)}"`
       : '';
+    const userProfileContext = userProfile ? `\n\nUSER PROFILE (use this to decide channel/approach):\n${userProfile}` : '';
     const prompt = `A user's AI assistant just successfully completed an action. Determine if there is ONE natural, HIGH-VALUE follow-up action warranted.
 
 COMPLETED ACTION:
 - Type: ${completedAction.actionType}
 - Title: ${completedAction.title}
 - Payload summary: ${JSON.stringify(payload).slice(0, 400)}
-- Result: ${JSON.stringify(resultData).slice(0, 200)}${sourceContext}
+- Result: ${JSON.stringify(resultData).slice(0, 200)}${sourceContext}${userProfileContext}
 
 ONLY suggest a follow-up if:
 1. It is a natural, closely related next step (e.g., after scheduling a meeting with someone → draft a confirmation email to them)
@@ -625,7 +629,7 @@ export async function executeAction(action: AiAction): Promise<ActionExecutionRe
             const userSettings = await storage.getSettings(action.userId);
             if (userSettings?.allowActionChaining === false) return;
 
-            const followUp = await detectFollowUpAction(action, result.resultData);
+            const followUp = await detectFollowUpAction(action, result.resultData, userSettings?.userProfile);
             if (!followUp) return;
 
             // Hard server-side whitelist: reject any child type not in CHAINABLE_ACTION_TYPES
@@ -1480,7 +1484,7 @@ export async function processUserInputForActions(
   userInput: string,
   sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' | 'discovery' | 'velocity' | 'high_signal' = 'voice_input',
   sourceId?: string,
-  contextInfo?: { timezone?: string },
+  contextInfo?: { timezone?: string; userProfile?: string | null },
   minConfidence?: number
 ): Promise<{ 
   actionDetected: boolean; 
@@ -1488,10 +1492,11 @@ export async function processUserInputForActions(
   autoExecuted?: boolean;
   executionResult?: ActionExecutionResult;
 }> {
-  // Detect action from input with user's timezone context
+  // Detect action from input with user's timezone and profile context
   const detected = await detectActionFromInput(userInput, {
     currentTime: new Date(),
     timezone: contextInfo?.timezone,
+    userProfile: contextInfo?.userProfile,
   });
   
   if (!detected) {

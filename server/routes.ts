@@ -574,7 +574,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // AI Action Detection
           import('./ai-actions-service').then(({ processUserInputForActions }) => {
-            processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone })
+            processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone, userProfile: settingsForCalendar?.userProfile })
               .catch(err => console.warn('AI action detection failed:', err));
           }).catch(err => console.warn('Failed to load ai-actions-service:', err));
           
@@ -4561,7 +4561,8 @@ Respond with JSON only.`
         return sendErrorResponse(res, 400, "userInput is required");
       }
       
-      const result = await processUserInputForActions(user.id, userInput, 'manual', undefined, { timezone });
+      const userSettings = await storage.getSettings(user.id);
+      const result = await processUserInputForActions(user.id, userInput, 'manual', undefined, { timezone, userProfile: userSettings?.userProfile });
       
       res.json({
         status: 'success',
