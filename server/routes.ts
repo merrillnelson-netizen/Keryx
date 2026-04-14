@@ -2063,15 +2063,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allConversations = await storage.getMessageConversations(user.id, 1000, 0);
 
       const matchingConvs = allConversations.filter(conv => {
-        // Match by phone number if available
+        // Match by phone number if available — require both sides to be meaningful length
         if (personPhoneDigits && personPhoneDigits.length >= 7) {
           const addrDigits = conv.contactAddress.replace(/\D/g, '');
-          if (addrDigits.endsWith(personPhoneDigits) || personPhoneDigits.endsWith(addrDigits)) return true;
+          if (addrDigits.length >= 7 && (addrDigits.endsWith(personPhoneDigits) || personPhoneDigits.endsWith(addrDigits))) return true;
         }
-        // Match by contactName (case-insensitive, partial match on any name variant)
+        // Match by contactName — require ALL words of the name variant to appear in
+        // the contact name to prevent partial/single-word false positives (e.g. "Michael"
+        // from a business matching "Michael Nelson").
         if (conv.contactName) {
           const cn = conv.contactName.toLowerCase().trim();
-          if (nameVariants.some(v => cn === v || cn.includes(v) || v.includes(cn))) return true;
+          if (nameVariants.some(variant => {
+            if (cn === variant) return true; // exact match
+            const words = variant.split(/\s+/).filter(w => w.length > 2);
+            if (words.length >= 2) {
+              // Multi-word name: every word must appear in the contact name
+              return words.every(w => cn.includes(w));
+            }
+            // Single-word alias: exact match only to avoid false positives
+            return cn === variant;
+          })) return true;
         }
         return false;
       });
