@@ -428,7 +428,7 @@ export async function createPendingAction(
           type: 'action_required',
           title: `${actionEmoji} Action needs approval`,
           body: detected.title.substring(0, 100),
-          url: '/actions',
+          url: '/agent',
           requireInteraction: true,
         });
       } catch (err) {
