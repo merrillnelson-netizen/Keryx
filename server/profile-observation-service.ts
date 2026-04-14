@@ -22,23 +22,25 @@ export async function generateObservations(userId: string): Promise<number> {
     // is not blocked by observations the user never saw.
     await storage.expireOldPendingObservations(userId);
 
-    // Gather data — memories capped at last 30 days
+    // Gather data — fetch most recent 200 memories, then slice to ideal window
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [allRecentMemories, goals, frequentPlaces, existingObs] = await Promise.all([
+    const [allMemories, goals, frequentPlaces, existingObs] = await Promise.all([
       storage.getLogEntries(userId, 200, 0),
       storage.getGoals(userId),
       storage.getFrequentPlaces(userId),
       storage.getProfileObservations(userId),
     ]);
 
-    // Filter to last 30 days
-    const recentMemories = allRecentMemories.filter(
+    if (allMemories.length < 5) return 0; // Not enough data at all
+
+    // Prefer last 30 days; fall back to most recent 60 if recent window is thin
+    const last30 = allMemories.filter(
       m => m.createdAt && new Date(m.createdAt) >= thirtyDaysAgo
     );
-
-    if (recentMemories.length < 5) return 0;
+    const recentMemories = last30.length >= 10 ? last30 : allMemories.slice(0, 60);
+    const windowLabel = last30.length >= 10 ? 'last 30 days' : 'most recent memories (all time)';
 
     // Count pending after expiry
     const pendingCount = existingObs.filter(o => o.status === 'pending').length;
@@ -63,7 +65,7 @@ export async function generateObservations(userId: string): Promise<number> {
     const deniedText = existingObs.filter(o => o.status === 'denied').map(o => o.observation).join('\n');
     const pendingText = existingObs.filter(o => o.status === 'pending').map(o => o.observation).join('\n');
 
-    const systemPrompt = `You are a behavioral analyst generating concise, specific observations about a user based on their memory log entries from the last 30 days.
+    const systemPrompt = `You are a behavioral analyst generating concise, specific observations about a user based on their memory log entries (${windowLabel}).
 
 Rules:
 - Each observation must be a single, concrete statement grounded in the provided data.
@@ -76,7 +78,7 @@ Rules:
 Output a JSON object with key "observations" containing an array of exactly ${maxNew} items (or fewer if evidence is insufficient). Format:
 {"observations": [{"observation": "string", "category": "string", "evidenceSummary": "string", "confidence": number}]}`;
 
-    const userPrompt = `Recent memories (last 30 days, ${recentMemories.length} entries):
+    const userPrompt = `Recent memories (${windowLabel}, ${recentMemories.length} entries):
 ${memorySample}
 
 Active goals: ${goalsText}
