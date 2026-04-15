@@ -39,8 +39,11 @@ import {
   Menu,
   X,
   Sparkles,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
+import { useVoiceInput } from "@/hooks/use-voice-input";
 
 interface AiChatSession {
   id: string;
@@ -261,6 +264,21 @@ export default function ChatPage() {
   const [savedCandidates, setSavedCandidates] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Voice-to-text: appends transcript to current input
+  const { isListening, isSupported: isVoiceSupported, startListening, stopListening } = useVoiceInput(
+    useCallback((transcript: string) => {
+      if (transcript) setInput(prev => prev ? `${prev} ${transcript}` : transcript);
+    }, [])
+  );
+
+  // Auto-resize textarea as content grows
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [input]);
 
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<AiChatSession[]>({
     queryKey: ["/api/chat/sessions"],
@@ -642,24 +660,49 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Talk to Keryx… (Enter to send, Shift+Enter for new line)"
-                className="flex-1 min-h-[44px] max-h-36 resize-none"
-                rows={1}
+                placeholder="Type to Keryx… (Enter to send, Shift+Enter for new line)"
+                className="flex-1 resize-none overflow-y-auto"
+                style={{ minHeight: "80px", maxHeight: "240px" }}
+                rows={3}
                 disabled={sendMessageMutation.isPending}
               />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || sendMessageMutation.isPending}
-                size="icon"
-                className="flex-shrink-0 h-11 w-11"
-              >
-                {sendMessageMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
+              <div className="flex flex-col gap-1.5 flex-shrink-0">
+                {isVoiceSupported && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={isListening ? "destructive" : "outline"}
+                    className="h-10 w-10"
+                    onClick={isListening ? stopListening : startListening}
+                    title={isListening ? "Stop listening" : "Voice input"}
+                  >
+                    {isListening ? (
+                      <MicOff className="w-4 h-4" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
+                  </Button>
                 )}
-              </Button>
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim() || sendMessageMutation.isPending}
+                  size="icon"
+                  className="h-10 w-10"
+                >
+                  {sendMessageMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
             </div>
+            {isListening && (
+              <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                Listening… speak now
+              </p>
+            )}
           </div>
         </div>
       </div>
