@@ -23,9 +23,11 @@ import {
   Newspaper,
   Sunrise,
   TrendingDown,
-  Zap
+  Zap,
+  MessageSquare
 } from "lucide-react";
 import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import { format, formatDistanceToNow } from "date-fns";
 import { type AiAction, AI_ACTION_TYPES } from "@shared/schema";
 
@@ -35,6 +37,8 @@ interface PendingActionsProps {
 
 export default function PendingActions({ compact = false }: PendingActionsProps) {
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
+  const [rejectingActionId, setRejectingActionId] = useState<string | null>(null);
+  const [rejectionInput, setRejectionInput] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -66,13 +70,16 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
   });
 
   const rejectMutation = useMutation({
-    mutationFn: async (actionId: string) => {
-      const response = await apiRequest("POST", `/api/actions/${actionId}/reject`);
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const body = reason ? { reason } : {};
+      const response = await apiRequest("POST", `/api/actions/${id}/reject`, body);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/actions/pending"] });
       queryClient.invalidateQueries({ queryKey: ["/api/actions"] });
+      setRejectingActionId(null);
+      setRejectionInput("");
       toast({
         title: "Action Rejected",
         description: "The proposed action was declined.",
@@ -304,7 +311,10 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
                   size="sm"
                   variant="ghost"
                   className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                  onClick={() => rejectMutation.mutate(action.id)}
+                  onClick={() => {
+                    setRejectingActionId(action.id);
+                    setRejectionInput("");
+                  }}
                   disabled={approveMutation.isPending || rejectMutation.isPending}
                   data-testid={`reject-action-${action.id}`}
                 >
@@ -325,6 +335,47 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
                 </Button>
               </div>
             </div>
+
+            {rejectingActionId === action.id && (
+              <div className="mt-2 pt-2 border-t border-red-500/20 space-y-2">
+                <div className="flex items-start gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-1" />
+                  <span className="text-xs text-muted-foreground">Why are you rejecting this? Keryx will remember and won't repeat it.</span>
+                </div>
+                <Textarea
+                  value={rejectionInput}
+                  onChange={(e) => setRejectionInput(e.target.value.slice(0, 500))}
+                  placeholder="Why are you rejecting this? (optional)"
+                  className="text-sm min-h-[60px] max-h-[90px] resize-none"
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => rejectMutation.mutate({ id: action.id, reason: rejectionInput.trim() || undefined })}
+                    disabled={rejectMutation.isPending}
+                  >
+                    Submit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => rejectMutation.mutate({ id: action.id })}
+                    disabled={rejectMutation.isPending}
+                  >
+                    Skip
+                  </Button>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1"
+                    onClick={() => { setRejectingActionId(null); setRejectionInput(""); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {expandedAction === action.id && (
               <div className="mt-3 pt-3 border-t border-white/10 space-y-2 text-sm">

@@ -285,6 +285,8 @@ export const aiActions = pgTable("ai_actions", {
   executedAt: timestamp("executed_at"),
   resultData: jsonb("result_data"), // Response from the external service (created event ID, sent email ID, etc.)
   errorMessage: text("error_message"), // Error details if failed
+  // User rejection feedback
+  rejectionReason: text("rejection_reason"), // User-provided reason when rejecting this action
   // Rollback capability
   rollbackAvailable: boolean("rollback_available").default(false),
   rollbackData: jsonb("rollback_data"), // Data needed to undo this action

@@ -1460,17 +1460,21 @@ export async function approveAction(actionId: string, userId: string): Promise<A
 }
 
 /**
- * Reject a pending action
+ * Reject a pending action, optionally storing the user's reason.
+ * The reason is later injected into AI prompts to prevent re-suggestions.
  */
-export async function rejectAction(actionId: string, userId: string): Promise<boolean> {
+export async function rejectAction(actionId: string, userId: string, reason?: string): Promise<boolean> {
   const action = await storage.getAiAction(actionId, userId);
   if (!action || action.status !== AI_ACTION_STATUSES.PENDING) {
     return false;
   }
-  
-  await storage.updateAiAction(actionId, userId, { 
-    status: AI_ACTION_STATUSES.REJECTED 
-  });
+
+  const updates: Record<string, unknown> = { status: AI_ACTION_STATUSES.REJECTED };
+  if (reason && reason.trim()) {
+    updates.rejectionReason = reason.trim().slice(0, 500);
+  }
+
+  await storage.updateAiAction(actionId, userId, updates as Parameters<typeof storage.updateAiAction>[2]);
   
   return true;
 }
@@ -1504,6 +1508,23 @@ export async function processUserInputForActions(
     }
   } catch (obsErr) {
     console.warn('[ai-actions] Could not load confirmed profile observations:', obsErr instanceof Error ? obsErr.message : obsErr);
+  }
+
+  // Inject recent rejection reasons so the AI avoids repeating declined suggestions
+  try {
+    const { storage } = await import('./storage');
+    const rejectedWithReasons = await storage.getRecentRejectedActionsWithReasons(userId, 20);
+    if (rejectedWithReasons.length > 0) {
+      const rejectionLines = rejectedWithReasons
+        .map(a => `- "${a.title}" (${a.actionType}): ${a.rejectionReason}`)
+        .join('\n');
+      const rejectionBlock = `Past rejected suggestions — do NOT re-suggest these unless circumstances have materially changed:\n${rejectionLines}`;
+      enrichedProfile = enrichedProfile
+        ? `${enrichedProfile}\n\n${rejectionBlock}`
+        : rejectionBlock;
+    }
+  } catch (rejErr) {
+    console.warn('[ai-actions] Could not load rejection history:', rejErr instanceof Error ? rejErr.message : rejErr);
   }
 
   // Detect action from input with user's timezone and profile context

@@ -108,6 +108,7 @@ export interface IStorage {
   updateAiAction(id: string, userId: string, updates: Partial<InsertAiAction>): Promise<AiAction | undefined>;
   markActionRolledBack(id: string, userId: string): Promise<AiAction | undefined>;
   getPendingActions(userId: string): Promise<AiAction[]>;
+  getRecentRejectedActionsWithReasons(userId: string, limit?: number): Promise<AiAction[]>;
   resolvePendingActionsBySource(userId: string, sourceId: string, actionType?: string, resolution?: 'completed' | 'rejected'): Promise<number>;
   
   // AI Action Preferences (user-scoped)
@@ -1505,6 +1506,24 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to fetch pending actions:', error);
       throw new Error('Database error while fetching pending actions');
+    }
+  }
+
+  async getRecentRejectedActionsWithReasons(userId: string, limit = 20): Promise<AiAction[]> {
+    try {
+      return await db
+        .select()
+        .from(aiActions)
+        .where(and(
+          eq(aiActions.userId, userId),
+          eq(aiActions.status, 'rejected'),
+          isNotNull(aiActions.rejectionReason)
+        ))
+        .orderBy(desc(aiActions.updatedAt))
+        .limit(limit);
+    } catch (error) {
+      console.error('Failed to fetch rejected actions with reasons:', error);
+      return [];
     }
   }
 

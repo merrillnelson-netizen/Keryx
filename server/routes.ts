@@ -4366,8 +4366,10 @@ Respond with JSON only.`
   app.post("/api/actions/:id/reject", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      
-      const success = await rejectAction(req.params.id, user.id);
+      const bodySchema = z.object({ reason: z.string().max(500).optional() });
+      const { reason } = bodySchema.parse(req.body ?? {});
+
+      const success = await rejectAction(req.params.id, user.id, reason);
       
       if (!success) {
         return sendErrorResponse(res, 400, "Failed to reject action");
