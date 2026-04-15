@@ -7916,12 +7916,13 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
         return res.status(400).json({ error: "savedAs must be 'ecosystem' or 'memory'" });
       }
 
-      const updated = await storage.markAiChatMessageSaved(req.params.id, user.id, savedAs);
-      if (!updated) return res.status(404).json({ error: "Message not found" });
+      // Check message exists without marking it saved yet (atomic: mark only on success)
+      const message = await storage.getAiChatMessage(req.params.id, user.id);
+      if (!message) return res.status(404).json({ error: "Message not found" });
 
       if (savedAs === 'ecosystem') {
-        // Save as a confirmed profile observation so it feeds into AI context everywhere
-        const text = memoryText || updated.content.slice(0, 300);
+        // Save as a confirmed profile observation — mark AFTER write succeeds
+        const text = memoryText || message.content.slice(0, 300);
         await storage.createProfileObservation({
           userId: user.id,
           observation: text,
@@ -7930,24 +7931,85 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
           status: 'confirmed',
           confidence: 1.0,
         });
+        await storage.markAiChatMessageSaved(req.params.id, user.id, 'ecosystem');
         res.json({ success: true, savedAs: 'ecosystem' });
       } else {
-        // Log as a regular memory entry
-        const text = memoryText || updated.content;
-        const { extractMetadata: extract } = await import('./ai-service');
+        // Quota check: respect same limits as POST /api/memories
+        if (process.env.BILLING_ENFORCEMENT === 'true' && user.subscriptionTier === 'free') {
+          const now = new Date();
+          const ms = user.memoriesMonthStart ? new Date(user.memoriesMonthStart) : null;
+          const sameMonth = ms && ms.getMonth() === now.getMonth() && ms.getFullYear() === now.getFullYear();
+          const countThisMonth = sameMonth ? (user.memoriesThisMonth ?? 0) : 0;
+          if (countThisMonth >= 100) {
+            return res.status(403).json({
+              error: 'Monthly memory limit reached',
+              upgradeRequired: true,
+              requiredTier: 'pro',
+              memoriesUsed: countThisMonth,
+              memoriesLimit: 100,
+            });
+          }
+        }
+
+        // Full memory ingestion pipeline matching POST /api/memories behavior
+        const text = memoryText || message.content;
         const userSettings = await storage.getSettings(user.id);
-        const meta = await extract(text, userSettings?.userTimezone ?? undefined);
+        const [meta, embeddingVector] = await Promise.all([
+          extractMetadata(text, userSettings?.userTimezone ?? undefined),
+          generateEmbedding(text),
+        ]);
+
         const entry = await storage.createLogEntry({
           userId: user.id,
           memoryText: text,
           topicTag: meta.topicTag || 'Chat',
           metadataJson: meta.metadataJson || {},
+          embeddingVector,
           mood: meta.mood,
           moodScore: meta.moodScore,
           detectedPeople: meta.detectedPeople || [],
           importance: meta.importance || 5,
         });
+
+        // Mark message saved only after DB write succeeds (atomic)
+        await storage.markAiChatMessageSaved(req.params.id, user.id, 'memory');
+
         res.json({ success: true, savedAs: 'memory', entryId: entry.id });
+
+        // Background: fire automation triggers same as POST /api/memories
+        import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
+          const POSITIVE_MOODS = new Set(['happy', 'excited', 'hopeful', 'grateful', 'peaceful', 'proud', 'motivated', 'nostalgic']);
+          const NEGATIVE_MOODS = new Set(['sad', 'anxious', 'frustrated', 'stressed', 'angry', 'confused']);
+          const moodLabel = (entry.mood || 'neutral').toLowerCase();
+          const moodScore = entry.moodScore ?? undefined;
+          const aiSentiment: 'positive' | 'neutral' | 'negative' =
+            POSITIVE_MOODS.has(moodLabel) ? 'positive'
+            : NEGATIVE_MOODS.has(moodLabel) ? 'negative'
+            : moodScore !== undefined
+              ? moodScore > 20 ? 'positive' : moodScore < -20 ? 'negative' : 'neutral'
+              : 'neutral';
+          const aiTopics = entry.topicTag ? [entry.topicTag] : [];
+          const aiPeople = entry.detectedPeople ?? [];
+          const ctx = {
+            userId: user.id,
+            memoryContent: text,
+            moodScore,
+            topics: aiTopics,
+            peopleNames: aiPeople,
+            aiTopics,
+            aiPeople,
+            aiMoodLabel: entry.mood ?? undefined,
+            aiSentiment,
+          };
+          fireTrigger(user.id, AUTOMATION_TRIGGERS.MEMORY_LOGGED, ctx).catch(() => {});
+          if (moodScore !== undefined) {
+            if (moodScore <= 3) fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_DROPPED, ctx).catch(() => {});
+            if (moodScore >= 8) fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_SPIKED, ctx).catch(() => {});
+          }
+          aiPeople.forEach((name: string) => {
+            fireTrigger(user.id, AUTOMATION_TRIGGERS.PERSON_MENTIONED, { ...ctx, personName: name }).catch(() => {});
+          });
+        }).catch(() => {});
       }
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to save message", error);

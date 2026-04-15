@@ -252,6 +252,7 @@ export interface IStorage {
   updateAiChatSession(id: string, userId: string, updates: { title?: string; lastMessageAt?: Date; messageCount?: number }): Promise<AiChatSession | undefined>;
   deleteAiChatSession(id: string, userId: string): Promise<boolean>;
   getAiChatMessages(sessionId: string, userId: string): Promise<AiChatMessage[]>;
+  getAiChatMessage(id: string, userId: string): Promise<AiChatMessage | undefined>;
   createAiChatMessage(data: { sessionId: string; userId: string; role: string; content: string }): Promise<AiChatMessage>;
   markAiChatMessageSaved(id: string, userId: string, savedAs: 'ecosystem' | 'memory'): Promise<AiChatMessage | undefined>;
 }
@@ -3193,6 +3194,12 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(aiChatMessages)
       .where(and(eq(aiChatMessages.sessionId, sessionId), eq(aiChatMessages.userId, userId)))
       .orderBy(aiChatMessages.timestamp);
+  }
+
+  async getAiChatMessage(id: string, userId: string): Promise<AiChatMessage | undefined> {
+    const [msg] = await db.select().from(aiChatMessages)
+      .where(and(eq(aiChatMessages.id, id), eq(aiChatMessages.userId, userId)));
+    return msg;
   }
 
   async createAiChatMessage(data: { sessionId: string; userId: string; role: string; content: string }): Promise<AiChatMessage> {
