@@ -320,8 +320,9 @@ export default function ChatPage() {
       if (!res.ok) throw new Error("Failed to send message");
       return res.json() as Promise<{ userMessage: AiChatMessage; aiMessage: AiChatMessage; summaryOffer: SummaryOffer | null; intentCandidates: SummaryCandidate[] | null }>;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId, "messages"] });
+    onSuccess: (data, variables) => {
+      // Use the sessionId from mutation variables (not ambient state) to avoid stale-closure race
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", variables.sessionId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
       // Intent candidates take priority (typed "save that" / "log that")
       if (data.intentCandidates && data.intentCandidates.length > 0) {

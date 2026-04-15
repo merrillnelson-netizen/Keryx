@@ -7848,20 +7848,31 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
         await storage.markAiChatMessageSaved(req.params.id, user.id, 'ecosystem');
         res.json({ success: true, savedAs: 'ecosystem' });
       } else {
-        // Quota check: respect same limits as POST /api/memories
+        // Quota check: same logic as requireMemoryQuota() including monthly reset
         if (process.env.BILLING_ENFORCEMENT === 'true' && user.subscriptionTier === 'free') {
           const now = new Date();
           const ms = user.memoriesMonthStart ? new Date(user.memoriesMonthStart) : null;
           const sameMonth = ms && ms.getMonth() === now.getMonth() && ms.getFullYear() === now.getFullYear();
-          const countThisMonth = sameMonth ? (user.memoriesThisMonth ?? 0) : 0;
-          if (countThisMonth >= 100) {
-            return res.status(403).json({
-              error: 'Monthly memory limit reached',
-              upgradeRequired: true,
-              requiredTier: 'pro',
-              memoriesUsed: countThisMonth,
-              memoriesLimit: 100,
-            });
+
+          if (!sameMonth) {
+            // New month — reset counter same as requireMemoryQuota does
+            try {
+              await storage.updateUser(user.id, {
+                memoriesThisMonth: 0,
+                memoriesMonthStart: new Date(now.getFullYear(), now.getMonth(), 1),
+              });
+            } catch { /* non-fatal */ }
+          } else {
+            const countThisMonth = user.memoriesThisMonth ?? 0;
+            if (countThisMonth >= 100) {
+              return res.status(403).json({
+                error: 'Monthly memory limit reached',
+                upgradeRequired: true,
+                requiredTier: 'pro',
+                memoriesUsed: countThisMonth,
+                memoriesLimit: 100,
+              });
+            }
           }
         }
 
