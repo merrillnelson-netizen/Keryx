@@ -22,6 +22,7 @@ import { isPushConfigured, getVapidPublicKey, sendPushNotification, sendPushToAl
 import { parseAndImportNDJSON } from "./sms-import-service";
 import { processMessageBatch } from "./message-ai-service";
 import { requireTier, requireMemoryQuota } from "./tier-middleware";
+import { runMemorySideEffects } from "./memory-service";
 import { isStripeConfigured, createCheckoutSession, createPortalSession } from "./stripe-service";
 import { 
   getGoogleAuthUrl, exchangeGoogleCode, 
@@ -538,22 +539,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // ALL background processing happens AFTER response is sent
       // These are completely decoupled from the response
+      // runMemorySideEffects handles quota increment, people tracking,
+      // AI action detection, reminder creation, and automation triggers.
+      runMemorySideEffects(user, logEntry, memoryText, extracted, {
+        timezone,
+        userProfile: settingsForCalendar?.userProfile ?? undefined,
+        entryId: logEntry.id,
+      });
+
       setImmediate(() => {
         try {
-          // Increment monthly memory count for free-tier users
-          if (user.subscriptionTier === 'free') {
-            const currentCount = user.memoriesThisMonth || 0;
-            storage.updateUser(user.id, { memoriesThisMonth: currentCount + 1 }).catch(err =>
-              console.error("Failed to increment memory count:", err)
-            );
-          }
-
-          // Track people mentions in the people table
-          if (extracted.detectedPeople && extracted.detectedPeople.length > 0) {
-            Promise.all(
-              extracted.detectedPeople.map(name => storage.upsertPerson(user.id, name))
-            ).catch(err => console.error("Failed to track people:", err));
-          }
+          // Location history and location-based reminder checks are request-specific
+          // (geo data is not available in other memory-creation paths)
           
           // Store location in location_history table
           if (geoLat !== undefined && geoLng !== undefined) {
@@ -572,43 +569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          // AI Action Detection
-          import('./ai-actions-service').then(({ processUserInputForActions }) => {
-            processUserInputForActions(user.id, memoryText, 'memory', logEntry.id, { timezone, userProfile: settingsForCalendar?.userProfile })
-              .catch(err => console.warn('AI action detection failed:', err));
-          }).catch(err => console.warn('Failed to load ai-actions-service:', err));
-          
-          // Auto-create reminder if detected in memory
-          if (extracted.reminderIntent?.detected && extracted.reminderIntent.content) {
-            const reminderData: InsertReminder = {
-              content: extracted.reminderIntent.content!,
-              triggerType: extracted.reminderIntent.triggerType || 'time',
-              sourceMemoryId: logEntry.id,
-            };
-            
-            if (extracted.reminderIntent.triggerType === 'time' && extracted.reminderIntent.triggerTime) {
-              let triggerTimeStr = extracted.reminderIntent.triggerTime;
-              if (!triggerTimeStr.endsWith('Z') && !triggerTimeStr.match(/[+-]\d{2}:\d{2}$/)) {
-                triggerTimeStr += 'Z';
-              }
-              const parsedTime = new Date(triggerTimeStr);
-              
-              if (!isNaN(parsedTime.getTime()) && parsedTime > new Date()) {
-                reminderData.triggerTime = parsedTime;
-              } else {
-                const fallback = new Date();
-                fallback.setMinutes(fallback.getMinutes() + 30);
-                reminderData.triggerTime = fallback;
-                console.warn(`AI returned invalid/past reminder time "${extracted.reminderIntent.triggerTime}" (tz: ${timezone}), defaulting to 30min from now`);
-              }
-            }
-            if (extracted.reminderIntent.triggerType === 'location' && extracted.reminderIntent.triggerLocationName) {
-              reminderData.triggerLocationName = extracted.reminderIntent.triggerLocationName;
-            }
-            
-            storage.createReminder(user.id, reminderData)
-              .catch(err => console.error('Failed to auto-create reminder:', err));
-          }
+          // Note: quota increment, people tracking, AI action detection,
+          // reminder creation, and automation triggers are now handled by
+          // runMemorySideEffects() called above this setImmediate block.
           
           // Check location-based reminders if this memory has location
           if (geoPlaceName) {
@@ -624,58 +587,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
               .catch(err => console.error('Failed to check location reminders:', err));
           }
 
-          // Fire automation triggers for memory.logged (and keyword.detected, person.mentioned, mood.*)
-          import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
-            const moodScore = extracted.moodScore ?? undefined;
-            // Derive aiSentiment from the AI's mood label (primary source — intent-aware)
-            // Fallback to moodScore on -100..100 scale if mood label is unrecognized
-            const POSITIVE_MOODS = new Set(['happy', 'excited', 'hopeful', 'grateful', 'peaceful', 'proud', 'motivated', 'nostalgic']);
-            const NEGATIVE_MOODS = new Set(['sad', 'anxious', 'frustrated', 'stressed', 'angry', 'confused']);
-            const moodLabel = (extracted.mood || 'neutral').toLowerCase();
-            const aiSentiment: 'positive' | 'neutral' | 'negative' =
-              POSITIVE_MOODS.has(moodLabel) ? 'positive'
-              : NEGATIVE_MOODS.has(moodLabel) ? 'negative'
-              : moodScore !== undefined
-                ? moodScore > 20 ? 'positive' : moodScore < -20 ? 'negative' : 'neutral'
-                : 'neutral';
-            // aiMoodLabel: the raw AI-assigned mood string (e.g. "stressed", "happy")
-            const aiMoodLabel = extracted.mood || undefined;
-            const aiTopics = extracted.topicTag ? [extracted.topicTag] : [];
-            const aiPeople = extracted.detectedPeople || [];
-            const ctx = {
-              userId: user.id,
-              memoryContent: memoryText,
-              moodScore,
-              topics: aiTopics,
-              peopleNames: aiPeople,
-              // Enriched AI fields for advanced condition matching
-              aiTopics,
-              aiPeople,
-              aiMoodLabel,
-              aiSentiment,
-            };
-
-            // memory.logged
-            fireTrigger(user.id, AUTOMATION_TRIGGERS.MEMORY_LOGGED, ctx).catch(() => {});
-
-            // mood.dropped / mood.spiked
-            if (extracted.moodScore !== undefined && extracted.moodScore !== null) {
-              if (extracted.moodScore <= 3) {
-                fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_DROPPED, ctx).catch(() => {});
-              } else if (extracted.moodScore >= 8) {
-                fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_SPIKED, ctx).catch(() => {});
-              }
-            }
-
-            // person.mentioned — fire once per person
-            for (const personName of (extracted.detectedPeople || [])) {
-              fireTrigger(user.id, AUTOMATION_TRIGGERS.PERSON_MENTIONED, { ...ctx, personName }).catch(() => {});
-            }
-
-            // keyword.detected — check if any keywords from rules appear in the text
-            // (The engine itself checks conditions; we just fire the trigger)
-            fireTrigger(user.id, AUTOMATION_TRIGGERS.KEYWORD_DETECTED, { ...ctx, keyword: memoryText }).catch(() => {});
-          }).catch(() => {});
         } catch (bgError) {
           console.error('Background processing error (non-fatal):', bgError);
         }
@@ -7979,40 +7890,12 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
 
         res.json({ success: true, savedAs: 'memory', entryId: entry.id });
 
-        // Background: fire automation triggers same as POST /api/memories
-        import('./automation-engine').then(({ fireTrigger, AUTOMATION_TRIGGERS }) => {
-          const POSITIVE_MOODS = new Set(['happy', 'excited', 'hopeful', 'grateful', 'peaceful', 'proud', 'motivated', 'nostalgic']);
-          const NEGATIVE_MOODS = new Set(['sad', 'anxious', 'frustrated', 'stressed', 'angry', 'confused']);
-          const moodLabel = (entry.mood || 'neutral').toLowerCase();
-          const moodScore = entry.moodScore ?? undefined;
-          const aiSentiment: 'positive' | 'neutral' | 'negative' =
-            POSITIVE_MOODS.has(moodLabel) ? 'positive'
-            : NEGATIVE_MOODS.has(moodLabel) ? 'negative'
-            : moodScore !== undefined
-              ? moodScore > 20 ? 'positive' : moodScore < -20 ? 'negative' : 'neutral'
-              : 'neutral';
-          const aiTopics = entry.topicTag ? [entry.topicTag] : [];
-          const aiPeople = entry.detectedPeople ?? [];
-          const ctx = {
-            userId: user.id,
-            memoryContent: text,
-            moodScore,
-            topics: aiTopics,
-            peopleNames: aiPeople,
-            aiTopics,
-            aiPeople,
-            aiMoodLabel: entry.mood ?? undefined,
-            aiSentiment,
-          };
-          fireTrigger(user.id, AUTOMATION_TRIGGERS.MEMORY_LOGGED, ctx).catch(() => {});
-          if (moodScore !== undefined) {
-            if (moodScore <= 3) fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_DROPPED, ctx).catch(() => {});
-            if (moodScore >= 8) fireTrigger(user.id, AUTOMATION_TRIGGERS.MOOD_SPIKED, ctx).catch(() => {});
-          }
-          aiPeople.forEach((name: string) => {
-            fireTrigger(user.id, AUTOMATION_TRIGGERS.PERSON_MENTIONED, { ...ctx, personName: name }).catch(() => {});
-          });
-        }).catch(() => {});
+        // Run identical side effects as POST /api/memories (shared service ensures parity)
+        runMemorySideEffects(user, entry, text, meta, {
+          timezone: userSettings?.userTimezone ?? undefined,
+          userProfile: userSettings?.userProfile ?? undefined,
+          entryId: entry.id,
+        });
       }
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to save message", error);
