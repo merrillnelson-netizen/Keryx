@@ -265,12 +265,20 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Voice-to-text: appends transcript to current input
-  const { isListening, isSupported: isVoiceSupported, startListening, stopListening } = useVoiceInput(
+  // Voice-to-text: replaces the "voice portion" so interim + final don't double up
+  const voiceBaseRef = useRef<string>("");
+  const { isListening, isSupported: isVoiceSupported, startListening: _startListening, stopListening } = useVoiceInput(
     useCallback((transcript: string) => {
-      if (transcript) setInput(prev => prev ? `${prev} ${transcript}` : transcript);
+      if (transcript) {
+        const base = voiceBaseRef.current;
+        setInput(base ? `${base} ${transcript}` : transcript);
+      }
     }, [])
   );
+  const startListening = useCallback(() => {
+    voiceBaseRef.current = input.trimEnd();
+    _startListening();
+  }, [input, _startListening]);
 
   // Auto-resize textarea as content grows
   useEffect(() => {
