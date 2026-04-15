@@ -345,8 +345,14 @@ export default function PendingActions({ compact = false }: PendingActionsProps)
                 <Textarea
                   value={rejectionInput}
                   onChange={(e) => setRejectionInput(e.target.value.slice(0, 500))}
+                  onInput={(e) => {
+                    const el = e.currentTarget;
+                    el.style.height = "auto";
+                    el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+                  }}
                   placeholder="Why are you rejecting this? (optional)"
-                  className="text-sm min-h-[60px] max-h-[90px] resize-none"
+                  className="text-sm resize-none overflow-hidden"
+                  style={{ minHeight: "60px", maxHeight: "90px" }}
                   autoFocus
                 />
                 <div className="flex items-center gap-2">

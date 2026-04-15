@@ -1514,8 +1514,9 @@ export async function processUserInputForActions(
   try {
     const { storage } = await import('./storage');
     const rejectedWithReasons = await storage.getRecentRejectedActionsWithReasons(userId, 20);
-    if (rejectedWithReasons.length > 0) {
-      const rejectionLines = rejectedWithReasons
+    const validRejections = rejectedWithReasons.filter(a => a.rejectionReason?.trim());
+    if (validRejections.length > 0) {
+      const rejectionLines = validRejections
         .map(a => `- "${a.title}" (${a.actionType}): ${a.rejectionReason}`)
         .join('\n');
       const rejectionBlock = `Past rejected suggestions — do NOT re-suggest these unless circumstances have materially changed:\n${rejectionLines}`;
