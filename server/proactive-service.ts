@@ -23,8 +23,9 @@ import { buildTemporalContext } from "./temporal-context";
 import type { Discovery } from "./contextual-discoveries-service";
 
 const DEDUP_WINDOW_DAYS = 7; // Don't re-create the same action type within 7 days
+const REJECTION_SILENCE_DAYS = 30; // After a rejection, don't re-surface for 30 days
 const REACH_OUT_MIN_PRIORITY = 7; // Only suggest reach-outs for priority 7+
-const GOAL_STALE_DAYS = 7; // Goals with no update in 7+ days get a prompt
+const GOAL_STALE_DAYS = 14; // Goals with no update in 14+ days get a prompt (was 7)
 const MAX_PROACTIVE_PER_RUN = 3; // Max new actions per run to avoid noise
 
 /**
@@ -52,6 +53,84 @@ async function hasDuplicateRecentAction(
       )
       .limit(1);
     return existing.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cross-source, cross-type check: is there already a pending OR recently-rejected
+ * action that references a specific goalId in its payload?
+ *
+ * This prevents multiple generators (goal-checkin, discovery bridge, briefing bridge)
+ * from all creating separate actions about the same goal in the same proactive run.
+ *
+ * - Pending actions: any age (block until the user resolves them)
+ * - Rejected actions: blocked for REJECTION_SILENCE_DAYS (30 days by default)
+ */
+async function hasAnyGoalRelatedAction(
+  userId: string,
+  goalId: string,
+  rejectionSilenceDays: number = REJECTION_SILENCE_DAYS
+): Promise<boolean> {
+  try {
+    const rejectionCutoff = new Date(Date.now() - rejectionSilenceDays * 24 * 60 * 60 * 1000);
+    const existing = await db
+      .select({ id: aiActions.id, status: aiActions.status, createdAt: aiActions.createdAt })
+      .from(aiActions)
+      .where(
+        and(
+          eq(aiActions.userId, userId),
+          sql`(payload->>'goalId') = ${goalId}`
+        )
+      )
+      .limit(10);
+
+    for (const row of existing) {
+      if (row.status === AI_ACTION_STATUSES.PENDING) return true; // still waiting on user
+      if (
+        row.status === AI_ACTION_STATUSES.REJECTED &&
+        row.createdAt &&
+        new Date(row.createdAt) > rejectionCutoff
+      ) return true; // rejected within silence window
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cross-source person dedup: is there already a pending OR recently-rejected
+ * action that references a specific personId in its payload?
+ */
+async function hasAnyPersonRelatedAction(
+  userId: string,
+  personId: string,
+  rejectionSilenceDays: number = REJECTION_SILENCE_DAYS
+): Promise<boolean> {
+  try {
+    const rejectionCutoff = new Date(Date.now() - rejectionSilenceDays * 24 * 60 * 60 * 1000);
+    const existing = await db
+      .select({ id: aiActions.id, status: aiActions.status, createdAt: aiActions.createdAt })
+      .from(aiActions)
+      .where(
+        and(
+          eq(aiActions.userId, userId),
+          sql`(payload->>'personId') = ${personId}`
+        )
+      )
+      .limit(10);
+
+    for (const row of existing) {
+      if (row.status === AI_ACTION_STATUSES.PENDING) return true;
+      if (
+        row.status === AI_ACTION_STATUSES.REJECTED &&
+        row.createdAt &&
+        new Date(row.createdAt) > rejectionCutoff
+      ) return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -87,6 +166,11 @@ async function generateReachOutProposals(
         sourceId
       );
       if (hasDupe) continue;
+
+      // Cross-source dedup: block if there's already a pending or recently-rejected
+      // action about this person regardless of type/source
+      const hasPersonAction = await hasAnyPersonRelatedAction(userId, person.id);
+      if (hasPersonAction) continue;
 
       const daysSince = person.recentMentionCount === 0 ? "30+" : "several";
       await storage.createAiAction({
@@ -147,12 +231,18 @@ async function generateGoalUpdateProposals(
       if (created.count >= MAX_PROACTIVE_PER_RUN) break;
 
       const sourceId = `goal_checkin_${goal.id}`;
+      // Same sourceId+type dedup (7-day window)
       const hasDupe = await hasDuplicateRecentAction(
         userId,
         AI_ACTION_TYPES.INSIGHT_SURFACE,
         sourceId
       );
       if (hasDupe) continue;
+
+      // Cross-source dedup: block if ANY pending action OR rejected within 30 days
+      // references this goalId in its payload (covers discovery + briefing bridges too)
+      const hasGoalAction = await hasAnyGoalRelatedAction(userId, goal.id);
+      if (hasGoalAction) continue;
 
       await storage.createAiAction({
         userId,
@@ -422,6 +512,28 @@ export async function generateDiscoveryActionProposals(
       );
 
       if (result.actionDetected && result.action) {
+        // Post-creation cross-source dedup: if a goal action was just created but
+        // there's already another pending/rejected action about the same goal, cancel it
+        const payload = result.action.payload as Record<string, unknown> | null;
+        const goalId = payload?.goalId as string | undefined;
+        if (goalId) {
+          const dupCount = await db
+            .select({ id: aiActions.id })
+            .from(aiActions)
+            .where(and(
+              eq(aiActions.userId, userId),
+              eq(aiActions.status, AI_ACTION_STATUSES.PENDING),
+              sql`(payload->>'goalId') = ${goalId}`,
+              sql`id != ${result.action.id}`
+            ))
+            .limit(1);
+          if (dupCount.length > 0) {
+            // Cancel the just-created action — there's already one pending
+            await storage.updateAiAction(result.action.id, userId, { status: AI_ACTION_STATUSES.CANCELLED });
+            console.log(`[proactive] Cancelled duplicate discovery goal action for goalId=${goalId}`);
+            continue;
+          }
+        }
         created++;
       }
     } catch (err) {
@@ -495,6 +607,27 @@ export async function generateBriefingActionProposals(
       );
 
       if (result.actionDetected && result.action) {
+        // Post-creation cross-source dedup: if a goal action was just created but
+        // there's already another pending action about the same goal, cancel it
+        const payload = result.action.payload as Record<string, unknown> | null;
+        const goalId = payload?.goalId as string | undefined;
+        if (goalId) {
+          const dupCount = await db
+            .select({ id: aiActions.id })
+            .from(aiActions)
+            .where(and(
+              eq(aiActions.userId, userId),
+              eq(aiActions.status, AI_ACTION_STATUSES.PENDING),
+              sql`(payload->>'goalId') = ${goalId}`,
+              sql`id != ${result.action.id}`
+            ))
+            .limit(1);
+          if (dupCount.length > 0) {
+            await storage.updateAiAction(result.action.id, userId, { status: AI_ACTION_STATUSES.CANCELLED });
+            console.log(`[proactive] Cancelled duplicate briefing goal action for goalId=${goalId}`);
+            continue;
+          }
+        }
         created++;
       }
     } catch (err) {
