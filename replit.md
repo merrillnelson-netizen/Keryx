@@ -59,6 +59,7 @@ Code Quality: Production-ready with comprehensive error handling, memory managem
 - **Location Features**: Google Timeline import, automatic capture, frequent place detection.
 - **Messaging**: SMS/MMS/RCS import with AI-powered conversation analysis, chat bubble UI.
 - **Collaborative AI Profile**: `/profile` page with two sections: "Your Words" (freeform textarea from settings) and "What Keryx Has Noticed" (AI-generated observations with Confirm/Dismiss). Confirmed observations are fed back into all AI action prompts. Generated automatically after morning briefing via `server/profile-observation-service.ts`. Schema: `profileObservations` table. Settings About You card replaced with compact summary.
+- **Keryx Chat**: `/chat` page — persistent, multi-session free-form AI conversation. Keryx has full ecosystem context (recent memories, active goals, people, confirmed profile observations, user profile text, timezone). Split-pane UI: session list sidebar + full chat. Each AI message has "Save That" (stores as confirmed profile observation → feeds AI everywhere) and "Log That" (logs as a full memory entry with AI processing → appears in History) actions. Sessions auto-title after 4 messages. Mobile-responsive. Schema: `aiChatSessions` and `aiChatMessages` tables. Routes: `/api/chat/sessions` CRUD + `/api/chat/sessions/:id/messages` + `/api/chat/messages/:id/save`.
 
 ### Security Measures
 - **Authentication**: Session-based authentication for all API routes.

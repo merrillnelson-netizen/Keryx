@@ -4,6 +4,7 @@ import {
   messageConversations, messages, messageImports,
   relayDestinations, relayEvents,
   automationRules,
+  aiChatSessions, aiChatMessages,
   type User, type InsertUser,
   type LogEntry, type InsertLogEntry,
   type Settings, type InsertSettings,
@@ -27,7 +28,9 @@ import {
   type RelayEvent, type InsertRelayEvent,
   type AutomationRule, type InsertAutomationRule,
   profileObservations,
-  type ProfileObservation, type InsertProfileObservation
+  type ProfileObservation, type InsertProfileObservation,
+  type AiChatSession, type InsertAiChatSession,
+  type AiChatMessage, type InsertAiChatMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
@@ -241,6 +244,16 @@ export interface IStorage {
   updateProfileObservationStatus(id: string, userId: string, status: string): Promise<ProfileObservation | undefined>;
   getConfirmedObservationsText(userId: string): Promise<string>;
   expireOldPendingObservations(userId: string): Promise<void>;
+
+  // AI Chat Sessions & Messages
+  getAiChatSessions(userId: string): Promise<AiChatSession[]>;
+  getAiChatSession(id: string, userId: string): Promise<AiChatSession | undefined>;
+  createAiChatSession(userId: string, title?: string): Promise<AiChatSession>;
+  updateAiChatSession(id: string, userId: string, updates: { title?: string; lastMessageAt?: Date; messageCount?: number }): Promise<AiChatSession | undefined>;
+  deleteAiChatSession(id: string, userId: string): Promise<boolean>;
+  getAiChatMessages(sessionId: string, userId: string): Promise<AiChatMessage[]>;
+  createAiChatMessage(data: { sessionId: string; userId: string; role: string; content: string }): Promise<AiChatMessage>;
+  markAiChatMessageSaved(id: string, userId: string, savedAs: 'ecosystem' | 'memory'): Promise<AiChatMessage | undefined>;
 }
 
 /**
@@ -3139,6 +3152,60 @@ export class DatabaseStorage implements IStorage {
         eq(profileObservations.status, 'pending'),
         lte(profileObservations.createdAt, cutoff)
       ));
+  }
+
+  // ─── AI Chat Sessions & Messages ──────────────────────────────────────────
+
+  async getAiChatSessions(userId: string): Promise<AiChatSession[]> {
+    return db.select().from(aiChatSessions)
+      .where(eq(aiChatSessions.userId, userId))
+      .orderBy(desc(aiChatSessions.lastMessageAt));
+  }
+
+  async getAiChatSession(id: string, userId: string): Promise<AiChatSession | undefined> {
+    const [session] = await db.select().from(aiChatSessions)
+      .where(and(eq(aiChatSessions.id, id), eq(aiChatSessions.userId, userId)));
+    return session;
+  }
+
+  async createAiChatSession(userId: string, title = 'New Chat'): Promise<AiChatSession> {
+    const [session] = await db.insert(aiChatSessions)
+      .values({ userId, title })
+      .returning();
+    return session;
+  }
+
+  async updateAiChatSession(id: string, userId: string, updates: { title?: string; lastMessageAt?: Date; messageCount?: number }): Promise<AiChatSession | undefined> {
+    const [updated] = await db.update(aiChatSessions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(aiChatSessions.id, id), eq(aiChatSessions.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteAiChatSession(id: string, userId: string): Promise<boolean> {
+    const result = await db.delete(aiChatSessions)
+      .where(and(eq(aiChatSessions.id, id), eq(aiChatSessions.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async getAiChatMessages(sessionId: string, userId: string): Promise<AiChatMessage[]> {
+    return db.select().from(aiChatMessages)
+      .where(and(eq(aiChatMessages.sessionId, sessionId), eq(aiChatMessages.userId, userId)))
+      .orderBy(aiChatMessages.timestamp);
+  }
+
+  async createAiChatMessage(data: { sessionId: string; userId: string; role: string; content: string }): Promise<AiChatMessage> {
+    const [msg] = await db.insert(aiChatMessages).values(data).returning();
+    return msg;
+  }
+
+  async markAiChatMessageSaved(id: string, userId: string, savedAs: 'ecosystem' | 'memory'): Promise<AiChatMessage | undefined> {
+    const [updated] = await db.update(aiChatMessages)
+      .set({ savedAs, savedAt: new Date() })
+      .where(and(eq(aiChatMessages.id, id), eq(aiChatMessages.userId, userId)))
+      .returning();
+    return updated;
   }
 }
 

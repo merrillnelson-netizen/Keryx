@@ -37,6 +37,7 @@ import FounderDashboard from "@/pages/founder";
 import Ecosystem from "@/pages/ecosystem";
 import AgentPage from "@/pages/agent";
 import ProfilePage from "@/pages/profile";
+import ChatPage from "@/pages/chat";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -204,6 +205,9 @@ function Router() {
       </Route>
       <Route path="/profile">
         {() => <ProtectedRoute component={ProfilePage} />}
+      </Route>
+      <Route path="/chat">
+        {() => <ProtectedRoute component={ChatPage} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

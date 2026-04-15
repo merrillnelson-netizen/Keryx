@@ -1384,6 +1384,66 @@ export type AutomationConditions = z.infer<typeof automationConditionsSchema>;
 export type AutomationRule = typeof automationRules.$inferSelect;
 export type InsertAutomationRule = z.infer<typeof insertAutomationRuleSchema>;
 
+// ─── AI Chat Sessions & Messages ──────────────────────────────────────────────
+// Persistent, multi-session free-form AI conversation with Keryx.
+// Unlike Ideas chat (idea-scoped) or Synthesis (analysis-first), this is open-ended.
+
+export const aiChatSessions = pgTable("ai_chat_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text("title").notNull().default('New Chat'),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  messageCount: integer("message_count").default(0).notNull(),
+}, (table) => ({
+  userIdIdx: index("ai_chat_sessions_user_id_idx").on(table.userId),
+  lastMessageIdx: index("ai_chat_sessions_last_msg_idx").on(table.userId, table.lastMessageAt),
+}));
+
+export const aiChatSessionsRelations = relations(aiChatSessions, ({ one, many }) => ({
+  user: one(users, { fields: [aiChatSessions.userId], references: [users.id] }),
+  messages: many(aiChatMessages),
+}));
+
+export const aiChatMessages = pgTable("ai_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => aiChatSessions.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text("role").notNull(), // 'user' | 'assistant'
+  content: text("content").notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  savedAs: text("saved_as"), // null | 'ecosystem' | 'memory'
+  savedAt: timestamp("saved_at"),
+}, (table) => ({
+  sessionIdIdx: index("ai_chat_messages_session_id_idx").on(table.sessionId),
+  userIdIdx: index("ai_chat_messages_user_id_idx").on(table.userId),
+  timestampIdx: index("ai_chat_messages_timestamp_idx").on(table.sessionId, table.timestamp),
+}));
+
+export const aiChatMessagesRelations = relations(aiChatMessages, ({ one }) => ({
+  session: one(aiChatSessions, { fields: [aiChatMessages.sessionId], references: [aiChatSessions.id] }),
+  user: one(users, { fields: [aiChatMessages.userId], references: [users.id] }),
+}));
+
+export const insertAiChatSessionSchema = createInsertSchema(aiChatSessions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastMessageAt: true,
+  messageCount: true,
+});
+export const insertAiChatMessageSchema = createInsertSchema(aiChatMessages).omit({
+  id: true,
+  timestamp: true,
+  savedAt: true,
+});
+
+export type AiChatSession = typeof aiChatSessions.$inferSelect;
+export type InsertAiChatSession = z.infer<typeof insertAiChatSessionSchema>;
+export type AiChatMessage = typeof aiChatMessages.$inferSelect;
+export type InsertAiChatMessage = z.infer<typeof insertAiChatMessageSchema>;
+
 // ─── Profile Observations ─────────────────────────────────────────────────────
 // AI-generated observations about the user, confirmed/dismissed via /profile page.
 

@@ -2,7 +2,7 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone, type AiChatMessage } from "@shared/schema";
 import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -7603,6 +7603,262 @@ Respond with JSON only.`
       res.json({ generated: count });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to generate observations", error);
+    }
+  });
+
+  // ============================================================
+  // KERYX CHAT — Free-form AI conversation with ecosystem context
+  // ============================================================
+
+  /** Build rich system prompt for Keryx Chat using user's life ecosystem */
+  async function buildChatSystemPrompt(userId: string): Promise<string> {
+    const [userSettings, recentMemories, activeGoals, confirmedObsText, people] = await Promise.all([
+      storage.getSettings(userId),
+      storage.getRecentLogEntriesLight(userId, 30, 20),
+      storage.getActiveGoals(userId),
+      storage.getConfirmedObservationsText(userId),
+      storage.getPeople(userId),
+    ]);
+
+    const { getKeryxPersona } = await import('./ai-service');
+    const sassLevel = userSettings?.sassLevel ?? 50;
+    const professionalMode = userSettings?.professionalMode ?? false;
+    const timezone = userSettings?.userTimezone ?? 'America/Denver';
+    const persona = getKeryxPersona(sassLevel, professionalMode);
+
+    const now = new Date().toLocaleString('en-US', { timeZone: timezone, dateStyle: 'full', timeStyle: 'short' });
+
+    const memorySummary = recentMemories.length > 0
+      ? recentMemories.map((m: any, i: number) => {
+          const when = m.timestamp ? new Date(m.timestamp).toLocaleDateString('en-US', { timeZone: timezone, month: 'short', day: 'numeric' }) : '';
+          const text = (m.memoryText || '').slice(0, 150);
+          return `${i + 1}. [${when}] ${text}`;
+        }).join('\n')
+      : 'No recent memories.';
+
+    const goalsSummary = activeGoals.length > 0
+      ? activeGoals.map((g: any) => `• ${g.title} (${g.progressPercent ?? 0}%)`).join('\n')
+      : 'No active goals.';
+
+    const topPeople = people
+      .filter((p: any) => p.mentionCount > 0)
+      .sort((a: any, b: any) => (b.mentionCount ?? 0) - (a.mentionCount ?? 0))
+      .slice(0, 10)
+      .map((p: any) => `${p.name}${p.relationship ? ` (${p.relationship})` : ''}`)
+      .join(', ') || 'None tracked yet.';
+
+    const userProfile = userSettings?.userProfile?.trim() || '';
+
+    return `${persona}
+
+---
+CURRENT CONTEXT (use this to inform your responses — reference it naturally, not robotically):
+
+Current date/time: ${now}
+
+${userProfile ? `USER'S OWN WORDS ABOUT THEMSELVES:\n${userProfile}\n` : ''}
+${confirmedObsText ? `CONFIRMED AI OBSERVATIONS:\n${confirmedObsText}\n` : ''}
+RECENT MEMORIES (last 30 days, newest first):
+${memorySummary}
+
+ACTIVE GOALS:
+${goalsSummary}
+
+FREQUENTLY MENTIONED PEOPLE:
+${topPeople}
+---
+
+You are having a direct conversation with the user. This is free-form — they might be problem-solving, venting, brainstorming, researching, or just talking. Respond naturally using the context above when relevant. Do NOT dump all the context at them — weave it in only when it adds value.
+
+SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that", identify the most important insight or fact from the recent conversation and present it clearly labeled as either something to "Save That" (for AI context across Keryx) or "Log That" (to add as a memory entry). Keep the candidate concise — 1-2 sentences max.`;
+  }
+
+  /** GET /api/chat/sessions — list all sessions for user */
+  app.get("/api/chat/sessions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const sessions = await storage.getAiChatSessions(user.id);
+      res.json(sessions);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch chat sessions", error);
+    }
+  });
+
+  /** POST /api/chat/sessions — create new session */
+  app.post("/api/chat/sessions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const session = await storage.createAiChatSession(user.id, 'New Chat');
+      res.status(201).json(session);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create chat session", error);
+    }
+  });
+
+  /** DELETE /api/chat/sessions/:id — delete a session */
+  app.delete("/api/chat/sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const deleted = await storage.deleteAiChatSession(req.params.id, user.id);
+      if (!deleted) return res.status(404).json({ error: "Session not found" });
+      res.json({ success: true });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to delete chat session", error);
+    }
+  });
+
+  /** PATCH /api/chat/sessions/:id — update session title */
+  app.patch("/api/chat/sessions/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { title } = req.body;
+      if (!title) return res.status(400).json({ error: "Title is required" });
+      const updated = await storage.updateAiChatSession(req.params.id, user.id, { title });
+      if (!updated) return res.status(404).json({ error: "Session not found" });
+      res.json(updated);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to update session", error);
+    }
+  });
+
+  /** GET /api/chat/sessions/:id/messages — get messages for a session */
+  app.get("/api/chat/sessions/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const session = await storage.getAiChatSession(req.params.id, user.id);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      const messages = await storage.getAiChatMessages(req.params.id, user.id);
+      res.json(messages);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch messages", error);
+    }
+  });
+
+  /** POST /api/chat/sessions/:id/messages — send user message, get AI reply */
+  app.post("/api/chat/sessions/:id/messages", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { content } = req.body;
+      if (!content?.trim()) return res.status(400).json({ error: "Message content is required" });
+
+      const session = await storage.getAiChatSession(req.params.id, user.id);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      // Save user message
+      const userMsg = await storage.createAiChatMessage({
+        sessionId: session.id,
+        userId: user.id,
+        role: 'user',
+        content: content.trim(),
+      });
+
+      // Get conversation history for context
+      const history = await storage.getAiChatMessages(session.id, user.id);
+      const systemPrompt = await buildChatSystemPrompt(user.id);
+
+      // Build messages array for OpenAI
+      const openaiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+        { role: 'system', content: systemPrompt },
+        ...history.map((m: AiChatMessage) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+      ];
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: openaiMessages,
+        max_tokens: 800,
+        temperature: 0.8,
+      });
+
+      const aiContent = completion.choices[0]?.message?.content || "I couldn't generate a response.";
+
+      // Save AI message
+      const aiMsg = await storage.createAiChatMessage({
+        sessionId: session.id,
+        userId: user.id,
+        role: 'assistant',
+        content: aiContent,
+      });
+
+      // Update session metadata
+      const newCount = (session.messageCount ?? 0) + 2;
+      await storage.updateAiChatSession(session.id, user.id, {
+        lastMessageAt: new Date(),
+        messageCount: newCount,
+      });
+
+      // Auto-generate title after 2nd user message (when there are now 4+ messages)
+      if (newCount >= 4 && session.title === 'New Chat') {
+        try {
+          const titleCompletion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'Generate a concise 3-5 word title for this conversation. Return ONLY the title — no quotes, no punctuation, no explanation.' },
+              ...history.slice(0, 4).map((m: AiChatMessage) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            ],
+            max_tokens: 20,
+            temperature: 0.5,
+          });
+          const newTitle = titleCompletion.choices[0]?.message?.content?.trim();
+          if (newTitle && newTitle.length > 0 && newTitle.length < 60) {
+            await storage.updateAiChatSession(session.id, user.id, { title: newTitle });
+          }
+        } catch (_) { /* title generation failure is non-fatal */ }
+      }
+
+      res.json({ userMessage: userMsg, aiMessage: aiMsg });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to process chat message", error);
+    }
+  });
+
+  /** POST /api/chat/messages/:id/save — save a message as 'ecosystem' or 'memory' */
+  app.post("/api/chat/messages/:id/save", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { savedAs, memoryText } = req.body as { savedAs: 'ecosystem' | 'memory'; memoryText?: string };
+
+      if (!['ecosystem', 'memory'].includes(savedAs)) {
+        return res.status(400).json({ error: "savedAs must be 'ecosystem' or 'memory'" });
+      }
+
+      const updated = await storage.markAiChatMessageSaved(req.params.id, user.id, savedAs);
+      if (!updated) return res.status(404).json({ error: "Message not found" });
+
+      if (savedAs === 'ecosystem') {
+        // Save as a confirmed profile observation so it feeds into AI context everywhere
+        const text = memoryText || updated.content.slice(0, 300);
+        await storage.createProfileObservation({
+          userId: user.id,
+          observation: text,
+          category: 'patterns',
+          evidenceSummary: 'Saved from Keryx Chat conversation',
+          status: 'confirmed',
+          confidence: 1.0,
+        });
+        res.json({ success: true, savedAs: 'ecosystem' });
+      } else {
+        // Log as a regular memory entry
+        const text = memoryText || updated.content;
+        const { extractMetadata: extract } = await import('./ai-service');
+        const userSettings = await storage.getSettings(user.id);
+        const meta = await extract(text, userSettings?.userTimezone ?? undefined);
+        const entry = await storage.createLogEntry({
+          userId: user.id,
+          memoryText: text,
+          topicTag: meta.topicTag || 'Chat',
+          metadataJson: meta.metadataJson || {},
+          mood: meta.mood,
+          moodScore: meta.moodScore,
+          detectedPeople: meta.detectedPeople || [],
+          importance: meta.importance || 5,
+        });
+        res.json({ success: true, savedAs: 'memory', entryId: entry.id });
+      }
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to save message", error);
     }
   });
 

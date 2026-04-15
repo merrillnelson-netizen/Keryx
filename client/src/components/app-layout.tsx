@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle } from "lucide-react";
+import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle, MessagesSquare } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
@@ -21,6 +21,7 @@ interface AppLayoutProps {
 const navigation = [
   { name: "Dashboard", href: "/", icon: Activity },
   { name: "Voice Log", href: "/voice", icon: Mic },
+  { name: "Chat", href: "/chat", icon: MessagesSquare },
   { name: "History", href: "/history", icon: History },
   { name: "Insights", href: "/insights", icon: Brain },
   { name: "Synthesis", href: "/synthesis", icon: Sparkles },
