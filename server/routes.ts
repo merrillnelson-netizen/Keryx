@@ -7834,6 +7834,11 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
       const message = await storage.getAiChatMessage(req.params.id, user.id);
       if (!message) return res.status(404).json({ error: "Message not found" });
 
+      // Idempotency guard: if already saved, return success without re-processing
+      if (message.savedAs) {
+        return res.json({ success: true, savedAs: message.savedAs, alreadySaved: true });
+      }
+
       if (savedAs === 'ecosystem') {
         // Save as a confirmed profile observation — mark AFTER write succeeds
         const text = memoryText || message.content.slice(0, 300);
@@ -7848,20 +7853,25 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
         await storage.markAiChatMessageSaved(req.params.id, user.id, 'ecosystem');
         res.json({ success: true, savedAs: 'ecosystem' });
       } else {
-        // Quota check: same logic as requireMemoryQuota() including monthly reset
+        // Quota check: same logic as requireMemoryQuota() including monthly reset.
+        // We maintain a mutable `effectiveUser` so the counter we pass to
+        // runMemorySideEffects reflects any month-boundary reset we just performed.
+        let effectiveUser = user;
         if (process.env.BILLING_ENFORCEMENT === 'true' && user.subscriptionTier === 'free') {
           const now = new Date();
           const ms = user.memoriesMonthStart ? new Date(user.memoriesMonthStart) : null;
           const sameMonth = ms && ms.getMonth() === now.getMonth() && ms.getFullYear() === now.getFullYear();
 
           if (!sameMonth) {
-            // New month — reset counter same as requireMemoryQuota does
+            // New month — reset counter (mirrors requireMemoryQuota logic)
             try {
               await storage.updateUser(user.id, {
                 memoriesThisMonth: 0,
                 memoriesMonthStart: new Date(now.getFullYear(), now.getMonth(), 1),
               });
             } catch { /* non-fatal */ }
+            // Reflect the reset in the user object so side-effects increment from 0
+            effectiveUser = { ...user, memoriesThisMonth: 0 };
           } else {
             const countThisMonth = user.memoriesThisMonth ?? 0;
             if (countThisMonth >= 100) {
@@ -7901,8 +7911,10 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
 
         res.json({ success: true, savedAs: 'memory', entryId: entry.id });
 
-        // Run identical side effects as POST /api/memories (shared service ensures parity)
-        runMemorySideEffects(user, entry, text, meta, {
+        // Run identical side effects as POST /api/memories (shared service ensures parity).
+        // Use effectiveUser (which has memoriesThisMonth reset to 0 if we crossed a month boundary)
+        // so the quota increment inside the service starts from the correct count.
+        runMemorySideEffects(effectiveUser, entry, text, meta, {
           timezone: userSettings?.userTimezone ?? undefined,
           userProfile: userSettings?.userProfile ?? undefined,
           entryId: entry.id,
