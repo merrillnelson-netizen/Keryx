@@ -127,7 +127,7 @@ function MessageBubble({
           {!isUser && (
             <div className={cn(
               "flex items-center gap-1 transition-opacity",
-              alreadySaved ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              alreadySaved ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
             )}>
               {alreadySaved ? (
                 <Badge variant="outline" className="text-xs h-5 gap-1 px-1.5">

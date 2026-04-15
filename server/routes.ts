@@ -7910,10 +7910,13 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
   app.post("/api/chat/messages/:id/save", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
-      const { savedAs, memoryText } = req.body as { savedAs: 'ecosystem' | 'memory'; memoryText?: string };
+      // Accept both `savedAs` (implementation name) and `type` (spec/documented name)
+      const rawSavedAs = req.body.savedAs || req.body.type;
+      const memoryText: string | undefined = req.body.memoryText;
+      const savedAs = rawSavedAs as 'ecosystem' | 'memory';
 
       if (!['ecosystem', 'memory'].includes(savedAs)) {
-        return res.status(400).json({ error: "savedAs must be 'ecosystem' or 'memory'" });
+        return res.status(400).json({ error: "savedAs/type must be 'ecosystem' or 'memory'" });
       }
 
       // Check message exists without marking it saved yet (atomic: mark only on success)
