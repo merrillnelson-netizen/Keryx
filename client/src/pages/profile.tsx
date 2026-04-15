@@ -9,16 +9,29 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import type { Settings, ProfileObservation } from "@shared/schema";
-import { UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save, Brain, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import {
+  UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save,
+  Brain, ChevronDown, ChevronUp, RotateCcw, PenLine,
+} from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  habits: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  habits:        "bg-blue-500/20 text-blue-400 border-blue-500/30",
   relationships: "bg-pink-500/20 text-pink-400 border-pink-500/30",
-  patterns: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  interests: "bg-green-500/20 text-green-400 border-green-500/30",
-  goals: "bg-orange-500/20 text-orange-400 border-orange-500/30",
+  patterns:      "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  interests:     "bg-green-500/20 text-green-400 border-green-500/30",
+  goals:         "bg-orange-500/20 text-orange-400 border-orange-500/30",
   communication: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
 };
+
+const USER_WORD_COLOR = "bg-amber-500/20 text-amber-400 border-amber-500/30";
+const USER_WORD_DOT   = "bg-amber-500/40 border-amber-500/60";
+
+function parseUserWords(text: string): string[] {
+  return text
+    .split(/\n+/)
+    .map(line => line.replace(/^[-•*·\s]+/, '').trim())
+    .filter(line => line.length > 3);
+}
 
 function ObservationCard({ obs, onConfirm, onDismiss, isPending }: {
   obs: ProfileObservation;
@@ -75,77 +88,141 @@ function ObservationCard({ obs, onConfirm, onDismiss, isPending }: {
   );
 }
 
-function ConfirmedObservationsList({ confirmed, onRemove, onUndone, isPending }: {
+type CombinedItem =
+  | { kind: 'ai'; obs: ProfileObservation }
+  | { kind: 'user'; text: string; key: string };
+
+function CombinedProfileList({
+  confirmed,
+  userWords,
+  onAiRemove,
+  onAiUndo,
+  onUserRemove,
+  onUserMoveToWords,
+  aiPending,
+  userPending,
+}: {
   confirmed: ProfileObservation[];
-  onRemove: (id: string) => void;
-  onUndone: (id: string) => void;
-  isPending: boolean;
+  userWords: string[];
+  onAiRemove: (id: string) => void;
+  onAiUndo: (id: string) => void;
+  onUserRemove: (text: string) => void;
+  aiPending: boolean;
+  userPending: boolean;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  const items: CombinedItem[] = [
+    ...userWords.map(t => ({ kind: 'user' as const, text: t, key: `user_${t}` })),
+    ...confirmed.map(o => ({ kind: 'ai' as const, obs: o })),
+  ];
+
+  const totalCount = items.length;
+  if (totalCount === 0) return null;
 
   return (
     <Card className="glass-card border-white/20">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Check className="w-4 h-4 text-green-400" />
-          Confirmed
+          Active Profile Context
           <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-            {confirmed.length}
+            {totalCount}
           </Badge>
         </CardTitle>
         <p className="text-xs text-muted-foreground mt-1">
-          Tap any item to read it fully. These are fed into Keryx's AI context. Remove any that no longer apply.
+          Everything here is fed into Keryx's AI context.{" "}
+          <span className="text-amber-400/80">Amber</span> = your own words.{" "}
+          Colored dots = AI observations. Tap any item to manage it.
         </p>
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y divide-white/5">
-          {confirmed.map(obs => {
-            const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
-            const isExpanded = expandedId === obs.id;
+          {items.map(item => {
+            const key = item.kind === 'user' ? item.key : item.obs.id;
+            const isExpanded = expandedKey === key;
+
+            if (item.kind === 'user') {
+              return (
+                <div key={key} className="px-4 py-0">
+                  <button
+                    className="w-full flex items-start gap-3 py-3 text-left"
+                    onClick={() => setExpandedKey(isExpanded ? null : key)}
+                  >
+                    <span className={`mt-1 shrink-0 w-2 h-2 rounded-full border ${USER_WORD_DOT}`} />
+                    <span className="flex-1 text-sm text-foreground leading-snug">{item.text}</span>
+                    <span className="shrink-0 text-muted-foreground mt-0.5">
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="pb-3 space-y-3">
+                      <Badge variant="outline" className={`text-xs ${USER_WORD_COLOR}`}>
+                        <PenLine className="w-2.5 h-2.5 mr-1" />
+                        Your words
+                      </Badge>
+                      <p className="text-xs text-muted-foreground leading-relaxed border-l-2 border-amber-500/20 pl-3">
+                        You wrote this yourself. It is always treated as confirmed and used by Keryx when
+                        generating actions and responses.
+                      </p>
+                      <div className="flex gap-2 pt-1 flex-wrap">
+                        <p className="text-xs text-muted-foreground/60 w-full">
+                          Edit this text in the "Your Words" section above, or remove it entirely below.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2.5 text-xs gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          disabled={userPending}
+                          onClick={() => { onUserRemove(item.text); setExpandedKey(null); }}
+                        >
+                          <X className="w-3 h-3" />
+                          Remove from profile
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            const colorClass = CATEGORY_COLORS[item.obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
+            const dotClass   = colorClass.replace('bg-', 'bg-').replace('/20', '/40').replace('border-', 'border-');
+
             return (
-              <div key={obs.id} className="px-4 py-0">
-                {/* Row — always visible */}
+              <div key={key} className="px-4 py-0">
                 <button
                   className="w-full flex items-start gap-3 py-3 text-left"
-                  onClick={() => setExpandedId(isExpanded ? null : obs.id)}
+                  onClick={() => setExpandedKey(isExpanded ? null : key)}
                 >
-                  <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full border ${colorClass}`} />
-                  <span className="flex-1 text-sm text-foreground leading-snug">
-                    {obs.observation}
-                  </span>
+                  <span className={`mt-1 shrink-0 w-2 h-2 rounded-full border ${dotClass}`} />
+                  <span className="flex-1 text-sm text-foreground leading-snug">{item.obs.observation}</span>
                   <span className="shrink-0 text-muted-foreground mt-0.5">
-                    {isExpanded
-                      ? <ChevronUp className="w-3.5 h-3.5" />
-                      : <ChevronDown className="w-3.5 h-3.5" />
-                    }
+                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </span>
                 </button>
-
-                {/* Expanded detail */}
                 {isExpanded && (
                   <div className="pb-3 space-y-3">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className={`text-xs ${colorClass}`}>
-                        {obs.category}
+                        {item.obs.category}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {Math.round((obs.confidence ?? 0.7) * 100)}% confidence
+                        {Math.round((item.obs.confidence ?? 0.7) * 100)}% confidence
                       </span>
                     </div>
-
-                    {obs.evidenceSummary && (
+                    {item.obs.evidenceSummary && (
                       <p className="text-xs text-muted-foreground leading-relaxed border-l-2 border-white/10 pl-3">
-                        {obs.evidenceSummary}
+                        {item.obs.evidenceSummary}
                       </p>
                     )}
-
                     <div className="flex gap-2 pt-1">
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                        disabled={isPending}
-                        onClick={() => { onUndone(obs.id); setExpandedId(null); }}
+                        disabled={aiPending}
+                        onClick={() => { onAiUndo(item.obs.id); setExpandedKey(null); }}
                       >
                         <RotateCcw className="w-3 h-3" />
                         Move back to pending
@@ -154,8 +231,8 @@ function ConfirmedObservationsList({ confirmed, onRemove, onUndone, isPending }:
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2.5 text-xs gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                        disabled={isPending}
-                        onClick={() => { onRemove(obs.id); setExpandedId(null); }}
+                        disabled={aiPending}
+                        onClick={() => { onAiRemove(item.obs.id); setExpandedKey(null); }}
                       >
                         <X className="w-3 h-3" />
                         Remove
@@ -193,11 +270,12 @@ export default function ProfilePage() {
     }
   }, [settings?.userProfile]);
 
-  const pending = observations.filter(o => o.status === 'pending');
+  const pending   = observations.filter(o => o.status === 'pending');
   const confirmed = observations.filter(o => o.status === 'confirmed');
+  const userWords = parseUserWords(settings?.userProfile ?? "");
 
   const saveProfileMutation = useMutation({
-    mutationFn: () => apiRequest("PUT", "/api/settings", { userProfile }),
+    mutationFn: (text: string) => apiRequest("PUT", "/api/settings", { userProfile: text }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({ title: "Profile saved" });
@@ -228,6 +306,13 @@ export default function ProfilePage() {
     onError: () => toast({ title: "Failed to generate observations", variant: "destructive" }),
   });
 
+  function handleUserRemove(text: string) {
+    const current = settings?.userProfile ?? userProfile;
+    const remaining = parseUserWords(current).filter(w => w !== text).join('\n');
+    setUserProfile(remaining);
+    saveProfileMutation.mutate(remaining);
+  }
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in max-w-2xl">
@@ -244,26 +329,27 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Your Words */}
+        {/* Your Words — textarea for adding/editing */}
         <Card className="glass-card border-white/20">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <UserCircle className="w-4 h-4 text-primary" />
+              <PenLine className="w-4 h-4 text-amber-400" />
               Your Words
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Tell Keryx about your habits, preferences, and communication style. The AI uses this when suggesting actions.
+              One statement per line. Each line becomes its own entry in your Active Profile Context below.
+              The AI uses these directly when suggesting actions.
             </p>
             <Textarea
               value={userProfile}
               onChange={(e) => setUserProfile(e.target.value)}
-              placeholder={`Examples:\n• I text friends and family — never email them\n• I prefer email for business contacts\n• I work in Mountain Time and keep evenings free\n• I'm rebuilding track confidence on my KTM`}
+              placeholder={`Examples:\nI text friends and family — never email them\nI prefer email for business contacts\nI work in Mountain Time and keep evenings free\nI'm rebuilding track confidence on my KTM`}
               className="min-h-[120px] glass-card border-white/20 text-sm resize-none"
             />
             <Button
-              onClick={() => saveProfileMutation.mutate()}
+              onClick={() => saveProfileMutation.mutate(userProfile)}
               disabled={saveProfileMutation.isPending}
               size="sm"
             >
@@ -277,7 +363,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* What Keryx Has Noticed */}
+        {/* What Keryx Has Noticed — pending only */}
         <Card className="glass-card border-white/20">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -316,7 +402,7 @@ export default function ProfilePage() {
                 <Sparkles className="w-8 h-8 text-muted-foreground/40 mx-auto" />
                 <p className="text-sm text-muted-foreground">No pending observations.</p>
                 <p className="text-xs text-muted-foreground/60">
-                  Keryx generates these automatically after your morning briefing, or you can generate them manually above.
+                  Keryx generates these automatically after your morning briefing, or tap Generate above.
                 </p>
               </div>
             ) : (
@@ -335,13 +421,16 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Confirmed Observations */}
-        {confirmed.length > 0 && (
-          <ConfirmedObservationsList
+        {/* Unified Active Profile Context */}
+        {(confirmed.length > 0 || userWords.length > 0) && (
+          <CombinedProfileList
             confirmed={confirmed}
-            onRemove={(id) => reviewMutation.mutate({ id, status: 'denied' })}
-            onUndone={(id) => reviewMutation.mutate({ id, status: 'pending' })}
-            isPending={reviewMutation.isPending}
+            userWords={userWords}
+            onAiRemove={(id) => reviewMutation.mutate({ id, status: 'denied' })}
+            onAiUndo={(id) => reviewMutation.mutate({ id, status: 'pending' })}
+            onUserRemove={handleUserRemove}
+            aiPending={reviewMutation.isPending}
+            userPending={saveProfileMutation.isPending}
           />
         )}
       </div>
