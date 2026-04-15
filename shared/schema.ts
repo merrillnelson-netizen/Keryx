@@ -1401,11 +1401,6 @@ export const aiChatSessions = pgTable("ai_chat_sessions", {
   lastMessageIdx: index("ai_chat_sessions_last_msg_idx").on(table.userId, table.lastMessageAt),
 }));
 
-export const aiChatSessionsRelations = relations(aiChatSessions, ({ one, many }) => ({
-  user: one(users, { fields: [aiChatSessions.userId], references: [users.id] }),
-  messages: many(aiChatMessages),
-}));
-
 export const aiChatMessages = pgTable("ai_chat_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sessionId: varchar("session_id").notNull().references(() => aiChatSessions.id, { onDelete: 'cascade' }),
@@ -1419,6 +1414,12 @@ export const aiChatMessages = pgTable("ai_chat_messages", {
   sessionIdIdx: index("ai_chat_messages_session_id_idx").on(table.sessionId),
   userIdIdx: index("ai_chat_messages_user_id_idx").on(table.userId),
   timestampIdx: index("ai_chat_messages_timestamp_idx").on(table.sessionId, table.timestamp),
+}));
+
+// Relations declared after both tables are defined to avoid TDZ initialization issues
+export const aiChatSessionsRelations = relations(aiChatSessions, ({ one, many }) => ({
+  user: one(users, { fields: [aiChatSessions.userId], references: [users.id] }),
+  messages: many(aiChatMessages),
 }));
 
 export const aiChatMessagesRelations = relations(aiChatMessages, ({ one }) => ({

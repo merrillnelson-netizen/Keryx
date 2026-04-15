@@ -37,6 +37,8 @@ import {
   ChevronDown,
   Bot,
   Menu,
+  X,
+  Sparkles,
 } from "lucide-react";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
 
@@ -59,6 +61,15 @@ interface AiChatMessage {
   timestamp: string;
   savedAs: "ecosystem" | "memory" | null;
   savedAt: string | null;
+}
+
+interface SummaryCandidate {
+  text: string;
+  type: "save" | "log";
+}
+
+interface SummaryOffer {
+  candidates: SummaryCandidate[];
 }
 
 const SAVE_TRIGGERS = ["save that", "log that", "remember that", "save this", "log this"];
@@ -245,6 +256,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [savingMsgId, setSavingMsgId] = useState<string | null>(null);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [summaryOffer, setSummaryOffer] = useState<SummaryOffer | null>(null);
+  const [savingCandidateIdx, setSavingCandidateIdx] = useState<number | null>(null);
+  const [savedCandidates, setSavedCandidates] = useState<Set<number>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -304,11 +318,15 @@ export default function ChatPage() {
     mutationFn: async ({ sessionId, content }: { sessionId: string; content: string }) => {
       const res = await apiRequest("POST", `/api/chat/sessions/${sessionId}/messages`, { content });
       if (!res.ok) throw new Error("Failed to send message");
-      return res.json();
+      return res.json() as Promise<{ userMessage: AiChatMessage; aiMessage: AiChatMessage; summaryOffer: SummaryOffer | null }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
+      if (data.summaryOffer && data.summaryOffer.candidates.length > 0) {
+        setSummaryOffer(data.summaryOffer);
+        setSavedCandidates(new Set());
+      }
     },
     onError: () => toast({ title: "Failed to send message", variant: "destructive" }),
   });
@@ -375,7 +393,33 @@ export default function ChatPage() {
 
   const handleSelect = (id: string) => {
     setActiveSessionId(id);
+    setSummaryOffer(null);
+    setSavedCandidates(new Set());
     setMobileSheetOpen(false);
+  };
+
+  const handleSaveCandidate = async (candidate: SummaryCandidate, idx: number) => {
+    setSavingCandidateIdx(idx);
+    try {
+      const savedAs = candidate.type === "save" ? "ecosystem" : "memory";
+      if (savedAs === "ecosystem") {
+        await apiRequest("POST", "/api/profile/observations", {
+          observation: candidate.text,
+          category: "patterns",
+          evidenceSummary: "Saved from Keryx Chat session summary",
+          status: "confirmed",
+        });
+        toast({ title: "Saved to AI context", description: "Keryx will use this across briefings, chat, and insights." });
+      } else {
+        await apiRequest("POST", "/api/memories", { memoryText: candidate.text });
+        toast({ title: "Logged to memories", description: "Added to your History with full AI processing." });
+      }
+      setSavedCandidates((prev) => new Set([...Array.from(prev), idx]));
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSavingCandidateIdx(null);
+    }
   };
 
   const isEmpty = !messagesLoading && messages.length === 0;
@@ -518,8 +562,64 @@ export default function ChatPage() {
             )}
           </div>
 
+          {/* Session summary offer card — shown after ~8 messages */}
+          {summaryOffer && summaryOffer.candidates.length > 0 && (
+            <div className="px-4 pb-2">
+              <div className="relative rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <button
+                  onClick={() => setSummaryOffer(null)}
+                  className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                  aria-label="Dismiss summary"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                  <p className="text-xs font-medium text-foreground">Things worth saving from this conversation</p>
+                </div>
+                <div className="space-y-2">
+                  {summaryOffer.candidates.map((candidate, idx) => (
+                    <div key={idx} className="flex items-start gap-2">
+                      <p className="flex-1 text-xs text-muted-foreground leading-relaxed">{candidate.text}</p>
+                      {savedCandidates.has(idx) ? (
+                        <Badge variant="outline" className="text-xs h-5 gap-1 px-1.5 flex-shrink-0">
+                          {candidate.type === "save" ? (
+                            <><Bookmark className="w-3 h-3 text-violet-500" />Saved</>
+                          ) : (
+                            <><BookOpen className="w-3 h-3 text-emerald-500" />Logged</>
+                          )}
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={savingCandidateIdx === idx}
+                          onClick={() => handleSaveCandidate(candidate, idx)}
+                          className={cn(
+                            "h-6 px-2 text-xs gap-1 flex-shrink-0",
+                            candidate.type === "save"
+                              ? "text-violet-600 dark:text-violet-400 border-violet-300 dark:border-violet-700 hover:bg-violet-500/10"
+                              : "text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-500/10"
+                          )}
+                        >
+                          {savingCandidateIdx === idx ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : candidate.type === "save" ? (
+                            <><Bookmark className="w-3 h-3" />Save That</>
+                          ) : (
+                            <><BookOpen className="w-3 h-3" />Log That</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Save That / Log That hint */}
-          {messages.length > 0 && (
+          {messages.length > 0 && !summaryOffer && (
             <div className="px-4 pb-1">
               <p className="text-xs text-muted-foreground text-center">
                 Hover any Keryx message to{" "}

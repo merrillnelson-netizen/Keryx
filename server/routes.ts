@@ -2,7 +2,7 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone, type AiChatMessage } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone, type AiChatMessage, type LogEntry } from "@shared/schema";
 import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -7629,7 +7629,7 @@ Respond with JSON only.`
     const now = new Date().toLocaleString('en-US', { timeZone: timezone, dateStyle: 'full', timeStyle: 'short' });
 
     const memorySummary = recentMemories.length > 0
-      ? recentMemories.map((m: any, i: number) => {
+      ? (recentMemories as Partial<LogEntry>[]).map((m, i: number) => {
           const when = m.timestamp ? new Date(m.timestamp).toLocaleDateString('en-US', { timeZone: timezone, month: 'short', day: 'numeric' }) : '';
           const text = (m.memoryText || '').slice(0, 150);
           return `${i + 1}. [${when}] ${text}`;
@@ -7637,14 +7637,14 @@ Respond with JSON only.`
       : 'No recent memories.';
 
     const goalsSummary = activeGoals.length > 0
-      ? activeGoals.map((g: any) => `• ${g.title} (${g.progressPercent ?? 0}%)`).join('\n')
+      ? (activeGoals as Goal[]).map((g) => `• ${g.title} (${g.progressPercent ?? 0}%)`).join('\n')
       : 'No active goals.';
 
-    const topPeople = people
-      .filter((p: any) => p.mentionCount > 0)
-      .sort((a: any, b: any) => (b.mentionCount ?? 0) - (a.mentionCount ?? 0))
+    const topPeople = (people as Person[])
+      .filter((p) => (p.mentionCount ?? 0) > 0)
+      .sort((a, b) => (b.mentionCount ?? 0) - (a.mentionCount ?? 0))
       .slice(0, 10)
-      .map((p: any) => `${p.name}${p.relationship ? ` (${p.relationship})` : ''}`)
+      .map((p) => `${p.name}${p.relationship ? ` (${p.relationship})` : ''}`)
       .join(', ') || 'None tracked yet.';
 
     const userProfile = userSettings?.userProfile?.trim() || '';
@@ -7808,7 +7808,47 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
         } catch (_) { /* title generation failure is non-fatal */ }
       }
 
-      res.json({ userMessage: userMsg, aiMessage: aiMsg });
+      // After ~8 messages (and every 8 thereafter), proactively offer a session summary
+      // with 2-3 labeled Save/Log candidates the user can act on or dismiss
+      let summaryOffer: { candidates: Array<{ text: string; type: 'save' | 'log' }> } | null = null;
+      if (newCount > 0 && newCount % 8 === 0) {
+        try {
+          const recentHistory = history.slice(-8);
+          const summaryCompletion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            response_format: { type: 'json_object' },
+            messages: [
+              {
+                role: 'system',
+                content: `You are reviewing a conversation excerpt. Identify 2-3 of the most valuable pieces of information that are worth saving.
+For each one, decide whether it should be:
+- "save": A self-insight, belief, pattern, preference, or observation about the person (feeds into the AI's understanding of them)
+- "log": A concrete event, decision, experience, or fact that belongs in their memory journal
+
+Return JSON exactly like:
+{"candidates": [{"text": "...", "type": "save"}, {"text": "...", "type": "log"}]}
+
+Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is worth saving, return {"candidates": []}.`,
+              },
+              ...recentHistory.map((m: AiChatMessage) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            ],
+            max_tokens: 300,
+            temperature: 0.5,
+          });
+          const raw = summaryCompletion.choices[0]?.message?.content || '{}';
+          const parsed = JSON.parse(raw) as { candidates?: Array<{ text: string; type: string }> };
+          if (Array.isArray(parsed.candidates) && parsed.candidates.length > 0) {
+            summaryOffer = {
+              candidates: parsed.candidates
+                .filter((c) => c.text && (c.type === 'save' || c.type === 'log'))
+                .slice(0, 3)
+                .map((c) => ({ text: c.text, type: c.type as 'save' | 'log' })),
+            };
+          }
+        } catch (_) { /* summary offer failure is non-fatal */ }
+      }
+
+      res.json({ userMessage: userMsg, aiMessage: aiMsg, summaryOffer });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to process chat message", error);
     }
