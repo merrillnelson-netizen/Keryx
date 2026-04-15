@@ -2999,29 +2999,59 @@ Respond with JSON only.`
     try {
       const user = req.user as User;
       const forceRefresh = req.query.refresh === 'true';
+      const quickMode = req.query.quick === 'true';
       const userTimezone = typeof req.query.timezone === 'string' ? req.query.timezone : 'UTC';
       
       const nowForCache = new Date();
       const userLocalNow = new Date(nowForCache.toLocaleString('en-US', { timeZone: userTimezone }));
       const userLocalDate = `${userLocalNow.getFullYear()}-${String(userLocalNow.getMonth() + 1).padStart(2, '0')}-${String(userLocalNow.getDate()).padStart(2, '0')}`;
       const userLocalHour = userLocalNow.getHours();
+      // Full cache key (used for both quick and full checks)
       const cacheKey = `${userLocalDate}-h${userLocalHour}-${userTimezone}`;
-      
+      // Quick cache key: stores only the quick 3-story result
+      const quickCacheKey = `quick-${cacheKey}`;
+
+      // Always try the FULL cache first — even for quick mode.
+      // If a full result is available we can slice it instead of generating quick stories.
       if (!forceRefresh) {
-        const cached = await storage.getAiCache(user.id, 'newsfeed', cacheKey);
-        if (cached) {
+        const fullCached = await storage.getAiCache(user.id, 'newsfeed', cacheKey);
+        if (fullCached) {
           const latestTimestamp = await storage.getLatestMemoryTimestamp(user.id);
-          const cacheTime = new Date(cached.generatedAt).getTime();
+          const cacheTime = new Date(fullCached.generatedAt).getTime();
           const latestTime = latestTimestamp?.getTime() || 0;
           
           if (latestTime <= cacheTime) {
+            const feed = fullCached.data as PersonalNewsFeed;
+            // For quick mode, return only the first 3 stories from the full cached result
+            const stories = quickMode ? feed.stories.slice(0, 3) : feed.stories;
             return res.json({
               status: 'success',
-              data: cached.data,
-              dataSources: (cached.data as PersonalNewsFeed).dataSources,
+              data: { ...feed, stories },
+              dataSources: feed.dataSources,
               cached: true,
-              generatedAt: cached.generatedAt.toISOString()
+              fullResultReady: true,
+              generatedAt: fullCached.generatedAt.toISOString()
             });
+          }
+        }
+
+        // For quick mode, also check quick-specific cache
+        if (quickMode) {
+          const quickCached = await storage.getAiCache(user.id, 'newsfeed', quickCacheKey);
+          if (quickCached) {
+            const latestTimestamp = await storage.getLatestMemoryTimestamp(user.id);
+            const cacheTime = new Date(quickCached.generatedAt).getTime();
+            const latestTime = latestTimestamp?.getTime() || 0;
+            if (latestTime <= cacheTime) {
+              return res.json({
+                status: 'success',
+                data: quickCached.data,
+                dataSources: (quickCached.data as PersonalNewsFeed).dataSources,
+                cached: true,
+                fullResultReady: false,
+                generatedAt: quickCached.generatedAt.toISOString()
+              });
+            }
           }
         }
       }
@@ -3197,15 +3227,45 @@ Respond with JSON only.`
         locationContext,
         activeGoals.length > 0 ? activeGoals : undefined,
         userSettings?.sassLevel ?? 50,
-        userSettings?.professionalMode ?? false
+        userSettings?.professionalMode ?? false,
+        quickMode  // pass quick mode flag
       );
 
       const memoriesHash = recentMemories.map(m => m.id).join(',');
-      // Only cache non-empty results for the full 30-minute TTL.
-      // An empty stories array (transient AI failure, timeout) is cached for only
-      // 3 minutes so the next request has a real chance of regenerating successfully.
       const hasStories = (newsFeed as PersonalNewsFeed).stories?.length > 0;
-      await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, hasStories ? 30 : 3);
+
+      if (quickMode) {
+        // Cache quick result with a short 5-minute TTL (full result will supersede it)
+        await storage.setAiCache(user.id, 'newsfeed', quickCacheKey, newsFeed, memoriesHash, recentMemories.length, hasStories ? 5 : 1);
+
+        // Kick off full background generation — detached from this request
+        setImmediate(async () => {
+          try {
+            const fullFeed = await generatePersonalNewsFeed(
+              insightMemories,
+              calendarEvents.length > 0 ? calendarEvents : undefined,
+              emailContext.length > 0 ? emailContext : undefined,
+              financialSummary,
+              user.username,
+              userTimezone,
+              knownPeople.length > 0 ? knownPeople : undefined,
+              locationContext,
+              activeGoals.length > 0 ? activeGoals : undefined,
+              userSettings?.sassLevel ?? 50,
+              userSettings?.professionalMode ?? false,
+              false  // full mode
+            );
+            const fullHasStories = (fullFeed as PersonalNewsFeed).stories?.length > 0;
+            await storage.setAiCache(user.id, 'newsfeed', cacheKey, fullFeed, memoriesHash, recentMemories.length, fullHasStories ? 30 : 3);
+            console.log(`[news-feed] Background full generation complete for user ${user.id.slice(0, 8)} (${(fullFeed as PersonalNewsFeed).stories?.length} stories)`);
+          } catch (bgErr) {
+            console.warn('[news-feed] Background full generation failed:', bgErr instanceof Error ? bgErr.message : bgErr);
+          }
+        });
+      } else {
+        // Full generation: cache with full 30-minute TTL
+        await storage.setAiCache(user.id, 'newsfeed', cacheKey, newsFeed, memoriesHash, recentMemories.length, hasStories ? 30 : 3);
+      }
 
       const dataSourceStatus = {
         memories: { checked: true, count: recentMemories.length },
@@ -3223,6 +3283,7 @@ Respond with JSON only.`
         dataSources: newsFeed.dataSources,
         dataSourceStatus,
         cached: false,
+        fullResultReady: !quickMode,  // quick mode triggers background; full mode is ready now
         generatedAt: newsFeed.generatedAt.toISOString()
       });
     } catch (error) {

@@ -14,7 +14,8 @@ import {
   Star,
   RefreshCw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef } from "react";
@@ -29,16 +30,6 @@ interface PersonalNewsStory {
   sentiment: 'positive' | 'neutral' | 'negative' | 'celebratory';
   priority: 'breaking' | 'featured' | 'standard';
   icon?: string;
-}
-
-interface DataSourceStatus {
-  memories: { checked: boolean; count: number };
-  calendar: { checked: boolean; count: number };
-  email: { checked: boolean; count: number };
-  financial: { checked: boolean; available: boolean };
-  location: { checked: boolean; available: boolean };
-  goals: { checked: boolean; count: number };
-  messages: { checked: boolean; available: boolean };
 }
 
 interface NewsFeedResponse {
@@ -59,8 +50,8 @@ interface NewsFeedResponse {
     emails: number;
     financial: boolean;
   };
-  dataSourceStatus?: DataSourceStatus;
   cached: boolean;
+  fullResultReady: boolean;
   generatedAt: string;
 }
 
@@ -108,7 +99,7 @@ const getPriorityBadge = (priority: PersonalNewsStory['priority']) => {
   }
 };
 
-function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
+function NewsStoryCard({ story, animate = false }: { story: PersonalNewsStory; animate?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const Icon = getCategoryIcon(story.category);
   const categoryColors = getCategoryColor(story.category);
@@ -119,7 +110,8 @@ function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
       className={cn(
         "glass-card p-4 rounded-xl border-l-4 transition-all",
         sentimentStyle,
-        story.priority === 'breaking' && "ring-1 ring-red-500/30"
+        story.priority === 'breaking' && "ring-1 ring-red-500/30",
+        animate && "animate-fade-in"
       )}
     >
       <div className="flex items-start gap-3">
@@ -190,17 +182,33 @@ function NewsStoryCard({ story }: { story: PersonalNewsStory }) {
   );
 }
 
+function StorySkeletonCard() {
+  return (
+    <div className="glass-card p-4 rounded-xl border-l-4 border-l-blue-500/30">
+      <div className="flex items-start gap-3">
+        <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PersonalInsights() {
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  // Ref to signal to queryFn that the next fetch should bypass server-side AI cache
   const forceRefreshRef = useRef(false);
-  
-  const { data, isLoading, isFetching, refetch } = useQuery<NewsFeedResponse>({
-    queryKey: ["/api/news-feed", userTimezone],
+  const [showAll, setShowAll] = useState(false);
+
+  // Stage 1: Quick query — top 3 stories, fast (~3-4s)
+  const { data: quickData, isLoading: quickLoading, isFetching: quickFetching, refetch: refetchQuick } = useQuery<NewsFeedResponse>({
+    queryKey: ["/api/news-feed/quick", userTimezone],
     queryFn: async () => {
       const shouldForce = forceRefreshRef.current;
-      forceRefreshRef.current = false; // reset immediately so retries don't re-force
-      const url = `/api/news-feed?timezone=${encodeURIComponent(userTimezone)}${shouldForce ? '&refresh=true' : ''}`;
+      forceRefreshRef.current = false;
+      const url = `/api/news-feed?quick=true&timezone=${encodeURIComponent(userTimezone)}${shouldForce ? '&refresh=true' : ''}`;
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         const text = (await response.text()) || response.statusText;
@@ -211,27 +219,51 @@ export default function PersonalInsights() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const stories = data?.data?.stories || [];
-  const dataSources = data?.dataSources;
-  const sourceStatus = data?.dataSourceStatus;
-  
-  const breakingStories = stories.filter(s => s.priority === 'breaking');
-  const featuredStories = stories.filter(s => s.priority === 'featured');
-  const standardStories = stories.filter(s => s.priority === 'standard');
+  // Stage 2: Full query — all stories, auto-runs after quick loads
+  // Polls with backoff until full result is ready (background generation can take ~15s)
+  const fullResultAlreadyReady = quickData?.fullResultReady === true;
+  const { data: fullData, isLoading: fullLoading, isFetching: fullFetching, refetch: refetchFull } = useQuery<NewsFeedResponse>({
+    queryKey: ["/api/news-feed/full", userTimezone],
+    queryFn: async () => {
+      const url = `/api/news-feed?timezone=${encodeURIComponent(userTimezone)}`;
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) {
+        const text = (await response.text()) || response.statusText;
+        throw new Error(`${response.status}: ${text}`);
+      }
+      return response.json();
+    },
+    enabled: !!quickData && !quickLoading,  // only start after quick load completes
+    staleTime: 1000 * 60 * 30,
+    // Poll every 5s while background generation is running (fullResultReady=false)
+    refetchInterval: (query) => {
+      const data = query.state.data as NewsFeedResponse | undefined;
+      if (!data) return 5000;           // not loaded yet — poll to pick up background result
+      if (data.fullResultReady) return false;  // full result ready — stop polling
+      return 5000;                       // still background generating — keep polling
+    },
+  });
 
-  const totalSourcesChecked = sourceStatus ? 
-    (sourceStatus.memories.count > 0 ? 1 : 0) +
-    (sourceStatus.calendar.count > 0 ? 1 : 0) +
-    (sourceStatus.email.count > 0 ? 1 : 0) +
-    (sourceStatus.financial.available ? 1 : 0) +
-    (sourceStatus.location.available ? 1 : 0) +
-    (sourceStatus.goals.count > 0 ? 1 : 0) +
-    (sourceStatus.messages.available ? 1 : 0) : 0;
+  // Use full data when available, fall back to quick data
+  const activeData = fullData ?? quickData;
+  const stories = activeData?.data?.stories || [];
+  const dataSources = activeData?.dataSources;
+  const isFullReady = fullData?.fullResultReady !== false;
+  const isLoadingMore = !isFullReady && !!quickData && !quickLoading;
+
+  // Stories split: quick shows first 3, expanded shows all
+  const visibleStories = showAll ? stories : stories.slice(0, 3);
+  const hiddenCount = stories.length - 3;
 
   const handleRefresh = () => {
     forceRefreshRef.current = true;
-    refetch();
+    setShowAll(false);
+    refetchQuick();
+    refetchFull();
   };
+
+  const isLoading = quickLoading;
+  const isFetching = quickFetching || fullFetching;
 
   return (
     <Card className="glass-card border-white/20 overflow-hidden">
@@ -275,16 +307,7 @@ export default function PersonalInsights() {
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="glass-card p-4 rounded-xl border-l-4 border-l-blue-500/50">
-                <div className="flex items-start gap-3">
-                  <Skeleton className="w-10 h-10 rounded-lg" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-5 w-3/4" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-2/3" />
-                  </div>
-                </div>
-              </div>
+              <StorySkeletonCard key={i} />
             ))}
           </div>
         ) : stories.length === 0 ? (
@@ -292,44 +315,8 @@ export default function PersonalInsights() {
             <Newspaper className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
             <h3 className="text-lg font-medium text-foreground mb-2">No insights yet</h3>
             <p className="text-muted-foreground max-w-sm mx-auto mb-4">
-              {totalSourcesChecked === 0
-                ? "Start logging memories, connect your calendar and email to see personalized insights about your life."
-                : `Checked ${totalSourcesChecked} data source${totalSourcesChecked > 1 ? 's' : ''} but couldn't generate insights. Try adding more memories or connecting additional services.`}
+              Start logging memories, connect your calendar and email to see personalized insights.
             </p>
-            {sourceStatus && (
-              <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
-                {sourceStatus.memories.count > 0 && (
-                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
-                    {sourceStatus.memories.count} memories
-                  </Badge>
-                )}
-                {sourceStatus.calendar.count > 0 && (
-                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
-                    {sourceStatus.calendar.count} events
-                  </Badge>
-                )}
-                {sourceStatus.email.count > 0 && (
-                  <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/30">
-                    {sourceStatus.email.count} emails
-                  </Badge>
-                )}
-                {sourceStatus.memories.count === 0 && (
-                  <Badge variant="outline" className="text-xs bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
-                    No memories
-                  </Badge>
-                )}
-                {sourceStatus.calendar.count === 0 && (
-                  <Badge variant="outline" className="text-xs bg-muted/20 text-muted-foreground border-muted/30">
-                    No calendar
-                  </Badge>
-                )}
-                {sourceStatus.email.count === 0 && (
-                  <Badge variant="outline" className="text-xs bg-muted/20 text-muted-foreground border-muted/30">
-                    No email
-                  </Badge>
-                )}
-              </div>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -343,68 +330,71 @@ export default function PersonalInsights() {
           </div>
         ) : (
           <div className="space-y-4">
-            {breakingStories.length > 0 && (
+            {/* Visible stories */}
+            <div className="space-y-3">
+              {visibleStories.map((story, i) => (
+                <NewsStoryCard key={story.id} story={story} animate={i >= 3} />
+              ))}
+            </div>
+
+            {/* More stories loading (background generation in progress) */}
+            {isLoadingMore && !showAll && (
               <div className="space-y-3">
-                {breakingStories.map(story => (
-                  <NewsStoryCard key={story.id} story={story} />
-                ))}
+                <StorySkeletonCard />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                  <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                  Generating more insights…
+                </div>
               </div>
             )}
-            
-            {featuredStories.length > 0 && (
-              <div className="space-y-3">
-                {featuredStories.map(story => (
-                  <NewsStoryCard key={story.id} story={story} />
-                ))}
-              </div>
-            )}
-            
-            {standardStories.length > 0 && (
-              <div className="space-y-3">
-                {standardStories.map(story => (
-                  <NewsStoryCard key={story.id} story={story} />
-                ))}
-              </div>
+
+            {/* Show more / show less button */}
+            {isFullReady && hiddenCount > 0 && (
+              <Button
+                variant="ghost"
+                className="w-full border border-white/10 hover:bg-white/5 text-sm gap-2"
+                onClick={() => setShowAll(!showAll)}
+              >
+                {showAll ? (
+                  <>
+                    <ChevronUp className="w-4 h-4" />
+                    Show less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    Show {hiddenCount} more insight{hiddenCount !== 1 ? 's' : ''}
+                  </>
+                )}
+              </Button>
             )}
           </div>
         )}
         
-        {(dataSources || sourceStatus) && stories.length > 0 && (
+        {dataSources && stories.length > 0 && (
           <div className="flex flex-wrap items-center justify-center gap-3 pt-4 text-xs text-muted-foreground border-t border-white/10">
-            {(dataSources?.memories ?? sourceStatus?.memories?.count ?? 0) > 0 && (
-              <span>{dataSources?.memories ?? sourceStatus?.memories?.count} memories</span>
+            {(dataSources.memories ?? 0) > 0 && (
+              <span>{dataSources.memories} memories</span>
             )}
-            {(dataSources?.calendars ?? sourceStatus?.calendar?.count ?? 0) > 0 && (
+            {(dataSources.calendars ?? 0) > 0 && (
               <>
                 <span>•</span>
-                <span>{dataSources?.calendars ?? sourceStatus?.calendar?.count} events</span>
+                <span>{dataSources.calendars} events</span>
               </>
             )}
-            {(dataSources?.emails ?? sourceStatus?.email?.count ?? 0) > 0 && (
+            {(dataSources.emails ?? 0) > 0 && (
               <>
                 <span>•</span>
-                <span>{dataSources?.emails ?? sourceStatus?.email?.count} emails</span>
+                <span>{dataSources.emails} emails</span>
               </>
             )}
-            {(dataSources?.financial || sourceStatus?.financial?.available) && (
+            {dataSources.financial && (
               <>
                 <span>•</span>
                 <span>Financial data</span>
               </>
             )}
-            {sourceStatus?.location?.available && (
-              <>
-                <span>•</span>
-                <span>Location data</span>
-              </>
-            )}
-            {sourceStatus?.messages?.available && (
-              <>
-                <span>•</span>
-                <span>Messages</span>
-              </>
-            )}
-            {data?.cached && (
+            {activeData?.cached && (
               <>
                 <span>•</span>
                 <span className="text-yellow-500/70">Cached</span>

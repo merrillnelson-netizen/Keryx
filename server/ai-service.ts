@@ -1559,7 +1559,8 @@ export async function generatePersonalNewsFeed(
   locationContext?: string,
   activeGoals?: GoalContext[],
   sassLevel?: number,
-  professionalMode?: boolean
+  professionalMode?: boolean,
+  quickMode?: boolean  // Fast path: only top 3 stories from top 10 memories
 ): Promise<PersonalNewsFeed> {
   try {
     const formatDateInTimezone = (date: Date, tz: string) => {
@@ -1584,8 +1585,11 @@ export async function generatePersonalNewsFeed(
     // Sort by importance (highest first) to prioritize critical memories in news feed
     const sortedMemories = [...recentMemories].sort((a, b) => (b.importance || 5) - (a.importance || 5));
     
+    // Quick mode: use only top 10 most-important memories to reduce token count and latency
+    const memoriesForFeed = quickMode ? sortedMemories.slice(0, 10) : sortedMemories;
+
     // IMPORTANT: Convert timestamps to user's local timezone to avoid UTC date mismatch
-    const memorySummary = sortedMemories.map((m, i) => {
+    const memorySummary = memoriesForFeed.map((m, i) => {
       const importanceLabel = (m.importance || 5) >= 8 ? '[CRITICAL] ' : (m.importance || 5) >= 6 ? '[HIGH] ' : (m.importance || 5) <= 2 ? '[LOW] ' : '';
       const localDate = formatDateForTimezone(m.timestamp, userTimezone);
       return `${importanceLabel}[${localDate}] Importance: ${m.importance || 5}/10 | Mood: ${m.mood || 'neutral'} (${m.moodScore || 0}) | Topic: ${m.topicTag}${m.detectedPeople?.length ? ` | People: ${m.detectedPeople.join(', ')}` : ''}\n"${m.memoryText}"`;
@@ -1675,7 +1679,10 @@ You are generating a personal news feed for ${userName || 'the user'} — a "Loc
 
 The user's timezone is ${userTimezone}. All dates in the memory data are in local time.
 
-Generate 4-8 news-style stories from the data provided. Each story should read like a brief news article about their life:
+${quickMode
+  ? 'Generate exactly 3 top-priority news stories — the 3 most important, timely, or newsworthy items from the data. Focus on breaking events (today/tomorrow calendar), significant mood shifts, or urgent action items. Be concise.'
+  : 'Generate 4-8 news-style stories from the data provided.'
+} Each story should read like a brief news article about their life:
 
 STORY CATEGORIES:
 - people: Stories about relationships, interactions with specific people mentioned in memories
@@ -1760,7 +1767,9 @@ Respond with JSON:
         },
         {
           role: "user",
-          content: `Generate my personal news feed based on this data from my Keryx ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nCreate news stories that synthesize insights across these data sources.`
+          content: quickMode
+            ? `Generate my top 3 personal news stories from this data:\n\nRECENT MEMORIES (top 10 by importance):\n${memorySummary || 'No recent memories.'}${calendarContext}${emailContext}\n\nReturn exactly 3 stories. JSON only.`
+            : `Generate my personal news feed based on this data from my Keryx ecosystem:\n\nRECENT MEMORIES (last 7 days):\n${memorySummary || 'No recent memories.'}${peopleContext}${calendarContext}${emailContext}${financialContext}${locationCtx}${goalsContext}\n\nCreate news stories that synthesize insights across these data sources.`
         },
       ],
       response_format: { type: "json_object" },
