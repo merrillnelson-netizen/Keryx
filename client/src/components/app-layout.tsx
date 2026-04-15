@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle, MessagesSquare } from "lucide-react";
+import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle, MessagesSquare, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
@@ -18,23 +18,54 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const navigation = [
+const primaryNav = [
   { name: "Dashboard", href: "/", icon: Activity },
   { name: "Voice Log", href: "/voice", icon: Mic },
   { name: "Chat", href: "/chat", icon: MessagesSquare },
   { name: "History", href: "/history", icon: History },
-  { name: "Insights", href: "/insights", icon: Brain },
-  { name: "Synthesis", href: "/synthesis", icon: Sparkles },
-  { name: "Profile", href: "/profile", icon: UserCircle },
   { name: "Agent", href: "/agent", icon: Bot },
-  { name: "Reminders", href: "/reminders", icon: Bell },
-  { name: "People", href: "/people", icon: Users },
-  { name: "Timeline", href: "/timeline", icon: Calendar },
-  { name: "Messages", href: "/messages", icon: MessageCircle },
-  { name: "Locations", href: "/locations", icon: MapPin },
-  { name: "Ideas", href: "/ideas", icon: Lightbulb },
-  { name: "Goals", href: "/goals", icon: Target },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
+];
+
+const navGroups = [
+  {
+    id: "intelligence",
+    label: "Intelligence",
+    icon: Brain,
+    color: "text-purple-400",
+    items: [
+      { name: "Insights", href: "/insights", icon: Brain },
+      { name: "Profile", href: "/profile", icon: UserCircle },
+    ],
+  },
+  {
+    id: "lifeos",
+    label: "Life OS",
+    icon: Target,
+    color: "text-emerald-400",
+    items: [
+      { name: "People", href: "/people", icon: Users },
+      { name: "Goals", href: "/goals", icon: Target },
+      { name: "Ideas", href: "/ideas", icon: Lightbulb },
+      { name: "Reminders", href: "/reminders", icon: Bell },
+    ],
+  },
+  {
+    id: "records",
+    label: "Records",
+    icon: Calendar,
+    color: "text-blue-400",
+    items: [
+      { name: "Timeline", href: "/timeline", icon: Calendar },
+      { name: "Messages", href: "/messages", icon: MessageCircle },
+      { name: "Locations", href: "/locations", icon: MapPin },
+    ],
+  },
+];
+
+const allNavItems = [
+  ...primaryNav,
+  ...navGroups.flatMap(g => g.items),
 ];
 
 function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
@@ -116,108 +147,211 @@ function ProfessionalModeToggle({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function NavItem({
+  item,
+  isActive,
+  onClick,
+  mobile = false,
+}: {
+  item: { name: string; href: string; icon: React.ElementType };
+  isActive: boolean;
+  onClick?: () => void;
+  mobile?: boolean;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link key={item.href} href={item.href}>
+      <button
+        data-testid={`nav${mobile ? "-mobile" : ""}-${item.href.slice(1) || "home"}`}
+        className={cn(
+          "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 group relative overflow-hidden",
+          isActive
+            ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold shadow-lg"
+            : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+        )}
+        onClick={onClick}
+      >
+        {isActive && (
+          <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
+        )}
+        <Icon className={cn("w-4 h-4 transition-transform duration-200", isActive ? "scale-110" : "group-hover:scale-110")} />
+        <span className="relative z-10 text-sm">{item.name}</span>
+        {isActive && (
+          <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+        )}
+      </button>
+    </Link>
+  );
+}
+
+function NavGroup({
+  group,
+  location,
+  onItemClick,
+  mobile = false,
+}: {
+  group: typeof navGroups[number];
+  location: string;
+  onItemClick?: () => void;
+  mobile?: boolean;
+}) {
+  const groupIsActive = group.items.some(i => i.href === location);
+  const [open, setOpen] = useState(groupIsActive);
+
+  useEffect(() => {
+    if (groupIsActive) setOpen(true);
+  }, [groupIsActive]);
+
+  const GroupIcon = group.icon;
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "w-full flex items-center gap-2.5 px-4 py-2 rounded-xl text-left transition-all duration-200 group",
+          groupIsActive ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+        )}
+      >
+        <GroupIcon className={cn("w-4 h-4 flex-shrink-0", group.color)} />
+        <span className="flex-1 text-xs font-semibold uppercase tracking-wider">{group.label}</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="ml-3 pl-3 border-l border-white/10 space-y-0.5 mt-0.5">
+          {group.items.map(item => (
+            <NavItem
+              key={item.href}
+              item={item}
+              isActive={location === item.href}
+              onClick={onItemClick}
+              mobile={mobile}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NavList({
+  location,
+  onItemClick,
+  mobile = false,
+}: {
+  location: string;
+  onItemClick?: () => void;
+  mobile?: boolean;
+}) {
+  return (
+    <div className="space-y-0.5">
+      {/* Primary nav items */}
+      {primaryNav.map(item => (
+        <NavItem
+          key={item.href}
+          item={item}
+          isActive={location === item.href}
+          onClick={onItemClick}
+          mobile={mobile}
+        />
+      ))}
+
+      {/* Divider */}
+      <div className="pt-2 pb-1">
+        <div className="border-t border-white/10" />
+      </div>
+
+      {/* Grouped nav sections */}
+      <div className="space-y-1">
+        {navGroups.map(group => (
+          <NavGroup
+            key={group.id}
+            group={group}
+            location={location}
+            onItemClick={onItemClick}
+            mobile={mobile}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const currentPage = navigation.find(item => item.href === location);
+  const currentPage = allNavItems.find(item => item.href === location);
 
   const handleLogout = async () => {
     await logout();
     setIsOpen(false);
   };
 
+  const BottomSection = ({ mobile = false }: { mobile?: boolean }) => (
+    <div className="p-4 border-t border-white/10 space-y-3">
+      <KeryxCapabilitiesModal />
+      <div className="glass-card p-3 rounded-xl">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+            <User className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium text-foreground block truncate">
+              {user?.username || "User"}
+            </span>
+            <p className="text-xs text-muted-foreground">Logged in</p>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <ProfessionalModeToggle />
+        <Button
+          data-testid={mobile ? "button-theme-toggle-mobile" : "button-theme-toggle"}
+          onClick={toggleTheme}
+          variant="ghost"
+          className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+        >
+          {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          {theme === "light" ? "Dark" : "Light"}
+        </Button>
+      </div>
+      <Button
+        data-testid={mobile ? "button-logout-mobile" : "button-logout"}
+        onClick={handleLogout}
+        variant="ghost"
+        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
+      >
+        <LogOut className="w-4 h-4" />
+        Logout
+      </Button>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop Sidebar - Glassmorphic Floating */}
+      {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:fixed lg:inset-y-0 lg:z-50 m-4 rounded-2xl">
         <div className="flex flex-col flex-1 glass-card-strong overflow-hidden">
-          {/* Logo & Branding */}
           <div className="p-6 border-b border-white/10">
             <KeryxStoryModal>
               <div className="flex items-center space-x-3">
                 <KeryxLogoIcon size="md" />
                 <div className="text-left">
                   <h1 className="text-xl font-bold text-foreground">Keryx</h1>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Kinetic Enterprise &<br/>Resource Yielding X-system</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Kinetic Enterprise &<br />Resource Yielding X-system</p>
                 </div>
               </div>
             </KeryxStoryModal>
           </div>
-          
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            {navigation.map((item) => {
-              const isActive = location === item.href;
-              const Icon = item.icon;
-              return (
-                <Link key={item.href} href={item.href}>
-                  <button 
-                    data-testid={`nav-${item.href.slice(1) || 'home'}`}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 group relative overflow-hidden",
-                      isActive
-                        ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold shadow-lg"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                    )}
-                  >
-                    {isActive && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
-                    )}
-                    <Icon className={cn(
-                      "w-5 h-5 transition-transform duration-200",
-                      isActive ? "scale-110" : "group-hover:scale-110"
-                    )} />
-                    <span className="relative z-10">{item.name}</span>
-                    {isActive && (
-                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    )}
-                  </button>
-                </Link>
-              );
-            })}
+
+          <nav className="flex-1 p-4 overflow-y-auto">
+            <NavList location={location} />
           </nav>
-          
-          {/* Help & User Info */}
-          <div className="p-4 border-t border-white/10 space-y-3">
-            <KeryxCapabilitiesModal />
-            <div className="glass-card p-3 rounded-xl">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-foreground block truncate">
-                    {user?.username || 'User'}
-                  </span>
-                  <p className="text-xs text-muted-foreground">Logged in</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <ProfessionalModeToggle />
-              <Button
-                data-testid="button-theme-toggle"
-                onClick={toggleTheme}
-                variant="ghost"
-                className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-              >
-                {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                {theme === "light" ? "Dark" : "Light"}
-              </Button>
-            </div>
-            <Button
-              data-testid="button-logout"
-              onClick={handleLogout}
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </Button>
-          </div>
+
+          <BottomSection />
         </div>
       </aside>
 
@@ -229,23 +363,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Sheet open={isOpen} onOpenChange={setIsOpen}>
                 {isOpen ? (
                   <SheetClose asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="p-2 hover:bg-white/10"
-                      aria-label="Close menu"
-                    >
+                    <Button variant="ghost" size="sm" className="p-2 hover:bg-white/10" aria-label="Close menu">
                       <X className="w-5 h-5" />
                     </Button>
                   </SheetClose>
                 ) : (
                   <SheetTrigger asChild>
-                    <Button 
-                      data-testid="button-menu"
-                      variant="ghost" 
-                      size="sm" 
-                      className="p-2 hover:bg-white/10"
-                    >
+                    <Button data-testid="button-menu" variant="ghost" size="sm" className="p-2 hover:bg-white/10">
                       <Menu className="w-5 h-5" />
                     </Button>
                   </SheetTrigger>
@@ -253,7 +377,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <SheetContent side="left" className="w-80 p-0 glass-card-strong border-white/20">
                   <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                   <div className="flex flex-col h-full">
-                    {/* Mobile Menu Header — pt-20 clears the fixed header bar */}
                     <div className="pt-20 pb-6 px-6 border-b border-white/10">
                       <KeryxStoryModal>
                         <div className="flex items-center space-x-3">
@@ -265,75 +388,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         </div>
                       </KeryxStoryModal>
                     </div>
-                    
-                    {/* Mobile Navigation */}
-                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                      {navigation.map((item) => {
-                        const isActive = location === item.href;
-                        const Icon = item.icon;
-                        return (
-                          <Link key={item.href} href={item.href}>
-                            <button 
-                              data-testid={`nav-mobile-${item.href.slice(1) || 'home'}`}
-                              className={cn(
-                                "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200",
-                                isActive
-                                  ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold"
-                                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-                              )}
-                              onClick={() => setIsOpen(false)}
-                            >
-                              <Icon className="w-5 h-5" />
-                              <span>{item.name}</span>
-                            </button>
-                          </Link>
-                        );
-                      })}
+
+                    <nav className="flex-1 p-4 overflow-y-auto">
+                      <NavList
+                        location={location}
+                        onItemClick={() => setIsOpen(false)}
+                        mobile
+                      />
                     </nav>
-                    
-                    {/* Mobile Help & User Info */}
-                    <div className="p-4 border-t border-white/10 space-y-3">
-                      <KeryxCapabilitiesModal />
-                      <div className="glass-card p-3 rounded-xl">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-                            <User className="w-4 h-4 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium text-foreground block truncate">
-                              {user?.username || 'User'}
-                            </span>
-                            <p className="text-xs text-muted-foreground">Logged in</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <ProfessionalModeToggle />
-                        <Button
-                          data-testid="button-theme-toggle-mobile"
-                          onClick={toggleTheme}
-                          variant="ghost"
-                          className="flex-1 justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-                        >
-                          {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                          {theme === "light" ? "Dark" : "Light"}
-                        </Button>
-                      </div>
-                      <Button
-                        data-testid="button-logout-mobile"
-                        onClick={handleLogout}
-                        variant="ghost"
-                        className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground hover:bg-white/5"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </Button>
-                    </div>
+
+                    <BottomSection mobile />
                   </div>
                 </SheetContent>
               </Sheet>
-              
-              <Link href="/dashboard">
+
+              <Link href="/">
                 <div className="flex items-center gap-2 cursor-pointer">
                   <KeryxLogoIcon size="sm" />
                   <h2 className="text-base font-semibold text-foreground">
@@ -343,13 +412,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </Link>
             </div>
 
-            {/* Mobile top bar right side: Pro Mode toggle */}
             <ProfessionalModeToggle compact />
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 lg:ml-80 overflow-hidden">
         <div className="h-full overflow-y-auto pt-20 lg:pt-0 p-4 lg:p-6">
           <div className="animate-fade-in">

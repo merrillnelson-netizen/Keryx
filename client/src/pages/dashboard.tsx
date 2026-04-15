@@ -28,6 +28,7 @@ import {
   Bot,
   CheckCircle2,
   Clock,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
@@ -668,26 +669,44 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Ecosystem View Entry Card */}
-        <Card
-          className="glass-card border-white/20 cursor-pointer hover:border-indigo-500/40 transition-colors group"
-          onClick={() => navigate("/ecosystem")}
-        >
-          <CardContent className="py-4">
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                <Activity className="w-6 h-6 text-white" />
+        {/* Quick-access intelligence cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Card
+            className="glass-card border-white/20 cursor-pointer hover:border-purple-500/40 transition-colors group"
+            onClick={() => navigate("/insights")}
+          >
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center flex-shrink-0">
+                  <Brain className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Cognitive Insights</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Patterns, synthesis &amp; AI analysis</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-purple-400 transition-colors flex-shrink-0" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">Ecosystem View</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Life at a glance — memory pulse, mood, topics, people, goals &amp; finance
-                </p>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="glass-card border-white/20 cursor-pointer hover:border-indigo-500/40 transition-colors group"
+            onClick={() => navigate("/ecosystem")}
+          >
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                  <Activity className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">Ecosystem View</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Life at a glance — all data sources</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-indigo-400 transition-colors flex-shrink-0" />
               </div>
-              <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-indigo-400 transition-colors flex-shrink-0" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Quick Stats Footer */}
         {(briefingData || alertsData) && (
