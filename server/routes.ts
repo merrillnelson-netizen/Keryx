@@ -4367,7 +4367,12 @@ Respond with JSON only.`
     try {
       const user = req.user as User;
       const bodySchema = z.object({ reason: z.string().max(500).optional() });
-      const { reason } = bodySchema.parse(req.body ?? {});
+      let reason: string | undefined;
+      try {
+        ({ reason } = bodySchema.parse(req.body ?? {}));
+      } catch {
+        return sendErrorResponse(res, 400, "Invalid request body: reason must be a string of 500 characters or fewer");
+      }
 
       const success = await rejectAction(req.params.id, user.id, reason);
       

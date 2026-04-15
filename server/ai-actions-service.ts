@@ -1469,12 +1469,12 @@ export async function rejectAction(actionId: string, userId: string, reason?: st
     return false;
   }
 
-  const updates: Record<string, unknown> = { status: AI_ACTION_STATUSES.REJECTED };
+  const updates: Partial<InsertAiAction> = { status: AI_ACTION_STATUSES.REJECTED };
   if (reason && reason.trim()) {
     updates.rejectionReason = reason.trim().slice(0, 500);
   }
 
-  await storage.updateAiAction(actionId, userId, updates as Parameters<typeof storage.updateAiAction>[2]);
+  await storage.updateAiAction(actionId, userId, updates);
   
   return true;
 }
