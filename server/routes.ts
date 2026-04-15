@@ -2,7 +2,7 @@ import express, { type Express, type Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone, type AiChatMessage, type LogEntry } from "@shared/schema";
+import { insertSettingsSchema, insertUserSchema, insertCategorySchema, insertPersonSchema, mcpPayloadSchema, insertIdeaSchema, insertIdeaTaskSchema, insertGoalSchema, goalMilestoneSchema, insertReminderSchema, insertRelayDestinationSchema, automationConditionsSchema, IDEA_STAGES, insertProfileObservationSchema, type User, type IdeaChatMessage, type InsertLogEntry, type InsertReminder, type Reminder, type Goal, type Person, type GoalMilestone, type AiChatMessage, type LogEntry } from "@shared/schema";
 import { z } from "zod";
 import { openai, extractMetadata, generateEmbedding, decomposeQuery, synthesizeSearchAnswer, generateThematicInsights, generateMorningBriefing, detectPatternAlerts, answerFinancialQuery, generatePersonalNewsFeed, PersonalNewsFeed, detectIntent, analyzeGoalProgress, suggestGoalMilestones, GoalContext, detectGoalPatternAlerts, detectCalendarEvent, formatDateForTimezone, formatDateTimeForTimezone, generateEcosystemCaptions, type EcosystemCaptions } from "./ai-service";
 import bcrypt from "bcrypt";
@@ -7577,6 +7577,19 @@ Respond with JSON only.`
     }
   });
 
+  /** POST /api/profile/observations — create a profile observation directly (confirmed by default) */
+  app.post("/api/profile/observations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const parseResult = insertProfileObservationSchema.safeParse({ ...req.body, userId: user.id });
+      if (!parseResult.success) return res.status(400).json({ error: parseResult.error.flatten() });
+      const observation = await storage.createProfileObservation(parseResult.data);
+      res.status(201).json(observation);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to create profile observation", error);
+    }
+  });
+
   /** PATCH /api/profile/observations/:id — update observation status (confirmed/denied) */
   app.patch("/api/profile/observations/:id", requireAuth, async (req, res) => {
     try {
@@ -7756,6 +7769,45 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
       const history = await storage.getAiChatMessages(session.id, user.id);
       const systemPrompt = await buildChatSystemPrompt(user.id);
 
+      // Detect typed save/log intent — when user types "save that" / "log that" etc.,
+      // generate explicit structured candidates from the recent conversation
+      const CHAT_SAVE_TRIGGERS = ['save that', 'log that', 'remember that', 'save this', 'log this'];
+      const trimmedLower = content.trim().toLowerCase();
+      let intentCandidates: Array<{ text: string; type: 'save' | 'log' }> | null = null;
+      if (CHAT_SAVE_TRIGGERS.some((t) => trimmedLower === t || trimmedLower.startsWith(t + ' '))) {
+        try {
+          const recentForIntent = history.slice(-6); // last 6 messages before user's trigger
+          const intentCompletion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            response_format: { type: 'json_object' },
+            messages: [
+              {
+                role: 'system',
+                content: `The user just said "${content.trim()}" — they want to save something from this conversation.
+Review the recent messages and identify 1-2 of the most specific, concrete things worth preserving.
+For each, choose:
+- "save": an insight, pattern, belief, preference, or observation about the user (to feed into AI context)
+- "log": a concrete event, decision, experience, or fact (to add as a memory journal entry)
+
+Return JSON: {"candidates": [{"text": "...", "type": "save"}, {"text": "...", "type": "log"}]}
+Keep each text to 1-2 sentences. Be specific, not generic. Only return 1-2 candidates.`,
+              },
+              ...recentForIntent.map((m: AiChatMessage) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            ],
+            max_tokens: 250,
+            temperature: 0.4,
+          });
+          const raw = intentCompletion.choices[0]?.message?.content || '{}';
+          const parsed = JSON.parse(raw) as { candidates?: Array<{ text: string; type: string }> };
+          if (Array.isArray(parsed.candidates) && parsed.candidates.length > 0) {
+            intentCandidates = parsed.candidates
+              .filter((c) => c.text && (c.type === 'save' || c.type === 'log'))
+              .slice(0, 2)
+              .map((c) => ({ text: c.text, type: c.type as 'save' | 'log' }));
+          }
+        } catch (_) { /* intent detection failure is non-fatal */ }
+      }
+
       // Build messages array for OpenAI
       const openaiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
         { role: 'system', content: systemPrompt },
@@ -7848,7 +7900,7 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
         } catch (_) { /* summary offer failure is non-fatal */ }
       }
 
-      res.json({ userMessage: userMsg, aiMessage: aiMsg, summaryOffer });
+      res.json({ userMessage: userMsg, aiMessage: aiMsg, summaryOffer, intentCandidates });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to process chat message", error);
     }

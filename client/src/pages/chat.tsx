@@ -318,12 +318,16 @@ export default function ChatPage() {
     mutationFn: async ({ sessionId, content }: { sessionId: string; content: string }) => {
       const res = await apiRequest("POST", `/api/chat/sessions/${sessionId}/messages`, { content });
       if (!res.ok) throw new Error("Failed to send message");
-      return res.json() as Promise<{ userMessage: AiChatMessage; aiMessage: AiChatMessage; summaryOffer: SummaryOffer | null }>;
+      return res.json() as Promise<{ userMessage: AiChatMessage; aiMessage: AiChatMessage; summaryOffer: SummaryOffer | null; intentCandidates: SummaryCandidate[] | null }>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions", activeSessionId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/chat/sessions"] });
-      if (data.summaryOffer && data.summaryOffer.candidates.length > 0) {
+      // Intent candidates take priority (typed "save that" / "log that")
+      if (data.intentCandidates && data.intentCandidates.length > 0) {
+        setSummaryOffer({ candidates: data.intentCandidates });
+        setSavedCandidates(new Set());
+      } else if (data.summaryOffer && data.summaryOffer.candidates.length > 0) {
         setSummaryOffer(data.summaryOffer);
         setSavedCandidates(new Set());
       }
