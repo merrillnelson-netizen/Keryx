@@ -451,10 +451,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.createCategoryIfNotExists(user.id, userProvidedTag);
       }
 
-      // Run AI metadata extraction, embedding generation, and settings fetch in parallel
-      // None of these depend on each other, so parallelizing saves 0.5-1.5 seconds
+      // AI tagging on save is a Pro feature. Free users (when enforcement is active)
+      // get a no-op extractor so we still persist the memory, but without AI metadata.
+      const billingActive = process.env.BILLING_ENFORCEMENT === 'true';
+      const userTierRank = ({ free: 0, pro: 1, life_os: 2 } as Record<string, number>)[user.subscriptionTier] ?? 0;
+      const subActive = (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')
+        && (!user.currentPeriodEnd || new Date(user.currentPeriodEnd) > new Date());
+      const aiTaggingAllowed = !billingActive || (userTierRank >= 1 && subActive);
+
+      const emptyExtracted = {
+        topicTag: 'general',
+        metadataJson: {},
+        mood: undefined as string | undefined,
+        moodScore: undefined as number | undefined,
+        detectedPeople: [] as string[],
+        aiReasoning: undefined as any,
+      };
+
+      // Run AI metadata extraction (Pro+ only), embedding generation, and settings fetch in parallel
       const [extracted, embeddingVector, settingsForCalendar] = await Promise.all([
-        extractMetadata(memoryText, timezone),
+        aiTaggingAllowed ? extractMetadata(memoryText, timezone) : Promise.resolve(emptyExtracted as any),
         generateEmbedding(memoryText),
         storage.getSettings(user.id),
       ]);

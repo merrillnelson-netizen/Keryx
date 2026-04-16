@@ -30,7 +30,6 @@ interface BillingStatus {
 const TIER_FEATURES = {
   free: [
     { label: "100 memories/month", included: true },
-    { label: "AI tagging on save", included: true },
     { label: "Basic keyword & filter search", included: true },
     { label: "History view", included: true },
     { label: "People directory (basic)", included: true },
@@ -40,6 +39,7 @@ const TIER_FEATURES = {
   ],
   pro: [
     { label: "Unlimited memories", included: true },
+    { label: "AI tagging on save (mood, people, topics)", included: true },
     { label: "Semantic AI search", included: true },
     { label: "Keryx Chat (multi-session)", included: true },
     { label: "AI Profile + observations", included: true },
