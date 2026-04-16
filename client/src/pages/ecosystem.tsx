@@ -415,6 +415,29 @@ export default function Ecosystem() {
     }));
   }, [spendingSummary?.categoryBreakdown]);
 
+  const dailySpendingData = useMemo(() => {
+    const debits = transactions.filter(t => t.amount > 0);
+    if (debits.length === 0) return [];
+    const totals: Record<string, number> = {};
+    for (const t of debits) {
+      const day = t.date.slice(0, 10);
+      totals[day] = (totals[day] ?? 0) + t.amount;
+    }
+    const days = parseInt(txDays);
+    const result: { date: string; label: string; amount: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      result.push({
+        date: iso,
+        label: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        amount: totals[iso] ?? 0,
+      });
+    }
+    return result;
+  }, [transactions, txDays]);
+
   const financialInsights = useMemo(() => {
     if (!spendingSummary || transactions.length === 0) return null;
     const debits = transactions.filter(t => t.amount > 0);
@@ -1098,6 +1121,61 @@ export default function Ecosystem() {
                     {/* ── Summary view: category bar + insight chips ── */}
                     {!showFinancialDetails && (
                       <div className="space-y-4">
+                        {dailySpendingData.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                              Spending Trend
+                            </h4>
+                            <ResponsiveContainer width="100%" height={100}>
+                              <AreaChart data={dailySpendingData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                                <defs>
+                                  <linearGradient id="spendTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35} />
+                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                                <XAxis
+                                  dataKey="label"
+                                  tick={{ fontSize: 9, fill: "rgba(255,255,255,0.4)" }}
+                                  interval="preserveStartEnd"
+                                  tickLine={false}
+                                  axisLine={false}
+                                />
+                                <YAxis
+                                  tick={privacyMode ? false : { fontSize: 9, fill: "rgba(255,255,255,0.4)" }}
+                                  tickFormatter={v => `$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`}
+                                  width={privacyMode ? 0 : 40}
+                                  tickLine={false}
+                                  axisLine={false}
+                                />
+                                <Tooltip
+                                  formatter={(v: number) => [
+                                    privacyMode ? "••••••" : `$${v.toFixed(2)}`,
+                                    "Spent",
+                                  ]}
+                                  labelFormatter={(label) => label}
+                                  contentStyle={{
+                                    background: "rgba(0,0,0,0.85)",
+                                    border: "1px solid rgba(255,255,255,0.15)",
+                                    borderRadius: 8,
+                                    fontSize: 11,
+                                  }}
+                                />
+                                <Area
+                                  type="monotone"
+                                  dataKey="amount"
+                                  stroke="#818cf8"
+                                  strokeWidth={2}
+                                  fill="url(#spendTrendGrad)"
+                                  dot={false}
+                                  activeDot={{ r: 3, fill: "#818cf8" }}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+
                         {spendingChartData.length > 0 && (
                           <div>
                             <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
