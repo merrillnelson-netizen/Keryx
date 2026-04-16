@@ -745,7 +745,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Card
             className="glass-card border-white/20 cursor-pointer hover:border-purple-500/40 transition-colors group"
-            onClick={() => navigate("/insights")}
+            title={!hasPro ? "Pro feature — opens billing" : undefined}
+            onClick={() => navigate(hasPro ? "/insights" : "/billing")}
           >
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
@@ -768,7 +769,8 @@ export default function Dashboard() {
 
           <Card
             className="glass-card border-white/20 cursor-pointer hover:border-indigo-500/40 transition-colors group"
-            onClick={() => navigate("/ecosystem")}
+            title={!hasPro ? "Pro feature — opens billing" : undefined}
+            onClick={() => navigate(hasPro ? "/ecosystem" : "/billing")}
           >
             <CardContent className="py-4">
               <div className="flex items-center gap-3">
