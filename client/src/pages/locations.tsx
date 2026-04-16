@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -466,6 +467,7 @@ export default function LocationsPage() {
 
   return (
     <AppLayout>
+      <TierGate required={"life_os"} feature={"Location Intelligence"} description={"Capture, analyze, and search your location history."}>
       <div className="container max-w-4xl mx-auto p-4 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -959,6 +961,7 @@ export default function LocationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </TierGate>
     </AppLayout>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -308,6 +309,7 @@ export default function GoalsPage() {
 
   return (
     <AppLayout>
+      <TierGate required={"pro"} feature={"Goals Tracking"} description={"Set goals and let Keryx monitor your progress through your daily memories."}>
       <div className="container max-w-4xl mx-auto p-4 pb-24">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -437,6 +439,7 @@ export default function GoalsPage() {
           isCreatePending={createGoalMutation.isPending}
         />
       </div>
+    </TierGate>
     </AppLayout>
   );
 }

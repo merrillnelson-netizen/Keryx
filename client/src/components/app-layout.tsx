@@ -4,7 +4,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle, MessagesSquare, ChevronDown } from "lucide-react";
+import { Menu, X, Mic, History, Settings as SettingsIcon, Activity, LogOut, User, Moon, Sun, Brain, Users, Calendar, Sparkles, Lightbulb, MapPin, Target, Bell, MessageCircle, ShieldCheck, ShieldOff, Bot, UserCircle, MessagesSquare, ChevronDown, Lock } from "lucide-react";
+import { useBillingTier, type Tier } from "@/hooks/use-billing-tier";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/components/theme-provider";
 import { KeryxLogoIcon } from "@/components/keryx-logo";
@@ -18,24 +19,32 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const primaryNav = [
+type NavTier = Tier;
+
+const primaryNav: { name: string; href: string; icon: React.ElementType; tier?: NavTier }[] = [
   { name: "Dashboard", href: "/", icon: Activity },
   { name: "Voice Log", href: "/voice", icon: Mic },
-  { name: "Chat", href: "/chat", icon: MessagesSquare },
+  { name: "Chat", href: "/chat", icon: MessagesSquare, tier: "pro" },
   { name: "History", href: "/history", icon: History },
-  { name: "Agent", href: "/agent", icon: Bot },
+  { name: "Agent", href: "/agent", icon: Bot, tier: "life_os" },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 
-const navGroups = [
+const navGroups: {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  items: { name: string; href: string; icon: React.ElementType; tier?: NavTier }[];
+}[] = [
   {
     id: "intelligence",
     label: "Intelligence",
     icon: Brain,
     color: "text-purple-400",
     items: [
-      { name: "Insights", href: "/insights", icon: Brain },
-      { name: "Profile", href: "/profile", icon: UserCircle },
+      { name: "Insights", href: "/insights", icon: Brain, tier: "pro" },
+      { name: "Profile", href: "/profile", icon: UserCircle, tier: "pro" },
     ],
   },
   {
@@ -45,9 +54,9 @@ const navGroups = [
     color: "text-emerald-400",
     items: [
       { name: "People", href: "/people", icon: Users },
-      { name: "Goals", href: "/goals", icon: Target },
-      { name: "Ideas", href: "/ideas", icon: Lightbulb },
-      { name: "Reminders", href: "/reminders", icon: Bell },
+      { name: "Goals", href: "/goals", icon: Target, tier: "pro" },
+      { name: "Ideas", href: "/ideas", icon: Lightbulb, tier: "pro" },
+      { name: "Reminders", href: "/reminders", icon: Bell, tier: "pro" },
     ],
   },
   {
@@ -57,8 +66,8 @@ const navGroups = [
     color: "text-blue-400",
     items: [
       { name: "Timeline", href: "/timeline", icon: Calendar },
-      { name: "Messages", href: "/messages", icon: MessageCircle },
-      { name: "Locations", href: "/locations", icon: MapPin },
+      { name: "Messages", href: "/messages", icon: MessageCircle, tier: "life_os" },
+      { name: "Locations", href: "/locations", icon: MapPin, tier: "life_os" },
     ],
   },
 ];
@@ -153,34 +162,52 @@ function NavItem({
   onClick,
   mobile = false,
 }: {
-  item: { name: string; href: string; icon: React.ElementType };
+  item: { name: string; href: string; icon: React.ElementType; tier?: NavTier };
   isActive: boolean;
   onClick?: () => void;
   mobile?: boolean;
 }) {
   const Icon = item.icon;
+  const { hasTier } = useBillingTier();
+  const isLocked = item.tier ? !hasTier(item.tier) : false;
+  const lockLabel = item.tier === "life_os" ? "Life OS" : "Pro";
+
   return (
-    <Link key={item.href} href={item.href}>
-      <button
-        data-testid={`nav${mobile ? "-mobile" : ""}-${item.href.slice(1) || "home"}`}
-        className={cn(
-          "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 group relative overflow-hidden",
-          isActive
-            ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold shadow-lg"
-            : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link key={item.href} href={item.href}>
+            <button
+              data-testid={`nav${mobile ? "-mobile" : ""}-${item.href.slice(1) || "home"}`}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 group relative overflow-hidden",
+                isActive
+                  ? "bg-gradient-to-r from-primary/20 via-secondary/20 to-accent/20 text-foreground font-semibold shadow-lg"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/5",
+                isLocked && "opacity-60"
+              )}
+              onClick={onClick}
+            >
+              {isActive && (
+                <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
+              )}
+              <Icon className={cn("w-4 h-4 transition-transform duration-200", isActive ? "scale-110" : "group-hover:scale-110")} />
+              <span className="relative z-10 text-sm flex-1">{item.name}</span>
+              {isLocked ? (
+                <Lock className="w-3 h-3 text-muted-foreground/70 relative z-10" />
+              ) : isActive ? (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              ) : null}
+            </button>
+          </Link>
+        </TooltipTrigger>
+        {isLocked && (
+          <TooltipContent side="right" className="text-xs">
+            {lockLabel} feature — tap to upgrade
+          </TooltipContent>
         )}
-        onClick={onClick}
-      >
-        {isActive && (
-          <div className="absolute inset-0 bg-gradient-to-r from-primary via-secondary to-accent opacity-10" />
-        )}
-        <Icon className={cn("w-4 h-4 transition-transform duration-200", isActive ? "scale-110" : "group-hover:scale-110")} />
-        <span className="relative z-10 text-sm">{item.name}</span>
-        {isActive && (
-          <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-        )}
-      </button>
-    </Link>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

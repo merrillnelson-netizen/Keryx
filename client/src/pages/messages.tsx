@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1112,7 +1113,9 @@ export default function Messages() {
 
   return (
     <AppLayout>
+      <TierGate required={"life_os"} feature={"Messages Sync"} description={"Import SMS, MMS, and RCS conversations for AI analysis and search."}>
       {params.conversationId ? <ThreadView /> : <ConversationList />}
+    </TierGate>
     </AppLayout>
   );
 }

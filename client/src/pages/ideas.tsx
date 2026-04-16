@@ -1,4 +1,5 @@
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -181,6 +182,7 @@ export default function IdeasPage() {
 
   return (
     <AppLayout>
+      <TierGate required={"pro"} feature={"Ideas Workspace"} description={"Brainstorm with AI, develop ideas, and turn thoughts into action plans."}>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -529,6 +531,7 @@ export default function IdeasPage() {
         open={isIdeaModalOpen}
         onOpenChange={setIsIdeaModalOpen}
       />
+    </TierGate>
     </AppLayout>
   );
 }

@@ -5,6 +5,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useHaptic } from "@/hooks/useHaptic";
 import { useToast } from "@/hooks/use-toast";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -584,6 +585,7 @@ export default function RemindersPage() {
 
   return (
     <AppLayout>
+      <TierGate required={"pro"} feature={"Reminders"} description={"Time-based and location-based reminders that surface when you need them."}>
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -763,6 +765,7 @@ export default function RemindersPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+    </TierGate>
     </AppLayout>
   );
 }

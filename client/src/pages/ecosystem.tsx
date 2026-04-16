@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -463,6 +464,7 @@ export default function Ecosystem() {
 
   return (
     <AppLayout>
+      <TierGate required={"pro"} feature={"Ecosystem View"} description={"A unified view of your goals, people, ideas and patterns powered by AI."}>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="glass-card p-5 rounded-2xl">
@@ -1500,6 +1502,7 @@ export default function Ecosystem() {
           </>
         )}
       </div>
+    </TierGate>
     </AppLayout>
   );
 }

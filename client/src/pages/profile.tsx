@@ -1,4 +1,5 @@
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -498,6 +499,7 @@ export default function ProfilePage() {
 
   return (
     <AppLayout>
+      <TierGate required={"pro"} feature={"Your AI Profile"} description={"See what Keryx has noticed about you and shape the persona it brings to every interaction."}>
       <div className="space-y-6 animate-fade-in max-w-2xl">
         {/* Header */}
         <div className="glass-card p-6 rounded-2xl">
@@ -684,6 +686,7 @@ export default function ProfilePage() {
           </Card>
         )}
       </div>
+    </TierGate>
     </AppLayout>
   );
 }

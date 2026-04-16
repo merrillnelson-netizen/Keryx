@@ -1,4 +1,5 @@
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1212,13 +1213,17 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <SmsImportSection />
+          <TierGate required="life_os" feature="Messages Sync" description="Import SMS, MMS, and RCS conversations." inline>
+            <SmsImportSection />
+          </TierGate>
 
           <PwaInstallPrompt variant="settings" />
 
           <PushNotificationCard />
 
-          <PlaidCard />
+          <TierGate required="life_os" feature="Financial Insights (Plaid)" description="Connect bank accounts for AI-powered spending insights." inline>
+            <PlaidCard />
+          </TierGate>
 
           <Card className="glass-card border-white/20">
             <CardHeader>
@@ -1404,11 +1409,17 @@ export default function SettingsPage() {
           </Card>
 
 
-          <AndroidBridgeCard />
+          <TierGate required="life_os" feature="Android Bridge" description="Auto-capture Google Messages from your Android phone." inline>
+            <AndroidBridgeCard />
+          </TierGate>
 
-          <CompanionAppCard />
+          <TierGate required="life_os" feature="Meta Glasses Companion" description="Hands-free voice logging via your Meta Glasses." inline>
+            <CompanionAppCard />
+          </TierGate>
 
-          <RelayApiCard />
+          <TierGate required="life_os" feature="Universal Relay API" description="Pipe data into Keryx from any external source." inline>
+            <RelayApiCard />
+          </TierGate>
 
 
           <BillingCard isFounder={isFounder} />

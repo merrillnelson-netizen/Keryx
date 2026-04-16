@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import {
   Bot,
   Calendar,
@@ -1002,6 +1003,7 @@ export default function AgentPage() {
 
   return (
     <AppLayout>
+      <TierGate required={"life_os"} feature={"AI Agent"} description={"Let Keryx take action on your behalf — drafting emails, creating calendar events, and more."}>
       <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
 
         {/* Page header */}
@@ -1285,6 +1287,7 @@ export default function AgentPage() {
         {/* ── Rules Tab ── */}
         {mainTab === "rules" && <RulesTab />}
       </div>
+    </TierGate>
     </AppLayout>
   );
 }

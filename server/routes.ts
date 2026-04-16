@@ -875,7 +875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * GET /api/companion/status - Returns last-seen timestamp for the companion app
    * Used by the Settings card to show connection status
    */
-  app.get("/api/companion/status", requireAuth, (req, res) => {
+  app.get("/api/companion/status", requireAuth, requireTier('life_os'), (req, res) => {
     const user = req.user as User;
     const lastSeenAt = companionLastSeenMap.get(user.id);
     res.json({ lastSeenAt: lastSeenAt ? lastSeenAt.toISOString() : null });
@@ -1309,7 +1309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/auth/google - Start Google OAuth flow (generates secure nonce)
    */
-  app.get("/api/auth/google", requireAuth, async (req, res) => {
+  app.get("/api/auth/google", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -1374,7 +1374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * DELETE /api/auth/google - Disconnect Google account
    */
-  app.delete("/api/auth/google", requireAuth, async (req, res) => {
+  app.delete("/api/auth/google", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       await deleteTokens(user.id, 'google');
@@ -1387,7 +1387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/auth/microsoft - Start Microsoft OAuth flow (generates secure nonce)
    */
-  app.get("/api/auth/microsoft", requireAuth, async (req, res) => {
+  app.get("/api/auth/microsoft", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -1452,7 +1452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * DELETE /api/auth/microsoft - Disconnect Microsoft account
    */
-  app.delete("/api/auth/microsoft", requireAuth, async (req, res) => {
+  app.delete("/api/auth/microsoft", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       await deleteTokens(user.id, 'microsoft');
@@ -1671,7 +1671,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/calendar/events/today - Get today's calendar events
    */
-  app.get("/api/calendar/events/today", requireAuth, async (req, res) => {
+  app.get("/api/calendar/events/today", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const events = await getTodaysEvents(user.id);
@@ -1688,7 +1688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * GET /api/calendar/events/current - Get current/relevant event
    */
-  app.get("/api/calendar/events/current", requireAuth, async (req, res) => {
+  app.get("/api/calendar/events/current", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const event = await findRelevantEvent(new Date(), user.id);
@@ -1706,7 +1706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/calendar/events/detect - Detect calendar event from memory text
    * Uses AI to analyze if text describes a future event
    */
-  app.post("/api/calendar/events/detect", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/calendar/events/detect", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const validation = calendarEventDetectSchema.safeParse(req.body);
       if (!validation.success) {
@@ -1730,7 +1730,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * POST /api/calendar/events/create - Create a new calendar event
    * Also checks for duplicate events before creating
    */
-  app.post("/api/calendar/events/create", requireAuth, async (req, res) => {
+  app.post("/api/calendar/events/create", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const validation = calendarEventCreateSchema.safeParse(req.body);
       if (!validation.success) {
@@ -1806,7 +1806,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /**
    * POST /api/calendar/events/check-duplicate - Check if similar event exists
    */
-  app.post("/api/calendar/events/check-duplicate", requireAuth, async (req, res) => {
+  app.post("/api/calendar/events/check-duplicate", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const validation = calendarDuplicateCheckSchema.safeParse(req.body);
       if (!validation.success) {
@@ -2146,7 +2146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const VALID_SORT_FIELDS = ['name', 'relationship', 'priority', 'mentionCount', 'source', 'lastMentioned', 'firstMentioned'] as const;
 
-  app.post("/api/people/find-duplicates", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/people/find-duplicates", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const allPeople = await storage.getPeople(user.id);
@@ -4160,7 +4160,7 @@ Respond with JSON only.`
   /**
    * GET /api/actions - Get user's AI actions with optional status filter, pagination, and date filter
    */
-  app.get("/api/actions", requireAuth, async (req, res) => {
+  app.get("/api/actions", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const statusFilter = req.query.status 
@@ -4209,7 +4209,7 @@ Respond with JSON only.`
    * GET /api/actions/stats - Summary stats for Agent Activity dashboard
    * NOTE: Must be defined BEFORE /api/actions/:id
    */
-  app.get("/api/actions/stats", requireAuth, async (req, res) => {
+  app.get("/api/actions/stats", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const today = new Date();
@@ -4263,7 +4263,7 @@ Respond with JSON only.`
   /**
    * GET /api/actions/pending - Get pending actions awaiting approval
    */
-  app.get("/api/actions/pending", requireAuth, async (req, res) => {
+  app.get("/api/actions/pending", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const pendingActions = await storage.getPendingActions(user.id);
@@ -4282,7 +4282,7 @@ Respond with JSON only.`
   /**
    * GET /api/actions/available - Get available action types with connection status
    */
-  app.get("/api/actions/available", requireAuth, async (req, res) => {
+  app.get("/api/actions/available", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const actionTypes = await getAvailableActionTypes(user.id);
@@ -4301,7 +4301,7 @@ Respond with JSON only.`
    * GET /api/actions/preferences - Get user's action preferences
    * NOTE: Must be defined BEFORE /api/actions/:id to prevent route conflicts
    */
-  app.get("/api/actions/preferences", requireAuth, async (req, res) => {
+  app.get("/api/actions/preferences", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const preferences = await storage.getAiActionPreferences(user.id);
@@ -4320,7 +4320,7 @@ Respond with JSON only.`
    * PUT /api/actions/preferences/:actionType - Update preference for an action type
    * NOTE: Must be defined BEFORE /api/actions/:id to prevent route conflicts
    */
-  app.put("/api/actions/preferences/:actionType", requireAuth, async (req, res) => {
+  app.put("/api/actions/preferences/:actionType", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { actionType } = req.params;
@@ -4350,7 +4350,7 @@ Respond with JSON only.`
   /**
    * GET /api/actions/:id - Get a specific action
    */
-  app.get("/api/actions/:id", requireAuth, async (req, res) => {
+  app.get("/api/actions/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const action = await storage.getAiAction(req.params.id, user.id);
@@ -4372,7 +4372,7 @@ Respond with JSON only.`
   /**
    * POST /api/actions/:id/approve - Approve and execute a pending action
    */
-  app.post("/api/actions/:id/approve", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/actions/:id/approve", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
 
@@ -4423,7 +4423,7 @@ Respond with JSON only.`
   /**
    * POST /api/actions/:id/reject - Reject a pending action
    */
-  app.post("/api/actions/:id/reject", requireAuth, async (req, res) => {
+  app.post("/api/actions/:id/reject", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const bodySchema = z.object({ reason: z.string().max(500).optional() });
@@ -4454,7 +4454,7 @@ Respond with JSON only.`
    * POST /api/actions/:id/rollback - Roll back a completed action
    * Executes compensating actions based on rollbackData, then marks rolledBackAt.
    */
-  app.post("/api/actions/:id/rollback", requireAuth, async (req, res) => {
+  app.post("/api/actions/:id/rollback", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const action = await storage.getAiAction(req.params.id, user.id);
@@ -4517,7 +4517,7 @@ Respond with JSON only.`
    * POST /api/actions/resolve-by-source - Resolve pending actions for a specific memory
    * Used when an action is handled inline (e.g., calendar event created from Log screen)
    */
-  app.post("/api/actions/resolve-by-source", requireAuth, async (req, res) => {
+  app.post("/api/actions/resolve-by-source", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { sourceId, actionType, resolution } = req.body;
@@ -4544,7 +4544,7 @@ Respond with JSON only.`
   /**
    * POST /api/actions/detect - Detect actions from user input (for testing)
    */
-  app.post("/api/actions/detect", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/actions/detect", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const { userInput, timezone } = req.body;
@@ -4929,7 +4929,7 @@ Respond with JSON only.`
   // ============================================
 
   // Get all ideas for user, optionally filtered by stage and/or type
-  app.get("/api/ideas", requireAuth, async (req, res) => {
+  app.get("/api/ideas", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const stage = req.query.stage as string | undefined;
@@ -4943,7 +4943,7 @@ Respond with JSON only.`
   });
 
   // Get single idea with tasks
-  app.get("/api/ideas/:id", requireAuth, async (req, res) => {
+  app.get("/api/ideas/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -4961,7 +4961,7 @@ Respond with JSON only.`
   });
 
   // Create new idea
-  app.post("/api/ideas", requireAuth, async (req, res) => {
+  app.post("/api/ideas", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const parsed = insertIdeaSchema.safeParse(req.body);
@@ -4978,7 +4978,7 @@ Respond with JSON only.`
   });
 
   // Update idea (title, description, stage, type, content, listItems)
-  app.patch("/api/ideas/:id", requireAuth, async (req, res) => {
+  app.patch("/api/ideas/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -5021,7 +5021,7 @@ Respond with JSON only.`
   });
 
   // Delete idea
-  app.delete("/api/ideas/:id", requireAuth, async (req, res) => {
+  app.delete("/api/ideas/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -5038,7 +5038,7 @@ Respond with JSON only.`
   });
 
   // Chat with AI about idea
-  app.post("/api/ideas/:id/chat", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/ideas/:id/chat", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -5216,7 +5216,7 @@ Be encouraging but honest. Keep responses concise and actionable.`;
   });
 
   // Generate tasks from idea using AI
-  app.post("/api/ideas/:id/generate-tasks", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/ideas/:id/generate-tasks", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -5297,7 +5297,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   // Create task for idea
-  app.post("/api/ideas/:ideaId/tasks", requireAuth, async (req, res) => {
+  app.post("/api/ideas/:ideaId/tasks", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { ideaId } = req.params;
@@ -5331,7 +5331,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Update task
-  app.patch("/api/ideas/:ideaId/tasks/:taskId", requireAuth, async (req, res) => {
+  app.patch("/api/ideas/:ideaId/tasks/:taskId", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { ideaId, taskId } = req.params;
@@ -5373,7 +5373,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete task
-  app.delete("/api/ideas/:ideaId/tasks/:taskId", requireAuth, async (req, res) => {
+  app.delete("/api/ideas/:ideaId/tasks/:taskId", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { ideaId, taskId } = req.params;
@@ -5403,7 +5403,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Reorder tasks
-  app.post("/api/ideas/:ideaId/tasks/reorder", requireAuth, async (req, res) => {
+  app.post("/api/ideas/:ideaId/tasks/reorder", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { ideaId } = req.params;
@@ -5431,7 +5431,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   // Get all goals for the user
-  app.get("/api/goals", requireAuth, async (req, res) => {
+  app.get("/api/goals", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const status = req.query.status as string | undefined;
@@ -5443,7 +5443,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get a specific goal
-  app.get("/api/goals/:id", requireAuth, async (req, res) => {
+  app.get("/api/goals/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -5457,7 +5457,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Create a new goal
-  app.post("/api/goals", requireAuth, async (req, res) => {
+  app.post("/api/goals", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const body = { ...req.body };
@@ -5476,7 +5476,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Update a goal
-  app.patch("/api/goals/:id", requireAuth, async (req, res) => {
+  app.patch("/api/goals/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -5528,7 +5528,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete a goal
-  app.delete("/api/goals/:id", requireAuth, async (req, res) => {
+  app.delete("/api/goals/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const deleted = await storage.deleteGoal(req.params.id, user.id);
@@ -5542,7 +5542,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get progress history for a goal
-  app.get("/api/goals/:id/history", requireAuth, async (req, res) => {
+  app.get("/api/goals/:id/history", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -5557,7 +5557,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Analyze goal progress using AI
-  app.post("/api/goals/:id/analyze", requireAuth, withSettings, aiLimiter, async (req, res) => {
+  app.post("/api/goals/:id/analyze", requireAuth, requireTier('pro'), withSettings, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -5611,7 +5611,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get suggested milestones for a goal
-  app.post("/api/goals/:id/suggest-milestones", requireAuth, withSettings, aiLimiter, async (req, res) => {
+  app.post("/api/goals/:id/suggest-milestones", requireAuth, requireTier('pro'), withSettings, aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const goal = await storage.getGoal(req.params.id, user.id);
@@ -5630,7 +5630,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // GET /api/goals/alerts - Get goal-related pattern alerts
-  app.get("/api/goals/alerts", requireAuth, async (req, res) => {
+  app.get("/api/goals/alerts", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const goals = await storage.getActiveGoals(user.id);
@@ -5672,7 +5672,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   // Get all reminders for user
-  app.get("/api/reminders", requireAuth, async (req, res) => {
+  app.get("/api/reminders", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const status = req.query.status as string | undefined;
@@ -5684,7 +5684,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get a specific reminder
-  app.get("/api/reminders/:id", requireAuth, async (req, res) => {
+  app.get("/api/reminders/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const reminder = await storage.getReminder(req.params.id, user.id);
@@ -5698,7 +5698,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Create a new reminder
-  app.post("/api/reminders", requireAuth, async (req, res) => {
+  app.post("/api/reminders", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const body = { ...req.body };
@@ -5723,7 +5723,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Update a reminder
-  app.patch("/api/reminders/:id", requireAuth, async (req, res) => {
+  app.patch("/api/reminders/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const reminder = await storage.getReminder(req.params.id, user.id);
@@ -5759,7 +5759,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete a reminder
-  app.delete("/api/reminders/:id", requireAuth, async (req, res) => {
+  app.delete("/api/reminders/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const deleted = await storage.deleteReminder(req.params.id, user.id);
@@ -5775,7 +5775,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Complete a reminder
-  app.post("/api/reminders/:id/complete", requireAuth, async (req, res) => {
+  app.post("/api/reminders/:id/complete", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const completed = await storage.completeReminder(req.params.id, user.id);
@@ -5791,7 +5791,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Snooze a reminder
-  app.post("/api/reminders/:id/snooze", requireAuth, async (req, res) => {
+  app.post("/api/reminders/:id/snooze", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { minutes = 30 } = req.body;
@@ -5810,7 +5810,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Dismiss a reminder
-  app.post("/api/reminders/:id/dismiss", requireAuth, async (req, res) => {
+  app.post("/api/reminders/:id/dismiss", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const dismissed = await storage.dismissReminder(req.params.id, user.id);
@@ -5826,7 +5826,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Unsnooze a reminder (restore to pending, clear snoozedUntil)
-  app.post("/api/reminders/:id/unsnooze", requireAuth, async (req, res) => {
+  app.post("/api/reminders/:id/unsnooze", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const unsnoozed = await storage.unsnoozeReminder(req.params.id, user.id);
@@ -5842,7 +5842,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Check and trigger due reminders (called on app load/periodic check)
-  app.post("/api/reminders/check-due", requireAuth, async (req, res) => {
+  app.post("/api/reminders/check-due", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const now = new Date();
@@ -5873,7 +5873,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get pending location reminders for location matching
-  app.get("/api/reminders/location-pending", requireAuth, async (req, res) => {
+  app.get("/api/reminders/location-pending", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const reminders = await storage.getPendingLocationReminders(user.id);
@@ -5888,7 +5888,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   // Get location history statistics
-  app.get("/api/locations/stats", requireAuth, async (req, res) => {
+  app.get("/api/locations/stats", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       
@@ -5911,7 +5911,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get location history with pagination
-  app.get("/api/locations", requireAuth, async (req, res) => {
+  app.get("/api/locations", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -5930,7 +5930,7 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
-  app.post("/api/locations/import", requireAuth, express.json({ limit: '50mb' }), async (req, res) => {
+  app.post("/api/locations/import", requireAuth, requireTier('life_os'), express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const user = req.user as User;
       const { jsonContent } = req.body;
@@ -5984,7 +5984,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Import pre-parsed locations (client-side parsing for large files)
-  app.post("/api/locations/import-parsed", requireAuth, async (req, res) => {
+  app.post("/api/locations/import-parsed", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { locations } = req.body;
@@ -6042,7 +6042,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete an import batch
-  app.delete("/api/locations/batch/:batchId", requireAuth, async (req, res) => {
+  app.delete("/api/locations/batch/:batchId", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { batchId } = req.params;
@@ -6059,7 +6059,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete all location history
-  app.delete("/api/locations", requireAuth, async (req, res) => {
+  app.delete("/api/locations", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       
@@ -6079,7 +6079,7 @@ Return ONLY the JSON array, no other text.`;
   // ============================================
 
   // Get all frequent places
-  app.get("/api/locations/places", requireAuth, async (req, res) => {
+  app.get("/api/locations/places", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const places = await storage.getFrequentPlaces(user.id);
@@ -6090,7 +6090,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get hidden frequent places
-  app.get("/api/locations/places/hidden", requireAuth, async (req, res) => {
+  app.get("/api/locations/places/hidden", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const places = await storage.getFrequentPlaces(user.id);
@@ -6101,7 +6101,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Update a frequent place (set name, label, confirm, hide)
-  app.patch("/api/locations/places/:id", requireAuth, async (req, res) => {
+  app.patch("/api/locations/places/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -6130,7 +6130,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Delete a frequent place
-  app.delete("/api/locations/places/:id", requireAuth, async (req, res) => {
+  app.delete("/api/locations/places/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { id } = req.params;
@@ -6147,7 +6147,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Geocode places without addresses
-  app.post("/api/locations/places/geocode", requireAuth, async (req, res) => {
+  app.post("/api/locations/places/geocode", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const places = await storage.getFrequentPlaces(user.id);
@@ -6178,7 +6178,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Deduplicate frequent places (merge nearby duplicates within 200m)
-  app.post("/api/locations/places/deduplicate", requireAuth, async (req, res) => {
+  app.post("/api/locations/places/deduplicate", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const result = await storage.deduplicateFrequentPlaces(user.id);
@@ -6189,7 +6189,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // AI-name unnamed frequent places using OpenAI
-  app.post("/api/locations/places/ai-name", requireAuth, async (req, res) => {
+  app.post("/api/locations/places/ai-name", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const places = await storage.getFrequentPlaces(user.id);
@@ -6260,7 +6260,7 @@ Return ONLY the JSON array, no other text.`;
   });
 
   // Get location context for AI (formatted for briefings)
-  app.get("/api/locations/context", requireAuth, async (req, res) => {
+  app.get("/api/locations/context", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       
@@ -6386,7 +6386,7 @@ Return ONLY the JSON array, no other text.`;
   // MESSAGE IMPORT & BROWSING ROUTES
   // ============================================
 
-  app.post("/api/messages/import", requireAuth, express.json({ limit: '100mb' }), async (req, res) => {
+  app.post("/api/messages/import", requireAuth, requireTier('life_os'), express.json({ limit: '100mb' }), async (req, res) => {
     let importRecord: any = null;
     try {
       const user = req.user as User;
@@ -6468,7 +6468,7 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
-  app.get("/api/messages/imports", requireAuth, async (req, res) => {
+  app.get("/api/messages/imports", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const imports = await storage.getMessageImports(user.id);
@@ -6478,7 +6478,7 @@ Return ONLY the JSON array, no other text.`;
     }
   });
 
-  app.get("/api/messages/conversations", requireAuth, async (req, res) => {
+  app.get("/api/messages/conversations", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -6495,7 +6495,7 @@ Return ONLY the JSON array, no other text.`;
 
   const MESSAGE_SORT_FIELDS = ['contactName', 'platform', 'messageCount', 'lastMessageAt'] as const;
 
-  app.post("/api/messages/ai-search", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/messages/ai-search", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const validation = aiSearchSchema.safeParse(req.body);
@@ -6603,7 +6603,7 @@ Respond with JSON only.`
     }
   });
 
-  app.patch("/api/messages/conversations/:id/name", requireAuth, async (req, res) => {
+  app.patch("/api/messages/conversations/:id/name", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { contactName } = req.body;
@@ -6656,7 +6656,7 @@ Respond with JSON only.`
     }
   });
 
-  app.delete("/api/messages/conversations/:id/relay-messages", requireAuth, async (req, res) => {
+  app.delete("/api/messages/conversations/:id/relay-messages", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const conversation = await storage.getMessageConversation(req.params.id, user.id);
@@ -6670,7 +6670,7 @@ Respond with JSON only.`
     }
   });
 
-  app.delete("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+  app.delete("/api/messages/conversations/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const conversation = await storage.getMessageConversation(req.params.id, user.id);
@@ -6684,7 +6684,7 @@ Respond with JSON only.`
     }
   });
 
-  app.post("/api/messages/conversations/merge", requireAuth, async (req, res) => {
+  app.post("/api/messages/conversations/merge", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const schema = z.object({
@@ -6735,7 +6735,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+  app.get("/api/messages/conversations/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const conversation = await storage.getMessageConversation(req.params.id, user.id);
@@ -6748,7 +6748,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/messages/conversations/:id/messages", requireAuth, async (req, res) => {
+  app.get("/api/messages/conversations/:id/messages", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const conversationId = req.params.id;
@@ -6770,7 +6770,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/messages/by-date", requireAuth, async (req, res) => {
+  app.get("/api/messages/by-date", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const dateStr = req.query.date as string;
@@ -6803,7 +6803,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/messages/stats", requireAuth, async (req, res) => {
+  app.get("/api/messages/stats", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const [totalConversations, totalMessages] = await Promise.all([
@@ -6816,7 +6816,7 @@ Respond with JSON only.`
     }
   });
 
-  app.get("/api/messages/processing-status", requireAuth, async (req, res) => {
+  app.get("/api/messages/processing-status", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const status = await storage.getMessageProcessingStatus(user.id);
@@ -6826,7 +6826,7 @@ Respond with JSON only.`
     }
   });
 
-  app.post("/api/messages/process-ai", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/messages/process-ai", requireAuth, requireTier('life_os'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const limit = parseInt(req.query.limit as string) || 50;
@@ -7188,7 +7188,7 @@ Respond with JSON only.`
   }
 
   /** GET /api/relay/key — return (or auto-generate) the relay API key. Session auth. */
-  app.get("/api/relay/key", requireAuth, async (req, res) => {
+  app.get("/api/relay/key", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       let s = await storage.getSettings(user.id);
@@ -7207,7 +7207,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/relay/key/regenerate — issue a fresh API key. Session auth. */
-  app.post("/api/relay/key/regenerate", requireAuth, async (req, res) => {
+  app.post("/api/relay/key/regenerate", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const key = `rky_${randomUUID().replace(/-/g, '')}`;
@@ -7243,7 +7243,7 @@ Respond with JSON only.`
   });
 
   /** GET /api/relay/destinations */
-  app.get("/api/relay/destinations", requireAuth, async (req, res) => {
+  app.get("/api/relay/destinations", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const dests = await storage.getRelayDestinations(user.id);
@@ -7254,7 +7254,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/relay/destinations */
-  app.post("/api/relay/destinations", requireAuth, async (req, res) => {
+  app.post("/api/relay/destinations", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const schema = z.object({
@@ -7273,7 +7273,7 @@ Respond with JSON only.`
   });
 
   /** PUT /api/relay/destinations/:id */
-  app.put("/api/relay/destinations/:id", requireAuth, async (req, res) => {
+  app.put("/api/relay/destinations/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       // Reuse the canonical insert schema (partial), then override outboundFormat with strict enum validation
@@ -7291,7 +7291,7 @@ Respond with JSON only.`
   });
 
   /** DELETE /api/relay/destinations/:id */
-  app.delete("/api/relay/destinations/:id", requireAuth, async (req, res) => {
+  app.delete("/api/relay/destinations/:id", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const ok = await storage.deleteRelayDestination(req.params.id, user.id);
@@ -7303,7 +7303,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/relay/destinations/:id/test-outbound — send a test ping to a single specific outbound destination */
-  app.post("/api/relay/destinations/:id/test-outbound", requireAuth, async (req, res) => {
+  app.post("/api/relay/destinations/:id/test-outbound", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const { dispatchOutboundToDestination } = await import('./relay-outbound-service');
@@ -7346,7 +7346,7 @@ Respond with JSON only.`
   });
 
   /** GET /api/relay/events — recent relay events for the dashboard */
-  app.get("/api/relay/events", requireAuth, async (req, res) => {
+  app.get("/api/relay/events", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       const user = req.user as User;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
@@ -7412,7 +7412,7 @@ Respond with JSON only.`
    * Falls back to local disk build if present.
    * Returns { available: boolean, url: string, releaseUrl: string, version: string }
    */
-  app.get("/api/android-bridge/apk-info", requireAuth, async (req, res) => {
+  app.get("/api/android-bridge/apk-info", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       // Prefer local disk build (CI artifact deposited here), fall back to GitHub Release
       const { existsSync } = await import("fs");
@@ -7440,7 +7440,7 @@ Respond with JSON only.`
   /**
    * GET /api/android-bridge/apk — redirect to GitHub Release APK or stream local build
    */
-  app.get("/api/android-bridge/apk", requireAuth, async (req, res) => {
+  app.get("/api/android-bridge/apk", requireAuth, requireTier('life_os'), async (req, res) => {
     try {
       // Local build takes priority
       const { existsSync } = await import("fs");
@@ -7584,7 +7584,7 @@ Respond with JSON only.`
   // ─── Profile Observations ───────────────────────────────────────────────────
 
   /** GET /api/profile/observations — list all observations (optionally filtered by status) */
-  app.get("/api/profile/observations", requireAuth, async (req, res) => {
+  app.get("/api/profile/observations", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user!;
       const ALLOWED_STATUSES = ['pending', 'confirmed', 'denied', 'archived'];
@@ -7602,7 +7602,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/profile/observations — create a profile observation directly (confirmed by default) */
-  app.post("/api/profile/observations", requireAuth, async (req, res) => {
+  app.post("/api/profile/observations", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const parseResult = insertProfileObservationSchema.safeParse({ ...req.body, userId: user.id });
@@ -7615,7 +7615,7 @@ Respond with JSON only.`
   });
 
   /** PATCH /api/profile/observations/:id — update observation status (confirmed/denied) */
-  app.patch("/api/profile/observations/:id", requireAuth, async (req, res) => {
+  app.patch("/api/profile/observations/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user!;
       const { id } = req.params;
@@ -7643,7 +7643,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/profile/observations/generate — manually trigger observation generation */
-  app.post("/api/profile/observations/generate", requireAuth, async (req, res) => {
+  app.post("/api/profile/observations/generate", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user!;
       const { generateObservations } = await import('./profile-observation-service');
@@ -7655,7 +7655,7 @@ Respond with JSON only.`
   });
 
   /** POST /api/profile/observations/consolidate — AI dedup/merge suggestions */
-  app.post("/api/profile/observations/consolidate", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/profile/observations/consolidate", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user!;
       const confirmed = await storage.getProfileObservations(user.id, 'confirmed');
@@ -7716,7 +7716,7 @@ Return JSON: { "groups": [ { "indices": [1, 3], "merged": "...", "category": "..
   });
 
   /** POST /api/profile/observations/apply-merge — apply a consolidation merge */
-  app.post("/api/profile/observations/apply-merge", requireAuth, async (req, res) => {
+  app.post("/api/profile/observations/apply-merge", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user!;
       const { keepId, archiveIds, mergedText, category } = req.body as {
@@ -7821,7 +7821,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   }
 
   /** GET /api/chat/sessions — list all sessions for user */
-  app.get("/api/chat/sessions", requireAuth, async (req, res) => {
+  app.get("/api/chat/sessions", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const sessions = await storage.getAiChatSessions(user.id);
@@ -7832,7 +7832,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   });
 
   /** POST /api/chat/sessions — create new session */
-  app.post("/api/chat/sessions", requireAuth, async (req, res) => {
+  app.post("/api/chat/sessions", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const session = await storage.createAiChatSession(user.id, 'New Chat');
@@ -7843,7 +7843,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   });
 
   /** DELETE /api/chat/sessions/:id — delete a session */
-  app.delete("/api/chat/sessions/:id", requireAuth, async (req, res) => {
+  app.delete("/api/chat/sessions/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const deleted = await storage.deleteAiChatSession(req.params.id, user.id);
@@ -7855,7 +7855,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   });
 
   /** PATCH /api/chat/sessions/:id — update session title */
-  app.patch("/api/chat/sessions/:id", requireAuth, async (req, res) => {
+  app.patch("/api/chat/sessions/:id", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const { title } = req.body;
@@ -7869,7 +7869,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   });
 
   /** GET /api/chat/sessions/:id/messages — get messages for a session */
-  app.get("/api/chat/sessions/:id/messages", requireAuth, async (req, res) => {
+  app.get("/api/chat/sessions/:id/messages", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       const session = await storage.getAiChatSession(req.params.id, user.id);
@@ -7882,7 +7882,7 @@ SAVE ACTIONS: If the user says "save that" or types just "save that" / "log that
   });
 
   /** POST /api/chat/sessions/:id/messages — send user message, get AI reply */
-  app.post("/api/chat/sessions/:id/messages", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/chat/sessions/:id/messages", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const { content } = req.body;
@@ -8041,7 +8041,7 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
   });
 
   /** POST /api/chat/sessions/:id/split — AI splits a mixed session into topic-based sessions */
-  app.post("/api/chat/sessions/:id/split", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/chat/sessions/:id/split", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const user = req.user as User;
       const session = await storage.getAiChatSession(req.params.id, user.id);
@@ -8115,7 +8115,7 @@ Rules:
   });
 
   /** POST /api/chat/messages/:id/save — save a message as 'ecosystem' or 'memory' */
-  app.post("/api/chat/messages/:id/save", requireAuth, async (req, res) => {
+  app.post("/api/chat/messages/:id/save", requireAuth, requireTier('pro'), async (req, res) => {
     try {
       const user = req.user as User;
       // Accept both `savedAs` (implementation name) and `type` (spec/documented name)
