@@ -90,6 +90,14 @@ const statusOptions = [
   { value: 'abandoned', label: 'Abandoned', icon: XCircle, color: 'text-gray-500' },
 ];
 
+interface AiProgressSuggestion {
+  progressPercent: number;
+  summary: string;
+  achievements?: string[];
+  blockers?: string[];
+  suggestions?: string[];
+}
+
 export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal, isCreatePending }: GoalModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'details' | 'milestones' | 'progress'>('details');
@@ -98,6 +106,8 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
   const [editedDescription, setEditedDescription] = useState("");
   const [editedTargetDate, setEditedTargetDate] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [localProgress, setLocalProgress] = useState(0);
+  const [aiSuggestion, setAiSuggestion] = useState<AiProgressSuggestion | null>(null);
 
   const { data: goal, isLoading } = useQuery<Goal>({
     queryKey: ['/api/goals', goalId],
@@ -116,11 +126,15 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
       setEditedDescription(goal.description || "");
       setEditedTargetDate(goal.targetDate ? format(new Date(goal.targetDate), 'yyyy-MM-dd') : "");
       setHasUnsavedChanges(false);
+      setLocalProgress(goal.progressPercent);
+      setAiSuggestion(null);
     } else if (isCreating) {
       setEditedTitle("");
       setEditedDescription("");
       setEditedTargetDate("");
       setHasUnsavedChanges(false);
+      setLocalProgress(0);
+      setAiSuggestion(null);
     }
   }, [goal, isCreating]);
 
@@ -159,20 +173,41 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
 
   const analyzeProgressMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/goals/${goalId}/analyze`);
+      const response = await apiRequest("POST", `/api/goals/${goalId}/analyze?suggest=true`);
       if (!response.ok) throw new Error("Failed to analyze progress");
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId] });
-      queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
-      toast({ 
-        title: "Progress analyzed", 
-        description: `Progress updated to ${data.goal.progressPercent}%` 
-      });
+      if (data.analysis) {
+        setAiSuggestion({
+          progressPercent: data.analysis.progressPercent,
+          summary: data.analysis.summary,
+          achievements: data.analysis.achievements,
+          blockers: data.analysis.blockers,
+          suggestions: data.analysis.suggestions,
+        });
+      }
     },
     onError: () => {
       toast({ title: "Failed to analyze progress", variant: "destructive" });
+    },
+  });
+
+  const acceptAiSuggestionMutation = useMutation({
+    mutationFn: async (progress: number) => {
+      const response = await apiRequest("PATCH", `/api/goals/${goalId}`, { progress });
+      if (!response.ok) throw new Error("Failed to apply suggestion");
+      return response.json();
+    },
+    onSuccess: (_data, progress) => {
+      setLocalProgress(progress);
+      setAiSuggestion(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
+      toast({ title: "Progress updated", description: `Set to ${progress}%` });
+    },
+    onError: () => {
+      toast({ title: "Failed to apply suggestion", variant: "destructive" });
     },
   });
 
@@ -257,7 +292,13 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
 
   const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
-    updateGoalMutation.mutate({ progressPercent: value } as any);
+    setLocalProgress(value);
+  };
+
+  const commitProgress = () => {
+    if (localProgress !== goal?.progressPercent) {
+      updateGoalMutation.mutate({ progress: localProgress } as any);
+    }
   };
 
   const milestones = goal?.milestones || [];
@@ -489,8 +530,10 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                   <div className="flex items-center justify-between">
                     <h3 className="font-medium">Progress Tracking</h3>
                     <Button
-                      onClick={() => analyzeProgressMutation.mutate()}
+                      onClick={() => { setAiSuggestion(null); analyzeProgressMutation.mutate(); }}
                       disabled={analyzeProgressMutation.isPending}
+                      variant="outline"
+                      size="sm"
                       className="gap-2"
                     >
                       {analyzeProgressMutation.isPending ? (
@@ -498,36 +541,94 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                       ) : (
                         <Sparkles className="w-4 h-4" />
                       )}
-                      Analyze Progress
+                      Ask Keryx
                     </Button>
                   </div>
 
+                  {/* AI Suggestion callout */}
+                  {aiSuggestion && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                        <Sparkles className="w-4 h-4" />
+                        Keryx suggests {aiSuggestion.progressPercent}%
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{aiSuggestion.summary}</p>
+                      {aiSuggestion.achievements && aiSuggestion.achievements.length > 0 && (
+                        <div className="space-y-1">
+                          {aiSuggestion.achievements.map((a, i) => (
+                            <p key={i} className="text-xs text-green-600 dark:text-green-400">✓ {a}</p>
+                          ))}
+                        </div>
+                      )}
+                      {aiSuggestion.blockers && aiSuggestion.blockers.length > 0 && (
+                        <div className="space-y-1">
+                          {aiSuggestion.blockers.map((b, i) => (
+                            <p key={i} className="text-xs text-orange-600 dark:text-orange-400">⚠ {b}</p>
+                          ))}
+                        </div>
+                      )}
+                      {aiSuggestion.suggestions && aiSuggestion.suggestions.length > 0 && (
+                        <div className="space-y-1">
+                          {aiSuggestion.suggestions.map((s, i) => (
+                            <p key={i} className="text-xs text-blue-600 dark:text-blue-400">→ {s}</p>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          onClick={() => acceptAiSuggestionMutation.mutate(aiSuggestion.progressPercent)}
+                          disabled={acceptAiSuggestionMutation.isPending}
+                          className="gap-2"
+                        >
+                          {acceptAiSuggestionMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                          Accept {aiSuggestion.progressPercent}%
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setAiSuggestion(null)}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual slider */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium">Manual Progress</label>
-                      <span className="text-2xl font-bold">{goal?.progressPercent || 0}%</span>
+                      <span className="text-2xl font-bold">{localProgress}%</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
-                      value={goal?.progressPercent || 0}
+                      value={localProgress}
                       onChange={handleProgressChange}
+                      onMouseUp={commitProgress}
+                      onTouchEnd={commitProgress}
                       className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
                     />
-                    <Progress value={goal?.progressPercent || 0} className="h-3" />
+                    <Progress value={localProgress} className="h-3" />
+                    {updateGoalMutation.isPending && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                      </p>
+                    )}
                   </div>
 
-                  {goal?.aiSummary && (
+                  {goal?.aiSummary && !aiSuggestion && (
                     <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="w-4 h-4 text-primary" />
-                        AI Analysis
+                        Last Keryx Analysis
                       </div>
                       <p className="text-sm text-muted-foreground">{goal.aiSummary}</p>
                       {goal.aiLastAnalyzed && (
                         <p className="text-xs text-muted-foreground">
-                          Last analyzed: {format(new Date(goal.aiLastAnalyzed), 'MMM d, yyyy h:mm a')}
+                          {format(new Date(goal.aiLastAnalyzed), 'MMM d, yyyy h:mm a')}
                         </p>
                       )}
                     </div>

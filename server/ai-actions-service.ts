@@ -1544,6 +1544,40 @@ export async function processUserInputForActions(
     return { actionDetected: false };
   }
   
+  // For goal.update actions: inject goalId from the user's goals list so that
+  // a rename after the action was detected still works on approval.
+  if (detected.actionType === AI_ACTION_TYPES.GOAL_UPDATE && detected.payload) {
+    const gPayload = detected.payload as Record<string, unknown>;
+    if (!gPayload.goalId && gPayload.goalTitle) {
+      try {
+        const { storage: st } = await import('./storage');
+        const userGoals = await st.getGoals(userId);
+        const normalize = (s: string) =>
+          s.toLowerCase().replace(/\d+\s*%/g, '').replace(/\b(goal|progress|update|my|the|a|an|to|for|on)\b/g, '').replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        const wordSet = (s: string) => new Set(normalize(s).split(' ').filter(w => w.length > 2));
+        const overlapScore = (a: string, b: string) => { const wa = wordSet(a); const wb = wordSet(b); let n = 0; for (const w of wa) if (wb.has(w)) n++; return n; };
+        const title = gPayload.goalTitle as string;
+        let matched = userGoals.find(g =>
+          normalize(g.title) === normalize(title) ||
+          g.title.toLowerCase().includes(title.toLowerCase()) ||
+          title.toLowerCase().includes(g.title.toLowerCase())
+        );
+        if (!matched) {
+          let best = 0;
+          for (const g of userGoals) {
+            const sc = overlapScore(g.title, title);
+            if (sc > best) { best = sc; matched = g; }
+          }
+          if (best < 1) matched = undefined;
+        }
+        if (matched) {
+          (detected.payload as Record<string, unknown>).goalId = matched.id;
+          (detected.payload as Record<string, unknown>).goalTitle = matched.title; // sync to current title
+        }
+      } catch { /* non-fatal */ }
+    }
+  }
+
   // Check user's policy for this action type
   const { policy } = await getActionPolicy(userId, detected.actionType);
   

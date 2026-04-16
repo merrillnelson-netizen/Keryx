@@ -5548,6 +5548,13 @@ Return ONLY the JSON array, no other text.`;
         milestones: (Array.isArray(goal.milestones) ? goal.milestones : []) as MilestoneJSON[],
       }, recentMemories, req.userSettings?.sassLevel ?? 50, req.userSettings?.professionalMode ?? false);
       
+      const suggestOnly = req.query.suggest === 'true';
+
+      if (suggestOnly) {
+        // Return suggestion without applying — let the user accept/dismiss in the UI
+        return res.json({ goal, analysis, suggested: true });
+      }
+
       // Update the goal with AI analysis
       const updated = await storage.updateGoal(req.params.id, user.id, {
         progressPercent: analysis.progressPercent,
