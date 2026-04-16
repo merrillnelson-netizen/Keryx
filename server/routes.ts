@@ -398,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Uses AI to classify user input for unified input flow
    * Requires authentication
    */
-  app.post("/api/intent", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
+  app.post("/api/intent", requireAuth, aiLimiter, async (req, res) => {
     try {
       const { text } = req.body;
       

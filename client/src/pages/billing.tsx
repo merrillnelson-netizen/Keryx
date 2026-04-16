@@ -39,11 +39,14 @@ const TIER_FEATURES = {
     { label: "Settings & profile", included: true },
     { label: "PWA install + push notifications", included: true },
     { label: "Billing & founder banner access", included: true },
+    { label: "Sass-o-Meter up to 25 (mild persona)", included: true },
   ],
   pro: [
     { label: "Unlimited memories", included: true },
     { label: "AI tagging on save (mood, people, topics)", included: true },
     { label: "Semantic AI search", included: true },
+    { label: "Ecosystem stats (everything except Plaid)", included: true },
+    { label: "Sass-o-Meter up to 75 (sharper persona)", included: true },
     { label: "Keryx Chat (multi-session)", included: true },
     { label: "AI Profile + observations", included: true },
     { label: "Morning briefings & news feed", included: true },
@@ -63,6 +66,7 @@ const TIER_FEATURES = {
     { label: "Meta Glasses companion", included: true },
     { label: "Financial insights (Plaid)", included: true },
     { label: "Contextual Discoveries (Tavily)", included: true },
+    { label: "Sass-o-Meter up to 100 (full persona)", included: true },
   ],
 };
 
