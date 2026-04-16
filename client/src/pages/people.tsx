@@ -1,5 +1,6 @@
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -472,10 +473,40 @@ export default function People() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading people...</p>
+        <div className="space-y-6">
+          <div className="glass-card p-6 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-12 h-12 rounded-xl" />
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-52" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+            </div>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card
+                key={i}
+                className="glass-card border-white/20"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-5 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </AppLayout>
@@ -1001,15 +1032,16 @@ export default function People() {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayPeople.map((person) => (
+            {displayPeople.map((person, personIndex) => (
               <Card 
                 key={person.id} 
                 data-testid={`person-card-${person.id}`}
                 className={cn(
-                  "glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]",
+                  "glass-card border-white/20 cursor-pointer transition-all hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] animate-fade-in",
                   mergeMode && selectedForMerge.has(person.id) && "ring-2 ring-primary",
                   mergeMode && mergeTarget === person.id && "ring-2 ring-amber-500"
                 )}
+                style={{ animationDelay: `${personIndex * 40}ms`, animationFillMode: 'both' }}
                 onClick={() => {
                   if (mergeMode) {
                     handleToggleMergeSelection(person.id);

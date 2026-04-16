@@ -1904,8 +1904,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = req.user as User;
       
-      // Sync mention counts to ensure accuracy
-      await storage.syncPeopleMentionCounts(user.id);
+      // Sync mention counts in background — do not block the response
+      storage.syncPeopleMentionCounts(user.id).catch(() => {});
       
       const userPeople = await storage.getPeople(user.id);
       

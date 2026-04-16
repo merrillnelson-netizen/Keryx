@@ -142,6 +142,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const autoTriggeredChatRef = useRef(false);
 
   const { data: idea, isLoading } = useQuery<Idea>({
     queryKey: ['/api/ideas', ideaId],
@@ -157,6 +158,25 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [idea?.chatHistory]);
+
+  // Auto-trigger AI suggestions when switching to chat tab on a fresh list
+  useEffect(() => {
+    if (
+      activeTab === 'chat' &&
+      idea &&
+      idea.type === 'list' &&
+      !autoTriggeredChatRef.current &&
+      !chatMutation.isPending &&
+      (!idea.chatHistory || (idea.chatHistory as any[]).length === 0)
+    ) {
+      autoTriggeredChatRef.current = true;
+      const listItems = (idea.listItems as Array<{text: string; isChecked: boolean}>) || [];
+      const prompt = listItems.length === 0
+        ? `I just created a list called "${idea.title}". What items do you suggest I add to it?`
+        : `Here's my list "${idea.title}" with ${listItems.length} item${listItems.length !== 1 ? 's' : ''}. What else might I be missing or should consider adding?`;
+      chatMutation.mutate(prompt);
+    }
+  }, [activeTab, idea?.type, idea?.id]);
 
   useEffect(() => {
     if (!open) {
@@ -176,6 +196,7 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
       setContentSearchQuery("");
       setContentSearchVisible(false);
       setDocumentPreviewMode(false);
+      autoTriggeredChatRef.current = false;
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     }
   }, [open]);
@@ -903,6 +924,19 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                       )}
                     </span>
                   </div>
+                  <div className="mt-2 pt-2 border-t border-dashed flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground flex-1">Ask AI to help with formatting or content</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => setActiveTab('chat')}
+                    >
+                      <MessageCircle className="w-3 h-3" />
+                      Get AI Help
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -1090,21 +1124,36 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                             <p className="text-sm whitespace-pre-wrap">{pendingContentEdit}</p>
                           </div>
                         )}
-                        {pendingListEdit !== null && (
-                          <div className="bg-background rounded border p-2 max-h-[200px] overflow-y-auto space-y-1">
-                            {pendingListEdit.map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-2 text-sm py-1 px-2">
-                                <span className={cn(
-                                  "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0",
-                                  item.isChecked ? "bg-primary border-primary" : "border-muted-foreground/30"
-                                )}>
-                                  {item.isChecked && <CheckCircle2 className="w-3 h-3 text-primary-foreground" />}
-                                </span>
-                                <span className={item.isChecked ? "line-through text-muted-foreground" : ""}>{item.text}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {pendingListEdit !== null && (() => {
+                          const existingTexts = new Set(
+                            ((idea.listItems as Array<{text: string}>) || []).map(i => i.text.trim().toLowerCase())
+                          );
+                          const newItems = pendingListEdit.filter(i => !existingTexts.has(i.text.trim().toLowerCase()));
+                          const keptItems = pendingListEdit.filter(i => existingTexts.has(i.text.trim().toLowerCase()));
+                          return (
+                            <div className="space-y-1.5">
+                              {newItems.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-emerald-500 mb-1 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" />
+                                    {newItems.length} new item{newItems.length !== 1 ? 's' : ''} to add
+                                  </p>
+                                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded p-2 space-y-1">
+                                    {newItems.map((item, idx) => (
+                                      <div key={idx} className="flex items-center gap-2 text-sm py-0.5">
+                                        <Plus className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                                        <span className="text-emerald-700 dark:text-emerald-300">{item.text}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {keptItems.length > 0 && (
+                                <p className="text-xs text-muted-foreground">{keptItems.length} existing item{keptItems.length !== 1 ? 's' : ''} preserved</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -1156,6 +1205,58 @@ export function IdeaModal({ ideaId, open, onOpenChange, onDelete }: IdeaModalPro
                     <div ref={chatEndRef} />
                   </div>
                   
+                  {(ideaType === 'note' || ideaType === 'document' || ideaType === 'list') && (
+                    <div className="flex-shrink-0 flex flex-wrap gap-1.5 mb-2">
+                      {ideaType === 'note' && [
+                        "Fix grammar & spelling",
+                        "Summarize key points",
+                        "Expand this note",
+                        "Add bullet points",
+                        "Make it clearer",
+                      ].map(chip => (
+                        <button
+                          key={chip}
+                          onClick={() => { chatMutation.mutate(chip); }}
+                          disabled={chatMutation.isPending}
+                          className="text-xs px-2.5 py-1 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                      {ideaType === 'document' && [
+                        "Improve structure",
+                        "Improve formatting",
+                        "Add an introduction",
+                        "Add a conclusion",
+                        "Fix grammar",
+                        "Make it clearer",
+                      ].map(chip => (
+                        <button
+                          key={chip}
+                          onClick={() => { chatMutation.mutate(chip); }}
+                          disabled={chatMutation.isPending}
+                          className="text-xs px-2.5 py-1 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                      {ideaType === 'list' && [
+                        "What else should I add?",
+                        "Group these by category",
+                        "Sort by priority",
+                        "Remove duplicates",
+                      ].map(chip => (
+                        <button
+                          key={chip}
+                          onClick={() => { chatMutation.mutate(chip); }}
+                          disabled={chatMutation.isPending}
+                          className="text-xs px-2.5 py-1 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex-shrink-0 flex gap-2 items-end">
                     <Textarea
                       ref={inputRef}
