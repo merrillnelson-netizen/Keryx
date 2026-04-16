@@ -7549,10 +7549,10 @@ Respond with JSON only.`
   app.get("/api/profile/observations", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
-      const ALLOWED_STATUSES = ['pending', 'confirmed', 'denied'];
+      const ALLOWED_STATUSES = ['pending', 'confirmed', 'denied', 'archived'];
       const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
       if (rawStatus && !ALLOWED_STATUSES.includes(rawStatus)) {
-        return res.status(400).json({ error: "Invalid status filter. Allowed: pending, confirmed, denied" });
+        return res.status(400).json({ error: "Invalid status filter. Allowed: pending, confirmed, denied, archived" });
       }
       // Expire stale pending observations before returning
       await storage.expireOldPendingObservations(user.id);
@@ -7582,12 +7582,23 @@ Respond with JSON only.`
       const user = req.user!;
       const { id } = req.params;
       const { status } = req.body;
-      if (!['confirmed', 'denied', 'pending'].includes(status)) {
-        return res.status(400).json({ error: "Status must be 'confirmed', 'denied', or 'pending'" });
+      if (!['confirmed', 'denied', 'pending', 'archived'].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'confirmed', 'denied', 'pending', or 'archived'" });
       }
       const updated = await storage.updateProfileObservationStatus(id, user.id, status);
       if (!updated) return res.status(404).json({ error: "Observation not found" });
-      res.json(updated);
+
+      // Auto-archive overflow: if confirming pushes active set over 20, archive the oldest/lowest-confidence
+      let autoArchivedId: string | null = null;
+      if (status === 'confirmed') {
+        const CONFIRMED_CAP = 20;
+        const count = await storage.getConfirmedObservationsCount(user.id);
+        if (count > CONFIRMED_CAP) {
+          autoArchivedId = await storage.archiveOldestConfirmedObservation(user.id);
+        }
+      }
+
+      res.json({ observation: updated, autoArchivedId });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update observation", error);
     }
@@ -7602,6 +7613,105 @@ Respond with JSON only.`
       res.json({ generated: count });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to generate observations", error);
+    }
+  });
+
+  /** POST /api/profile/observations/consolidate — AI dedup/merge suggestions */
+  app.post("/api/profile/observations/consolidate", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user!;
+      const confirmed = await storage.getProfileObservations(user.id, 'confirmed');
+      if (confirmed.length < 2) {
+        return res.json({ groups: [] });
+      }
+
+      const { openai } = await import('./ai-service');
+      const numberedList = confirmed.map((o, i) => `${i + 1}. [${o.category}] ${o.observation}`).join('\n');
+
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        max_tokens: 1200,
+        temperature: 0.2,
+        messages: [
+          {
+            role: 'system',
+            content: `You are reviewing a user's confirmed profile observations for a personal AI system. Your job is to find groups of observations that overlap, duplicate, or say the same thing with different wording.
+
+For each group you find:
+- List the 1-based indices of the observations in the group (must be 2 or more)
+- Write a single merged observation that captures all the nuance of the group in one concise sentence
+- Pick the best category from: habits, relationships, patterns, interests, goals, communication
+- Write a 1-sentence reason explaining why these overlap
+
+Only flag genuine overlaps. If observations are distinct enough to each stand alone, leave them out.
+If there are no overlaps, return an empty groups array.
+
+Return JSON: { "groups": [ { "indices": [1, 3], "merged": "...", "category": "...", "reason": "..." } ] }`
+          },
+          {
+            role: 'user',
+            content: `Observations:\n${numberedList}\n\nFind overlapping/duplicate groups.`
+          }
+        ]
+      });
+
+      const raw = JSON.parse(response.choices[0].message.content || '{}');
+      const groups: Array<{ indices: number[]; merged: string; category: string; reason: string }> = Array.isArray(raw.groups) ? raw.groups : [];
+
+      // Map indices back to observation IDs for the frontend
+      const result = groups
+        .filter(g => Array.isArray(g.indices) && g.indices.length >= 2 && typeof g.merged === 'string')
+        .map(g => ({
+          observationIds: g.indices.map((i: number) => confirmed[i - 1]?.id).filter(Boolean),
+          observations: g.indices.map((i: number) => confirmed[i - 1]).filter(Boolean),
+          merged: g.merged.trim(),
+          category: g.category || 'patterns',
+          reason: g.reason || '',
+        }))
+        .filter(g => g.observationIds.length >= 2);
+
+      res.json({ groups: result, totalConfirmed: confirmed.length });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to consolidate observations", error);
+    }
+  });
+
+  /** POST /api/profile/observations/apply-merge — apply a consolidation merge */
+  app.post("/api/profile/observations/apply-merge", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const { keepId, archiveIds, mergedText, category } = req.body as {
+        keepId: string;
+        archiveIds: string[];
+        mergedText: string;
+        category: string;
+      };
+
+      if (!keepId || !Array.isArray(archiveIds) || !mergedText) {
+        return res.status(400).json({ error: "keepId, archiveIds, and mergedText are required" });
+      }
+
+      // Update the kept observation with the merged text
+      await storage.updateProfileObservationStatus(keepId, user.id, 'confirmed');
+      // Also update the observation text — use a raw update since we only have a status updater
+      const { db } = await import('./db');
+      const { profileObservations } = await import('@shared/schema');
+      const { eq, and } = await import('drizzle-orm');
+      await db.update(profileObservations)
+        .set({ observation: mergedText.trim(), category, reviewedAt: new Date() })
+        .where(and(eq(profileObservations.id, keepId), eq(profileObservations.userId, user.id)));
+
+      // Archive the duplicates
+      for (const archiveId of archiveIds) {
+        if (archiveId !== keepId) {
+          await storage.updateProfileObservationStatus(archiveId, user.id, 'archived');
+        }
+      }
+
+      res.json({ success: true, archivedCount: archiveIds.length });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to apply merge", error);
     }
   });
 

@@ -33,7 +33,7 @@ import {
   type AiChatMessage, type InsertAiChatMessage,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, or, gte, lte, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -243,7 +243,9 @@ export interface IStorage {
   getProfileObservations(userId: string, status?: string): Promise<ProfileObservation[]>;
   createProfileObservation(data: InsertProfileObservation): Promise<ProfileObservation>;
   updateProfileObservationStatus(id: string, userId: string, status: string): Promise<ProfileObservation | undefined>;
-  getConfirmedObservationsText(userId: string): Promise<string>;
+  getConfirmedObservationsText(userId: string, limit?: number): Promise<string>;
+  getConfirmedObservationsCount(userId: string): Promise<number>;
+  archiveOldestConfirmedObservation(userId: string): Promise<string | null>;
   expireOldPendingObservations(userId: string): Promise<void>;
 
   // AI Chat Sessions & Messages
@@ -3153,13 +3155,38 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getConfirmedObservationsText(userId: string): Promise<string> {
-    const confirmed = await db.select({ observation: profileObservations.observation })
+  async getConfirmedObservationsText(userId: string, limit = 20): Promise<string> {
+    // Cap at `limit` (default 20) — ordered by highest confidence first, then most recent.
+    // Beyond ~20 confirmed facts the signal-to-noise ratio degrades and context bloat hurts quality.
+    const confirmed = await db.select({ observation: profileObservations.observation, confidence: profileObservations.confidence })
       .from(profileObservations)
       .where(and(eq(profileObservations.userId, userId), eq(profileObservations.status, 'confirmed')))
-      .orderBy(desc(profileObservations.createdAt));
+      .orderBy(desc(profileObservations.confidence), desc(profileObservations.createdAt))
+      .limit(limit);
     if (confirmed.length === 0) return '';
     return confirmed.map(r => `• ${r.observation}`).join('\n');
+  }
+
+  async getConfirmedObservationsCount(userId: string): Promise<number> {
+    const rows = await db.select({ id: profileObservations.id })
+      .from(profileObservations)
+      .where(and(eq(profileObservations.userId, userId), eq(profileObservations.status, 'confirmed')));
+    return rows.length;
+  }
+
+  async archiveOldestConfirmedObservation(userId: string): Promise<string | null> {
+    // Find the lowest-confidence + oldest confirmed observation and archive it.
+    const candidate = await db.select({ id: profileObservations.id })
+      .from(profileObservations)
+      .where(and(eq(profileObservations.userId, userId), eq(profileObservations.status, 'confirmed')))
+      .orderBy(asc(profileObservations.confidence), asc(profileObservations.createdAt))
+      .limit(1);
+    if (candidate.length === 0) return null;
+    const id = candidate[0].id;
+    await db.update(profileObservations)
+      .set({ status: 'archived', reviewedAt: new Date() })
+      .where(and(eq(profileObservations.id, id), eq(profileObservations.userId, userId)));
+    return id;
   }
 
   async expireOldPendingObservations(userId: string): Promise<void> {

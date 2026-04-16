@@ -8,11 +8,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import type { Settings, ProfileObservation } from "@shared/schema";
 import {
   UserCircle, Sparkles, Check, X, RefreshCw, Loader2, Save,
   Brain, ChevronDown, ChevronUp, RotateCcw, PenLine,
+  Archive, Merge, AlertTriangle, Combine,
 } from "lucide-react";
+
+const CONFIRMED_CAP = 20;
 
 const CATEGORY_COLORS: Record<string, string> = {
   habits:        "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -25,6 +29,14 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const USER_WORD_COLOR = "bg-amber-500/20 text-amber-400 border-amber-500/30";
 const USER_WORD_DOT   = "bg-amber-500/40 border-amber-500/60";
+
+interface MergeGroup {
+  observationIds: string[];
+  observations: ProfileObservation[];
+  merged: string;
+  category: string;
+  reason: string;
+}
 
 function parseUserWords(text: string): string[] {
   return text
@@ -97,18 +109,23 @@ function CombinedProfileList({
   userWords,
   onAiRemove,
   onAiUndo,
+  onAiArchive,
   onUserRemove,
-  onUserMoveToWords,
   aiPending,
   userPending,
+  onConsolidate,
+  consolidating,
 }: {
   confirmed: ProfileObservation[];
   userWords: string[];
   onAiRemove: (id: string) => void;
   onAiUndo: (id: string) => void;
+  onAiArchive: (id: string) => void;
   onUserRemove: (text: string) => void;
   aiPending: boolean;
   userPending: boolean;
+  onConsolidate: () => void;
+  consolidating: boolean;
 }) {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
@@ -118,23 +135,54 @@ function CombinedProfileList({
   ];
 
   const totalCount = items.length;
+  const aiCount = confirmed.length;
+  const isNearCap = aiCount >= CONFIRMED_CAP - 5;
+  const isAtCap = aiCount >= CONFIRMED_CAP;
+
   if (totalCount === 0) return null;
 
   return (
     <Card className="glass-card border-white/20">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Check className="w-4 h-4 text-green-400" />
-          Active Profile Context
-          <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-            {totalCount}
-          </Badge>
-        </CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          Everything here is fed into Keryx's AI context.{" "}
-          <span className="text-amber-400/80">Amber</span> = your own words.{" "}
-          Colored dots = AI observations. Tap any item to manage it.
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Check className="w-4 h-4 text-green-400" />
+              Active Profile Context
+              <Badge className={cn(
+                "text-xs",
+                isAtCap ? "bg-red-500/20 text-red-400 border-red-500/30"
+                  : isNearCap ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+                  : "bg-green-500/20 text-green-400 border-green-500/30"
+              )}>
+                {aiCount}/{CONFIRMED_CAP} AI · {userWords.length} yours
+              </Badge>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Everything here is fed into Keryx's AI context (top {CONFIRMED_CAP} AI facts by quality).{" "}
+              <span className="text-amber-400/80">Amber</span> = your own words.{" "}
+              Colored dots = AI observations. Tap any item to manage it.
+            </p>
+            {isAtCap && (
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-orange-400/80">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                At the 20-observation limit — new confirms will auto-archive the lowest-quality one.
+              </div>
+            )}
+          </div>
+          {aiCount >= 3 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs gap-1.5 shrink-0 border-white/20 text-muted-foreground hover:text-foreground"
+              onClick={onConsolidate}
+              disabled={consolidating}
+            >
+              {consolidating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Combine className="w-3 h-3" />}
+              Consolidate
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <div className="divide-y divide-white/5">
@@ -216,7 +264,7 @@ function CombinedProfileList({
                         {item.obs.evidenceSummary}
                       </p>
                     )}
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1 flex-wrap">
                       <Button
                         size="sm"
                         variant="ghost"
@@ -226,6 +274,16 @@ function CombinedProfileList({
                       >
                         <RotateCcw className="w-3 h-3" />
                         Move back to pending
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                        disabled={aiPending}
+                        onClick={() => { onAiArchive(item.obs.id); setExpandedKey(null); }}
+                      >
+                        <Archive className="w-3 h-3" />
+                        Archive
                       </Button>
                       <Button
                         size="sm"
@@ -249,10 +307,100 @@ function CombinedProfileList({
   );
 }
 
+function ConsolidatePanel({
+  groups,
+  onAccept,
+  onSkip,
+  applyPending,
+  onDone,
+}: {
+  groups: MergeGroup[];
+  onAccept: (group: MergeGroup) => void;
+  onSkip: (index: number) => void;
+  applyPending: boolean;
+  onDone: () => void;
+}) {
+  if (groups.length === 0) {
+    return (
+      <Card className="glass-card border-green-500/20 bg-green-500/5">
+        <CardContent className="py-6 text-center space-y-2">
+          <Check className="w-8 h-8 text-green-400 mx-auto" />
+          <p className="text-sm font-medium text-foreground">No duplicates found</p>
+          <p className="text-xs text-muted-foreground">Your profile observations are already distinct.</p>
+          <Button size="sm" variant="ghost" onClick={onDone} className="mt-2">Close</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="glass-card border-primary/20 bg-primary/5">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Combine className="w-4 h-4 text-primary" />
+            {groups.length} merge suggestion{groups.length !== 1 ? 's' : ''} found
+          </CardTitle>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={onDone}>
+            Done
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Accept a merge to replace overlapping observations with a single refined one. Originals are archived, not deleted.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {groups.map((group, idx) => (
+          <div key={idx} className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+            <p className="text-xs text-muted-foreground italic">{group.reason}</p>
+            <div className="space-y-1.5">
+              {group.observations.map(obs => (
+                <div key={obs.id} className="flex items-start gap-2">
+                  <span className="text-muted-foreground/50 text-xs mt-0.5 shrink-0">→</span>
+                  <p className="text-xs text-muted-foreground line-through leading-snug">{obs.observation}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
+              <p className="text-xs font-medium text-primary mb-1">Merged into:</p>
+              <p className="text-sm text-foreground leading-snug">{group.merged}</p>
+              <Badge variant="outline" className={cn("text-xs mt-2", CATEGORY_COLORS[group.category] ?? "bg-muted/20 text-muted-foreground border-muted/30")}>
+                {group.category}
+              </Badge>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => onAccept(group)}
+                disabled={applyPending}
+                className="gap-1.5"
+              >
+                {applyPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Merge className="w-3 h-3" />}
+                Accept merge
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onSkip(idx)}
+                disabled={applyPending}
+                className="text-muted-foreground"
+              >
+                Skip
+              </Button>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProfilePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [userProfile, setUserProfile] = useState("");
+  const [mergeGroups, setMergeGroups] = useState<MergeGroup[] | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -272,6 +420,7 @@ export default function ProfilePage() {
 
   const pending   = observations.filter(o => o.status === 'pending');
   const confirmed = observations.filter(o => o.status === 'confirmed');
+  const archived  = observations.filter(o => o.status === 'archived');
   const userWords = parseUserWords(settings?.userProfile ?? "");
 
   const saveProfileMutation = useMutation({
@@ -284,10 +433,16 @@ export default function ProfilePage() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'confirmed' | 'denied' | 'pending' }) =>
-      apiRequest("PATCH", `/api/profile/observations/${id}`, { status }),
-    onSuccess: () => {
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest("PATCH", `/api/profile/observations/${id}`, { status }).then(r => r.json()),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/profile/observations"] });
+      if (data?.autoArchivedId) {
+        toast({
+          title: "Observation confirmed",
+          description: "You're at the 20-observation limit — the lowest-quality one was auto-archived to keep your AI context clean.",
+        });
+      }
     },
     onError: () => toast({ title: "Failed to update observation", variant: "destructive" }),
   });
@@ -304,6 +459,34 @@ export default function ProfilePage() {
       });
     },
     onError: () => toast({ title: "Failed to generate observations", variant: "destructive" }),
+  });
+
+  const consolidateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/profile/observations/consolidate", {}).then(r => r.json()),
+    onSuccess: (data) => {
+      setMergeGroups(data.groups ?? []);
+    },
+    onError: () => toast({ title: "Failed to consolidate observations", variant: "destructive" }),
+  });
+
+  const applyMergeMutation = useMutation({
+    mutationFn: async (group: MergeGroup) => {
+      const keepId = group.observationIds[0];
+      const archiveIds = group.observationIds.slice(1);
+      return apiRequest("POST", "/api/profile/observations/apply-merge", {
+        keepId,
+        archiveIds,
+        mergedText: group.merged,
+        category: group.category,
+      }).then(r => r.json());
+    },
+    onSuccess: (_data, group) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/profile/observations"] });
+      // Remove the accepted group from the panel
+      setMergeGroups(prev => prev?.filter(g => g.observationIds[0] !== group.observationIds[0]) ?? null);
+      toast({ title: "Merged", description: `${group.observationIds.length} observations consolidated into one.` });
+    },
+    onError: () => toast({ title: "Failed to apply merge", variant: "destructive" }),
   });
 
   function handleUserRemove(text: string) {
@@ -421,6 +604,17 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        {/* Consolidate panel (shown after consolidate runs) */}
+        {mergeGroups !== null && (
+          <ConsolidatePanel
+            groups={mergeGroups}
+            onAccept={(group) => applyMergeMutation.mutate(group)}
+            onSkip={(idx) => setMergeGroups(prev => prev?.filter((_, i) => i !== idx) ?? null)}
+            applyPending={applyMergeMutation.isPending}
+            onDone={() => setMergeGroups(null)}
+          />
+        )}
+
         {/* Unified Active Profile Context */}
         {(confirmed.length > 0 || userWords.length > 0) && (
           <CombinedProfileList
@@ -428,10 +622,66 @@ export default function ProfilePage() {
             userWords={userWords}
             onAiRemove={(id) => reviewMutation.mutate({ id, status: 'denied' })}
             onAiUndo={(id) => reviewMutation.mutate({ id, status: 'pending' })}
+            onAiArchive={(id) => reviewMutation.mutate({ id, status: 'archived' })}
             onUserRemove={handleUserRemove}
             aiPending={reviewMutation.isPending}
             userPending={saveProfileMutation.isPending}
+            onConsolidate={() => consolidateMutation.mutate()}
+            consolidating={consolidateMutation.isPending}
           />
+        )}
+
+        {/* Archived observations — collapsed by default */}
+        {archived.length > 0 && (
+          <Card className="glass-card border-white/10 opacity-75">
+            <CardHeader className="pb-0">
+              <button
+                className="w-full flex items-center justify-between"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Archive className="w-4 h-4" />
+                  Archived Observations
+                  <Badge variant="outline" className="text-xs bg-muted/20 text-muted-foreground border-muted/30">
+                    {archived.length}
+                  </Badge>
+                </div>
+                {showArchived ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              </button>
+            </CardHeader>
+            {showArchived && (
+              <CardContent className="pt-3">
+                <p className="text-xs text-muted-foreground mb-3">
+                  These are not fed into AI context. Restore any back to active if they're relevant again.
+                </p>
+                <div className="divide-y divide-white/5">
+                  {archived.map(obs => {
+                    const colorClass = CATEGORY_COLORS[obs.category] ?? "bg-muted/20 text-muted-foreground border-muted/30";
+                    return (
+                      <div key={obs.id} className="py-3 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className={`text-xs shrink-0 ${colorClass}`}>
+                            {obs.category}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground leading-snug">{obs.observation}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                          disabled={reviewMutation.isPending}
+                          onClick={() => reviewMutation.mutate({ id: obs.id, status: 'confirmed' })}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Restore to active
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            )}
+          </Card>
         )}
       </div>
     </AppLayout>
