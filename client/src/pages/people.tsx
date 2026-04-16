@@ -608,7 +608,8 @@ export default function People() {
                 <Input
                   value={aiQuery}
                   onChange={(e) => setAiQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
+                  onKeyDown={(e) => e.key === 'Enter' && (hasPro ? handleAiSearch() : navigate('/billing'))}
+                  disabled={!hasPro}
                   placeholder={mergeMode ? "Search or say 'find duplicates'..." : "Ask AI: sort by closeness, show family, find duplicates..."}
                   className="pl-9 pr-9 bg-white/5 border-white/20 focus:border-primary/50"
                   data-testid="ai-search-input"

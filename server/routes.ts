@@ -459,18 +459,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         && (!user.currentPeriodEnd || new Date(user.currentPeriodEnd) > new Date());
       const aiTaggingAllowed = !billingActive || (userTierRank >= 1 && subActive);
 
-      const emptyExtracted = {
+      const emptyExtracted: import("./ai-service").ExtractedMetadata = {
         topicTag: 'general',
         metadataJson: {},
-        mood: undefined as string | undefined,
-        moodScore: undefined as number | undefined,
-        detectedPeople: [] as string[],
-        aiReasoning: undefined as any,
+        mood: 'neutral',
+        moodScore: 0,
+        detectedPeople: [],
       };
 
       // Run AI metadata extraction (Pro+ only), embedding generation, and settings fetch in parallel
       const [extracted, embeddingVector, settingsForCalendar] = await Promise.all([
-        aiTaggingAllowed ? extractMetadata(memoryText, timezone) : Promise.resolve(emptyExtracted as any),
+        aiTaggingAllowed ? extractMetadata(memoryText, timezone) : Promise.resolve(emptyExtracted),
         generateEmbedding(memoryText),
         storage.getSettings(user.id),
       ]);
