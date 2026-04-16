@@ -1,5 +1,6 @@
 import AppLayout from "@/components/app-layout";
 import { TierGate } from "@/components/tier-gate";
+import { useBillingTier } from "@/hooks/use-billing-tier";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,9 +43,11 @@ interface BackfillStatus {
 }
 
 function ProfileSummaryCard({ navigate }: { navigate: (to: string) => void }) {
+  const { hasTier: hasTierProfile } = useBillingTier();
   const { data: observations = [] } = useQuery<{ id: string; status: string }[]>({
     queryKey: ["/api/profile/observations"],
     staleTime: 60_000,
+    enabled: hasTierProfile("pro"),
   });
   const { data: settings } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -170,14 +173,19 @@ export default function SettingsPage() {
     provider?: string;
   }
   
+  const { hasTier: hasTierSettings } = useBillingTier();
+  const canUseActions = hasTierSettings("life_os");
+
   const { data: availableActions = [] } = useQuery<AvailableActionType[]>({
     queryKey: ["/api/actions/available"],
     staleTime: 1000 * 60 * 10, // 10 minutes
+    enabled: canUseActions,
   });
 
   const { data: actionPreferences = [] } = useQuery<AiActionPreference[]>({
     queryKey: ["/api/actions/preferences"],
     staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: canUseActions,
   });
 
   const updateSettingsMutation = useMutation({

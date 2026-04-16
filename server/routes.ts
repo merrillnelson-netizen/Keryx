@@ -1341,6 +1341,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/auth/google/callback - Google OAuth callback (validates nonce)
+   * NOTE: Intentionally NOT tier-gated. The OAuth provider (Google) calls this
+   * URL during the redirect handshake. The corresponding *start* endpoint is
+   * already gated to Pro, so a non-entitled user cannot reach this callback
+   * with a valid state/nonce in the first place.
    */
   app.get("/api/auth/google/callback", async (req, res) => {
     try {
@@ -1419,6 +1423,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   /**
    * GET /api/auth/microsoft/callback - Microsoft OAuth callback (validates nonce)
+   * NOTE: Intentionally NOT tier-gated. Same rationale as the Google callback —
+   * the *start* endpoint is gated to Pro, so non-entitled users cannot reach
+   * this callback with a valid state/nonce.
    */
   app.get("/api/auth/microsoft/callback", async (req, res) => {
     try {
