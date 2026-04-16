@@ -290,17 +290,18 @@ export default function Billing() {
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base text-yellow-300">
                 <Crown className="w-5 h-5 text-yellow-400" />
-                Founding Member Rate — $8/mo Life OS forever
+                Last Call — 48 hours left for $8/mo Life OS forever
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-yellow-400/80 leading-relaxed">
-                Before billing goes live, you can lock in <strong className="text-yellow-300">Life OS for $8/month forever</strong> —
+                Final stretch. After Monday the founding rate is gone for good. Lock in{" "}
+                <strong className="text-yellow-300">Life OS for $8/month forever</strong> —
                 that's 33% off the regular price. Use code{" "}
                 <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
               </p>
               <p className="text-sm font-semibold text-amber-400">
-                {spotsRemaining} of 50 founding spots left
+                Deal ends Monday • {spotsRemaining} of 50 spots still open
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 {spotsRemaining === 0 ? (

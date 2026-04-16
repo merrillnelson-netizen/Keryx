@@ -257,15 +257,15 @@ function FoundingMemberBanner() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-yellow-300">
-              Founding Member offer — lock in $8/month before we launch
+              Last Call — 48 hours left for $8/mo Life OS forever
             </p>
             <p className="text-xs text-yellow-400/80 mt-0.5 leading-relaxed">
-              Keryx is transitioning to a paid service soon. Early users can lock in
+              Final stretch. After Monday the founding rate is gone for good. Lock in
               <strong className="text-yellow-300"> Life OS for $8/mo forever</strong> — that's 33% off — using
               code <span className="font-mono bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200">FOUNDING8</span> at checkout.
             </p>
             <p className="text-xs font-semibold text-amber-400 mt-1">
-              {spotsRemaining} of 50 founding spots left
+              Deal ends Monday • {spotsRemaining} of 50 spots still open
             </p>
           </div>
         </div>
