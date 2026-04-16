@@ -1061,7 +1061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Useful for testing, importing data, or manual creation
    * Requires authentication
    */
-  app.post("/api/logs", requireAuth, async (req, res) => {
+  app.post("/api/logs", requireAuth, requireMemoryQuota(), async (req, res) => {
     try {
       const user = req.user as User;
       const { memoryText, topicTag, metadataJson } = req.body;
@@ -3257,7 +3257,6 @@ Respond with JSON only.`
             );
             const fullHasStories = (fullFeed as PersonalNewsFeed).stories?.length > 0;
             await storage.setAiCache(user.id, 'newsfeed', cacheKey, fullFeed, memoriesHash, recentMemories.length, fullHasStories ? 30 : 3);
-            console.log(`[news-feed] Background full generation complete for user ${user.id.slice(0, 8)} (${(fullFeed as PersonalNewsFeed).stories?.length} stories)`);
           } catch (bgErr) {
             console.warn('[news-feed] Background full generation failed:', bgErr instanceof Error ? bgErr.message : bgErr);
           }
@@ -4781,8 +4780,10 @@ Respond with JSON only.`
       const user = req.user as User;
       const { itemId } = req.params;
       
-      const result = await plaidService.syncTransactions(user.id, itemId);
-      await plaidService.updateAccountBalances(user.id, itemId);
+      const [result] = await Promise.all([
+        plaidService.syncTransactions(user.id, itemId),
+        plaidService.updateAccountBalances(user.id, itemId),
+      ]);
       
       res.json({
         status: 'success',
