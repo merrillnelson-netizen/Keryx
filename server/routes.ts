@@ -8039,6 +8039,80 @@ Keep each text to 1-2 sentences max. Only return 2-3 candidates. If nothing is w
     }
   });
 
+  /** POST /api/chat/sessions/:id/split — AI splits a mixed session into topic-based sessions */
+  app.post("/api/chat/sessions/:id/split", requireAuth, aiLimiter, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const session = await storage.getAiChatSession(req.params.id, user.id);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
+      const messages = await storage.getAiChatMessages(req.params.id, user.id);
+      if (messages.length < 6) {
+        return res.status(400).json({ error: "Session is too short to split meaningfully" });
+      }
+
+      const messageList = messages.map((m, i) =>
+        `[${i}] ${m.role.toUpperCase()}: ${m.content.substring(0, 300)}`
+      ).join('\n');
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [{
+          role: 'system',
+          content: `Analyze this conversation and identify distinct topic groups. Return JSON:
+{"groups": [{"title": "Short 3-5 word topic title", "messageIndexes": [0, 1, 2]}]}
+
+Rules:
+- Include ALL message indexes from 0 to ${messages.length - 1}
+- Each index appears in exactly one group
+- Include surrounding context — do not orphan single messages
+- Return 2-4 groups. If truly one topic, return exactly 1 group with all indexes
+- Titles should be descriptive (e.g. "KTM Bike Maintenance", "Career Planning", "Weekend Trip Ideas")`
+        }, {
+          role: 'user',
+          content: `Conversation:\n${messageList}`
+        }],
+        max_tokens: 400,
+        temperature: 0.3,
+      });
+
+      const raw = completion.choices[0]?.message?.content || '{}';
+      let groups: Array<{ title: string; messageIndexes: number[] }> = [];
+      try {
+        const parsed = JSON.parse(raw);
+        groups = Array.isArray(parsed.groups) ? parsed.groups : [];
+      } catch { groups = []; }
+
+      if (groups.length <= 1) {
+        return res.json({ split: false, message: "This conversation appears to be one cohesive topic — nothing to split" });
+      }
+
+      const createdSessions: Awaited<ReturnType<typeof storage.createAiChatSession>>[] = [];
+      for (const group of groups.slice(0, 4)) {
+        try {
+          const newSession = await storage.createAiChatSession(user.id, group.title || 'Split Chat');
+          for (const idx of (group.messageIndexes || [])) {
+            const msg = messages[idx];
+            if (msg) {
+              await storage.createAiChatMessage({
+                sessionId: newSession.id,
+                userId: user.id,
+                role: msg.role,
+                content: msg.content,
+              });
+            }
+          }
+          createdSessions.push(newSession);
+        } catch (_) { /* non-fatal if one group fails */ }
+      }
+
+      res.json({ split: true, sessions: createdSessions });
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to split session", error);
+    }
+  });
+
   /** POST /api/chat/messages/:id/save — save a message as 'ecosystem' or 'memory' */
   app.post("/api/chat/messages/:id/save", requireAuth, async (req, res) => {
     try {
