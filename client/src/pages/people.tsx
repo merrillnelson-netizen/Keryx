@@ -8,7 +8,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mail, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle, Activity } from "lucide-react";
+import { Users, User, MessageSquare, Edit2, Trash2, LayoutGrid, Table as TableIcon, Merge, X, Sparkles, Search, Loader2, Brain, MessagesSquare, Phone, Mail, Mic, MicOff, ScanSearch, Shield, ShieldAlert, ShieldQuestion, BookOpen, MessageCircle, Activity, Lock } from "lucide-react";
+import { useLocation } from "wouter";
+import { useBillingTier } from "@/hooks/use-billing-tier";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -63,6 +65,9 @@ const RELATIONSHIP_OPTIONS = [
 ];
 
 export default function People() {
+  const [, navigate] = useLocation();
+  const { hasTier } = useBillingTier();
+  const hasPro = hasTier('pro');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [deletingPerson, setDeletingPerson] = useState<Person | null>(null);
@@ -637,12 +642,15 @@ export default function People() {
                 </Button>
               )}
               <Button
-                onClick={handleAiSearch}
-                disabled={!aiQuery.trim() || aiSearchMutation.isPending}
+                onClick={hasPro ? handleAiSearch : () => navigate('/billing')}
+                disabled={hasPro ? (!aiQuery.trim() || aiSearchMutation.isPending) : false}
                 className="bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90 gap-2 shrink-0"
+                title={hasPro ? "Search with AI" : "Pro feature — tap to upgrade"}
                 data-testid="ai-search-button"
               >
-                {aiSearchMutation.isPending ? (
+                {!hasPro ? (
+                  <Lock className="w-4 h-4" />
+                ) : aiSearchMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Sparkles className="w-4 h-4" />
@@ -650,13 +658,15 @@ export default function People() {
                 <span className="hidden sm:inline">AI Search</span>
               </Button>
               <Button
-                onClick={() => findDuplicatesMutation.mutate()}
-                disabled={findDuplicatesMutation.isPending}
+                onClick={hasPro ? () => findDuplicatesMutation.mutate() : () => navigate('/billing')}
+                disabled={hasPro ? findDuplicatesMutation.isPending : false}
                 className="bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 gap-2 shrink-0"
-                title="AI finds potential duplicate records"
+                title={hasPro ? "AI finds potential duplicate records" : "Pro feature — tap to upgrade"}
                 data-testid="find-duplicates-button"
               >
-                {findDuplicatesMutation.isPending ? (
+                {!hasPro ? (
+                  <Lock className="w-4 h-4" />
+                ) : findDuplicatesMutation.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <ScanSearch className="w-4 h-4" />

@@ -31,11 +31,13 @@ import {
   CheckCircle2,
   Clock,
   Brain,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import PendingActions from "@/components/pending-actions";
 import ContextualDiscoveries from "@/components/contextual-discoveries";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useBillingTier } from "@/hooks/use-billing-tier";
 
 interface MorningBriefing {
   greeting: string;
@@ -385,6 +387,8 @@ function AgentActivityWidget() {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
+  const { hasTier } = useBillingTier();
+  const hasPro = hasTier('pro');
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   
   const { data: briefingData, isLoading: briefingLoading, isFetching: briefingFetching, refetch: refetchBriefing } = useQuery<BriefingResponse>({
@@ -749,8 +753,13 @@ export default function Dashboard() {
                   <Brain className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">Cognitive Insights</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Patterns, synthesis &amp; AI analysis</p>
+                  <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    Cognitive Insights
+                    {!hasPro && <Lock className="w-3 h-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {hasPro ? "Patterns, synthesis & AI analysis" : "Pro — patterns, synthesis & AI analysis"}
+                  </p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-purple-400 transition-colors flex-shrink-0" />
               </div>
@@ -767,8 +776,13 @@ export default function Dashboard() {
                   <Activity className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">Ecosystem View</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Life at a glance — all data sources</p>
+                  <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    Ecosystem View
+                    {!hasPro && <Lock className="w-3 h-3 text-muted-foreground" />}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {hasPro ? "Life at a glance — all data sources" : "Pro — life at a glance, all data sources"}
+                  </p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-indigo-400 transition-colors flex-shrink-0" />
               </div>

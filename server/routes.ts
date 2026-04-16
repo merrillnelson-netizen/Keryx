@@ -398,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
    * Uses AI to classify user input for unified input flow
    * Requires authentication
    */
-  app.post("/api/intent", requireAuth, aiLimiter, async (req, res) => {
+  app.post("/api/intent", requireAuth, requireTier('pro'), aiLimiter, async (req, res) => {
     try {
       const { text } = req.body;
       
@@ -7188,7 +7188,7 @@ Respond with JSON only.`
   }
 
   /** GET /api/relay/key — return (or auto-generate) the relay API key. Session auth. */
-  app.get("/api/relay/key", requireAuth, requireTier('life_os'), async (req, res) => {
+  app.get("/api/relay/key", requireAuth, async (req, res) => {
     try {
       const user = req.user as User;
       let s = await storage.getSettings(user.id);
