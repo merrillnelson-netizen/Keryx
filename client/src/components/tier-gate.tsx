@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Lock, Crown, Zap } from "lucide-react";
+import { Lock, Crown, Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useBillingTier, type Tier } from "@/hooks/use-billing-tier";
@@ -28,7 +28,26 @@ export function TierGate({
 }: TierGateProps) {
   const { hasTier, tier, isLoading } = useBillingTier();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    if (inline) {
+      return (
+        <Card data-testid="tier-gate-loading-inline">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Checking access…</span>
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div
+        className="flex flex-col items-center justify-center min-h-[40vh] p-6"
+        data-testid="tier-gate-loading"
+      >
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
   if (hasTier(required)) return <>{children}</>;
 
   const Icon = required === "life_os" ? Crown : Zap;
