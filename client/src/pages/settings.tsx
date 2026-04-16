@@ -746,6 +746,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          <TierGate required="pro" feature="Calendar Integration" description="Connect Google Calendar or Outlook so Keryx can link memories to meetings." inline>
           <Card className="glass-card border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -967,7 +968,9 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </TierGate>
 
+          <TierGate required="pro" feature="Email Integration" description="Connect Gmail or Outlook Mail to send summaries and reminders from your memories." inline>
           <Card className="glass-card border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1212,6 +1215,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </TierGate>
 
           <TierGate required="life_os" feature="Messages Sync" description="Import SMS, MMS, and RCS conversations." inline>
             <SmsImportSection />
@@ -1225,6 +1229,7 @@ export default function SettingsPage() {
             <PlaidCard />
           </TierGate>
 
+          <TierGate required="life_os" feature="AI Task Execution" description="Let Keryx perform actions on your behalf — drafting emails, creating events, and more." inline>
           <Card className="glass-card border-white/20">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1337,6 +1342,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          </TierGate>
 
           <Card className="glass-card border-white/20">
             <CardHeader>

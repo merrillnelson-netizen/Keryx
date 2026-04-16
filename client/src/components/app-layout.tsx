@@ -26,7 +26,7 @@ const primaryNav: { name: string; href: string; icon: React.ElementType; tier?: 
   { name: "Voice Log", href: "/voice", icon: Mic },
   { name: "Chat", href: "/chat", icon: MessagesSquare, tier: "pro" },
   { name: "History", href: "/history", icon: History },
-  { name: "Agent", href: "/agent", icon: Bot, tier: "life_os" },
+  { name: "Agent", href: "/agent", icon: Bot, tier: "pro" },
   { name: "Settings", href: "/settings", icon: SettingsIcon },
 ];
 

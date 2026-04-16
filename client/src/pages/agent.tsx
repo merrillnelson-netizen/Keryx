@@ -1003,7 +1003,7 @@ export default function AgentPage() {
 
   return (
     <AppLayout>
-      <TierGate required={"life_os"} feature={"AI Agent"} description={"Let Keryx take action on your behalf — drafting emails, creating calendar events, and more."}>
+      <TierGate required={"pro"} feature={"AI Agent & Automations"} description={"Configure automation rules and review the AI agent. Autonomous actions are a Life OS feature."}>
       <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
 
         {/* Page header */}
@@ -1096,7 +1096,7 @@ export default function AgentPage() {
 
         {/* ── Actions Tab ── */}
         {mainTab === "actions" && (
-          <>
+          <TierGate required={"life_os"} feature={"AI Agent (autonomous actions)"} description={"Let Keryx take action on your behalf — drafting emails, creating calendar events, and more."} inline>
             {/* Status + time filters */}
             <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
               <Tabs value={statusFilter} onValueChange={setStatusFilter} className="flex-1">
@@ -1281,7 +1281,7 @@ export default function AgentPage() {
                 </CardContent>
               </Card>
             )}
-          </>
+          </TierGate>
         )}
 
         {/* ── Rules Tab ── */}

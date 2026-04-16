@@ -31,8 +31,12 @@ const TIER_FEATURES = {
   free: [
     { label: "100 memories/month", included: true },
     { label: "AI tagging on save", included: true },
-    { label: "Basic keyword search", included: true },
+    { label: "Basic keyword & filter search", included: true },
     { label: "History view", included: true },
+    { label: "People directory (basic)", included: true },
+    { label: "Mood tracking", included: true },
+    { label: "Categories & people CRUD", included: true },
+    { label: "Settings & profile", included: true },
   ],
   pro: [
     { label: "Unlimited memories", included: true },

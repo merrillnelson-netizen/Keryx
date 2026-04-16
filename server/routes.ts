@@ -7329,7 +7329,7 @@ Respond with JSON only.`
    * Same logic as /api/relay/inbound but uses the logged-in session instead of API key.
    * Lets the Relay Dashboard send test payloads without copy-pasting the key.
    */
-  app.post("/api/relay/test", requireAuth, relayTestLimiter, async (req, res) => {
+  app.post("/api/relay/test", requireAuth, requireTier('life_os'), relayTestLimiter, async (req, res) => {
     try {
       const parsed = relayEnvelopeSchema.safeParse({ source: 'relay_dashboard', ...req.body });
       if (!parsed.success) {
