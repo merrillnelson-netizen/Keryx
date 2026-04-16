@@ -103,7 +103,7 @@ const createIdeaFormSchema = insertIdeaSchema.extend({
 
 type CreateIdeaForm = z.infer<typeof createIdeaFormSchema>;
 
-export default function IdeasPage() {
+function IdeasPageInner() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,8 +181,7 @@ export default function IdeasPage() {
   };
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Ideas Workspace"} description={"Brainstorm with AI, develop ideas, and turn thoughts into action plans."}>
+      <>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -531,7 +530,16 @@ export default function IdeasPage() {
         open={isIdeaModalOpen}
         onOpenChange={setIsIdeaModalOpen}
       />
-    </TierGate>
+      </>
+  );
+}
+
+export default function IdeasPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Ideas Workspace"} description={"Brainstorm with AI, develop ideas, and turn thoughts into action plans."}>
+        <IdeasPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

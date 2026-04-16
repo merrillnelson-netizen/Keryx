@@ -938,7 +938,7 @@ interface ActionsResponse {
   hasMore: boolean;
 }
 
-export default function AgentPage() {
+function AgentPageInner() {
   const [mainTab, setMainTab] = useState<"actions" | "rules">("actions");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -1002,8 +1002,6 @@ export default function AgentPage() {
   };
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"AI Agent & Automations"} description={"Configure automation rules and review the AI agent. Autonomous actions are a Life OS feature."}>
       <div className="max-w-3xl mx-auto space-y-4 animate-fade-in">
 
         {/* Page header */}
@@ -1287,7 +1285,15 @@ export default function AgentPage() {
         {/* ── Rules Tab ── */}
         {mainTab === "rules" && <RulesTab />}
       </div>
-    </TierGate>
+  );
+}
+
+export default function AgentPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"AI Agent & Automations"} description={"Configure automation rules and review the AI agent. Autonomous actions are a Life OS feature."}>
+        <AgentPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

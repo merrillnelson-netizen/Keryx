@@ -376,7 +376,7 @@ function SessionList({
   );
 }
 
-export default function ChatPage() {
+function ChatPageInner() {
   const { toast } = useToast();
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -597,8 +597,6 @@ export default function ChatPage() {
   const showPicker = !sessionsLoading && !activeSessionId;
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Keryx Chat"} description={"Have ongoing conversations with Keryx that remembers everything about your life."}>
       <div className="flex h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)] -mx-4 -mt-4 md:-mx-6 md:-mt-6">
         {/* Desktop sidebar */}
         <aside className="hidden md:flex flex-col w-64 border-r bg-background/50 backdrop-blur-sm flex-shrink-0">
@@ -944,7 +942,15 @@ export default function ChatPage() {
           )}
         </div>
       </div>
-    </TierGate>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Keryx Chat"} description={"Have ongoing conversations with Keryx that remembers everything about your life."}>
+        <ChatPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

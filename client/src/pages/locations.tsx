@@ -181,7 +181,7 @@ function parseTimelineFile(jsonContent: string): ParsedLocation[] {
   return locations;
 }
 
-export default function LocationsPage() {
+function LocationsPageInner() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -466,8 +466,7 @@ export default function LocationsPage() {
   };
 
   return (
-    <AppLayout>
-      <TierGate required={"life_os"} feature={"Location Intelligence"} description={"Capture, analyze, and search your location history."}>
+      <>
       <div className="container max-w-4xl mx-auto p-4 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -961,7 +960,16 @@ export default function LocationsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </TierGate>
+      </>
+  );
+}
+
+export default function LocationsPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"life_os"} feature={"Location Intelligence"} description={"Capture, analyze, and search your location history."}>
+        <LocationsPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

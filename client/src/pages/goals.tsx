@@ -210,7 +210,7 @@ function sortGoals(goals: Goal[]): Goal[] {
   });
 }
 
-export default function GoalsPage() {
+function GoalsPageInner() {
   const { toast } = useToast();
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -308,8 +308,6 @@ export default function GoalsPage() {
     : 0;
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Goals Tracking"} description={"Set goals and let Keryx monitor your progress through your daily memories."}>
       <div className="container max-w-4xl mx-auto p-4 pb-24">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -439,7 +437,15 @@ export default function GoalsPage() {
           isCreatePending={createGoalMutation.isPending}
         />
       </div>
-    </TierGate>
+  );
+}
+
+export default function GoalsPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Goals Tracking"} description={"Set goals and let Keryx monitor your progress through your daily memories."}>
+        <GoalsPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

@@ -396,7 +396,7 @@ function ConsolidatePanel({
   );
 }
 
-export default function ProfilePage() {
+function ProfilePageInner() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [userProfile, setUserProfile] = useState("");
@@ -498,8 +498,6 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Your AI Profile"} description={"See what Keryx has noticed about you and shape the persona it brings to every interaction."}>
       <div className="space-y-6 animate-fade-in max-w-2xl">
         {/* Header */}
         <div className="glass-card p-6 rounded-2xl">
@@ -686,7 +684,15 @@ export default function ProfilePage() {
           </Card>
         )}
       </div>
-    </TierGate>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Your AI Profile"} description={"See what Keryx has noticed about you and shape the persona it brings to every interaction."}>
+        <ProfilePageInner />
+      </TierGate>
     </AppLayout>
   );
 }

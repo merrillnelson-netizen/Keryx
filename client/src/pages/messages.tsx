@@ -1108,14 +1108,17 @@ function ThreadView() {
   );
 }
 
-export default function Messages() {
+function MessagesInner() {
   const params = useParams<{ conversationId: string }>();
+  return params.conversationId ? <ThreadView /> : <ConversationList />;
+}
 
+export default function Messages() {
   return (
     <AppLayout>
       <TierGate required={"life_os"} feature={"Messages Sync"} description={"Import SMS, MMS, and RCS conversations for AI analysis and search."}>
-      {params.conversationId ? <ThreadView /> : <ConversationList />}
-    </TierGate>
+        <MessagesInner />
+      </TierGate>
     </AppLayout>
   );
 }

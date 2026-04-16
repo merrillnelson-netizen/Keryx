@@ -309,7 +309,7 @@ function ReminderCard({
   );
 }
 
-export default function RemindersPage() {
+function RemindersPageInner() {
   const { toast } = useToast();
   const { vibrate } = useHaptic();
   const [location] = useLocation();
@@ -584,8 +584,6 @@ export default function RemindersPage() {
   }
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Reminders"} description={"Time-based and location-based reminders that surface when you need them."}>
       <div className="container mx-auto px-4 py-6 max-w-4xl">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -765,7 +763,15 @@ export default function RemindersPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </TierGate>
+  );
+}
+
+export default function RemindersPage() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Reminders"} description={"Time-based and location-based reminders that surface when you need them."}>
+        <RemindersPageInner />
+      </TierGate>
     </AppLayout>
   );
 }

@@ -292,7 +292,7 @@ function MoodTrendDirBadge({ dir, avg }: { dir: "up" | "down" | "flat"; avg: num
 
 const QUERY_KEY = "/api/ecosystem/stats";
 
-export default function Ecosystem() {
+function EcosystemInner() {
   const [, navigate] = useLocation();
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -463,8 +463,6 @@ export default function Ecosystem() {
   }, [spendingSummary, transactions, txDays, spendingChartData]);
 
   return (
-    <AppLayout>
-      <TierGate required={"pro"} feature={"Ecosystem View"} description={"A unified view of your goals, people, ideas and patterns powered by AI."}>
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="glass-card p-5 rounded-2xl">
@@ -1502,7 +1500,15 @@ export default function Ecosystem() {
           </>
         )}
       </div>
-    </TierGate>
+  );
+}
+
+export default function Ecosystem() {
+  return (
+    <AppLayout>
+      <TierGate required={"pro"} feature={"Ecosystem View"} description={"A unified view of your goals, people, ideas and patterns powered by AI."}>
+        <EcosystemInner />
+      </TierGate>
     </AppLayout>
   );
 }
