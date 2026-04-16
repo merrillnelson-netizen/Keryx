@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AppLayout from "@/components/app-layout";
+import { TierGate } from "@/components/tier-gate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -25,12 +26,11 @@ const TABS: { id: Tab; label: string; icon: React.ElementType; color: string }[]
   { id: "ecosystem", label: "Ecosystem View", icon: Activity, color: "from-indigo-500 via-purple-500 to-pink-500" },
 ];
 
-export default function Insights() {
+function InsightsInner() {
   const [activeTab, setActiveTab] = useState<Tab>("insights");
 
   return (
-    <AppLayout>
-      <div className="flex flex-col h-full space-y-4 animate-fade-in">
+    <div className="flex flex-col h-full space-y-4 animate-fade-in">
         {/* Header */}
         <div className="glass-card p-5 rounded-2xl flex-shrink-0">
           <div className="flex items-center gap-3 mb-4">
@@ -124,6 +124,19 @@ export default function Insights() {
           )}
         </div>
       </div>
+  );
+}
+
+export default function Insights() {
+  return (
+    <AppLayout>
+      <TierGate
+        required="pro"
+        feature="Insights"
+        description="Unlock Cognitive Insights, AI Synthesis, and Ecosystem View to see patterns across your memories, emotions, goals, and relationships."
+      >
+        <InsightsInner />
+      </TierGate>
     </AppLayout>
   );
 }
