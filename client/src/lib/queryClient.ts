@@ -1,7 +1,20 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import {
+  UpgradeRequiredError,
+  tryHandleUpgradeRequired,
+} from "./upgrade-toast";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 403) {
+      const payload = await tryHandleUpgradeRequired(res);
+      if (payload) {
+        throw new UpgradeRequiredError(
+          payload,
+          `${res.status}: ${payload.error ?? "Upgrade required"}`,
+        );
+      }
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -39,12 +52,12 @@ export const getQueryFn: <T>(options: {
 
     await throwIfResNotOk(res);
     const json = await res.json();
-    
+
     // If the response has the standard {status, data, ...} structure, extract data
     if (json && typeof json === 'object' && 'data' in json) {
       return json.data;
     }
-    
+
     return json;
   };
 
@@ -62,3 +75,5 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export { UpgradeRequiredError } from "./upgrade-toast";
