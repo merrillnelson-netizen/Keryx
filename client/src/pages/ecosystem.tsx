@@ -37,6 +37,9 @@ import {
   ArrowUpCircle,
   Clock,
   DollarSign,
+  Globe,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -49,6 +52,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Label,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -325,6 +329,10 @@ export default function Ecosystem() {
   const [selectedAccount, setSelectedAccount] = useState("all");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [showFinancialDetails, setShowFinancialDetails] = useState(false);
+
+  // ── Topic Distribution state ──
+  const [activeTopicIndex, setActiveTopicIndex] = useState<number | null>(null);
 
   const fmt = (amount: number) =>
     privacyMode ? "••••••" : `$${amount.toFixed(2)}`;
@@ -401,6 +409,29 @@ export default function Ecosystem() {
       fill: SPENDING_COLORS[i % SPENDING_COLORS.length],
     }));
   }, [spendingSummary?.categoryBreakdown]);
+
+  const financialInsights = useMemo(() => {
+    if (!spendingSummary || transactions.length === 0) return null;
+    const debits = transactions.filter(t => t.amount > 0);
+    const dailyBurn = spendingSummary.totalSpending / parseInt(txDays);
+    const biggestTxn = debits.length > 0 ? Math.max(...debits.map(t => t.amount)) : 0;
+    const topCatPct = spendingChartData.length > 0
+      ? Math.round((spendingChartData[0].value / spendingSummary.totalSpending) * 100)
+      : 0;
+    const onlinePct = debits.length > 0
+      ? Math.round(debits.filter(t => t.paymentChannel === 'online').length / debits.length * 100)
+      : 0;
+    const pendingCount = transactions.filter(t => t.pending).length;
+    return {
+      dailyBurn,
+      biggestTxn,
+      topCatName: spendingChartData[0]?.name ?? "—",
+      topCatPct,
+      onlinePct,
+      pendingCount,
+      activeCategories: spendingSummary.categoryBreakdown.length,
+    };
+  }, [spendingSummary, transactions, txDays, spendingChartData]);
 
   return (
     <AppLayout>
@@ -700,34 +731,90 @@ export default function Ecosystem() {
                           innerRadius={50}
                           outerRadius={80}
                           paddingAngle={2}
+                          cursor="pointer"
+                          onClick={(_, index) =>
+                            setActiveTopicIndex(prev => prev === index ? null : index)
+                          }
                         >
                           {data.topicDistribution.map((entry, i) => (
                             <Cell
                               key={entry.topic}
                               fill={TOPIC_COLORS[i % TOPIC_COLORS.length]}
+                              opacity={activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.4}
+                              stroke={activeTopicIndex === i ? "#fff" : "transparent"}
+                              strokeWidth={2}
                             />
                           ))}
+                          <Label
+                            content={({ viewBox }) => {
+                              const { cx, cy } = viewBox as { cx: number; cy: number };
+                              const total = data.topicDistribution.reduce((s, t) => s + t.count, 0);
+                              if (activeTopicIndex === null) {
+                                return (
+                                  <text
+                                    x={cx}
+                                    y={cy}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fill="rgba(255,255,255,0.3)"
+                                    fontSize={11}
+                                  >
+                                    tap a slice
+                                  </text>
+                                );
+                              }
+                              const t = data.topicDistribution[activeTopicIndex];
+                              const pct = Math.round((t.count / total) * 100);
+                              return (
+                                <g>
+                                  <text
+                                    x={cx}
+                                    y={cy - 8}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fill="#fff"
+                                    fontSize={13}
+                                    fontWeight={600}
+                                  >
+                                    {t.topic}
+                                  </text>
+                                  <text
+                                    x={cx}
+                                    y={cy + 10}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                    fill="rgba(255,255,255,0.5)"
+                                    fontSize={11}
+                                  >
+                                    {pct}%
+                                  </text>
+                                </g>
+                              );
+                            }}
+                          />
                         </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            background: "rgba(15,15,25,0.9)",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: 8,
-                          }}
-                          formatter={(val: number, name: string) => [val, name]}
-                        />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                       {(() => {
                         const total = data.topicDistribution.reduce((s, t) => s + t.count, 0);
                         return data.topicDistribution.map((t, i) => (
-                          <div key={t.topic} className="flex items-center gap-2">
+                          <div
+                            key={t.topic}
+                            className="flex items-center gap-2 cursor-pointer"
+                            onClick={() => setActiveTopicIndex(prev => prev === i ? null : i)}
+                          >
                             <div
-                              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                              style={{ background: TOPIC_COLORS[i % TOPIC_COLORS.length] }}
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-opacity"
+                              style={{
+                                background: TOPIC_COLORS[i % TOPIC_COLORS.length],
+                                opacity: activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.4,
+                              }}
                             />
-                            <span className="text-xs text-foreground truncate flex-1">
+                            <span className={cn(
+                              "text-xs truncate flex-1 transition-colors",
+                              activeTopicIndex === i ? "text-foreground font-medium" : "text-foreground/70"
+                            )}>
                               {t.topic}
                             </span>
                             <span className="text-xs text-muted-foreground flex-shrink-0">
@@ -1000,173 +1087,267 @@ export default function Ecosystem() {
                       </div>
                     </div>
 
-                    {/* Charts: spending pie + top merchants */}
-                    <div className="grid md:grid-cols-2 gap-5">
-                      {spendingChartData.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                            By Category <span className="opacity-60 normal-case">(tap to filter)</span>
-                          </h4>
-                          <ResponsiveContainer width="100%" height={200}>
-                            <PieChart>
-                              <Pie
+                    {/* ── Summary view: category bar + insight chips ── */}
+                    {!showFinancialDetails && (
+                      <div className="space-y-4">
+                        {spendingChartData.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                              Spending by Category
+                            </h4>
+                            <ResponsiveContainer width="100%" height={Math.max(120, spendingChartData.length * 32)}>
+                              <BarChart
                                 data={spendingChartData}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={72}
-                                cursor="pointer"
-                                label={({ name, percent }) =>
-                                  `${name} ${(percent * 100).toFixed(0)}%`
-                                }
-                                labelLine={{ stroke: "rgba(255,255,255,0.3)" }}
-                                onClick={(entry) => {
-                                  const cat = entry?.name as string;
-                                  setSelectedCategory(prev => prev === cat ? "all" : cat);
-                                  const txEl = document.getElementById("eco-tx-browser");
-                                  if (txEl) txEl.scrollIntoView({ behavior: "smooth" });
-                                }}
+                                layout="vertical"
+                                margin={{ top: 0, right: 56, left: 4, bottom: 0 }}
                               >
-                                {spendingChartData.map((entry, idx) => (
-                                  <Cell
-                                    key={`cell-${idx}`}
-                                    fill={entry.fill}
-                                    opacity={selectedCategory === "all" || selectedCategory === entry.name ? 1 : 0.4}
-                                    stroke={selectedCategory === entry.name ? "#fff" : "transparent"}
-                                    strokeWidth={2}
-                                  />
-                                ))}
-                              </Pie>
-                              <Tooltip
-                                formatter={(value: number) => [
-                                  privacyMode ? "••••••" : `$${value.toFixed(2)}`,
-                                  "Amount",
-                                ]}
-                                contentStyle={{
-                                  backgroundColor: "rgba(0,0,0,0.8)",
-                                  border: "1px solid rgba(255,255,255,0.2)",
-                                  borderRadius: "8px",
-                                }}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-
-                      {spendingSummary.topMerchants.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
-                            Top Merchants
-                          </h4>
-                          <div className="space-y-2">
-                            {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
-                              <div
-                                key={i}
-                                className="glass-card p-2.5 rounded-lg flex items-center justify-between gap-2"
-                              >
-                                <p className="text-xs text-foreground break-words flex-1">
-                                  {merchant.merchant}
-                                </p>
-                                <span className="text-xs font-semibold text-emerald-500 shrink-0">
-                                  {fmt(merchant.amount)}
-                                </span>
-                              </div>
-                            ))}
+                                <CartesianGrid
+                                  strokeDasharray="3 3"
+                                  stroke="rgba(255,255,255,0.06)"
+                                  vertical={false}
+                                />
+                                <XAxis
+                                  type="number"
+                                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                                  tickFormatter={v =>
+                                    privacyMode ? "••" : `$${v >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(0)}`
+                                  }
+                                />
+                                <YAxis
+                                  type="category"
+                                  dataKey="name"
+                                  width={88}
+                                  tick={{ fontSize: 11, fill: "rgba(255,255,255,0.7)" }}
+                                />
+                                <Tooltip
+                                  formatter={(v: number) => [
+                                    privacyMode ? "••••••" : `$${v.toFixed(2)}`,
+                                    "Spent",
+                                  ]}
+                                  contentStyle={{
+                                    background: "rgba(0,0,0,0.85)",
+                                    border: "1px solid rgba(255,255,255,0.15)",
+                                    borderRadius: 8,
+                                  }}
+                                />
+                                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                  {spendingChartData.map((entry, idx) => (
+                                    <Cell key={idx} fill={entry.fill} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
                           </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Transaction Browser */}
-                    <div id="eco-tx-browser" className="space-y-3 pt-2 border-t border-white/10">
-                      <h4 className="text-xs font-semibold text-foreground flex items-center gap-2 uppercase tracking-wide">
-                        <CreditCard className="w-4 h-4 text-teal-400" />
-                        Transactions
-                      </h4>
-
-                      {/* Filters */}
-                      <div className="flex flex-wrap gap-2">
-                        {visibleAccounts.length > 1 && (
-                          <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                            <SelectTrigger className="h-8 text-xs flex-1 min-w-32">
-                              <SelectValue placeholder="All Accounts" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Accounts</SelectItem>
-                              {visibleAccounts.map(a => (
-                                <SelectItem key={a.id} value={a.id}>
-                                  {a.name}{a.mask ? ` ····${a.mask}` : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
                         )}
 
-                        {categoryOptions.length > 0 && (
-                          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                            <SelectTrigger className="h-8 text-xs flex-1 min-w-36">
-                              <SelectValue placeholder="All Categories" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Categories</SelectItem>
-                              {categoryOptions.map(c => (
-                                <SelectItem key={c} value={c}>{c}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        {/* Financial insight chips */}
+                        {financialInsights && (
+                          <div>
+                            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                              Financial Insights
+                            </h4>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+                                  <span className="text-xs">Daily Burn</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {privacyMode ? "••••••" : `$${financialInsights.dailyBurn.toFixed(2)}/day`}
+                                </p>
+                              </div>
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                                  <span className="text-xs">Biggest Txn</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {privacyMode ? "••••••" : `$${financialInsights.biggestTxn.toFixed(2)}`}
+                                </p>
+                              </div>
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <Tag className="w-3.5 h-3.5 text-violet-400" />
+                                  <span className="text-xs">Top Category</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground truncate">
+                                  {financialInsights.topCatName}{" "}
+                                  <span className="text-muted-foreground font-normal text-xs">
+                                    {financialInsights.topCatPct}%
+                                  </span>
+                                </p>
+                              </div>
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span className="text-xs">Online Spend</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {financialInsights.onlinePct}%
+                                </p>
+                              </div>
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                  <span className="text-xs">Pending</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {financialInsights.pendingCount} txn{financialInsights.pendingCount !== 1 ? "s" : ""}
+                                </p>
+                              </div>
+                              <div className="glass-card p-3 rounded-xl flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <LayoutGrid className="w-3.5 h-3.5 text-teal-400" />
+                                  <span className="text-xs">Active Cats</span>
+                                </div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {financialInsights.activeCategories}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         )}
 
-                        {(selectedAccount !== "all" || selectedCategory !== "all") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs h-8 gap-2 border-white/10"
+                          onClick={() => setShowFinancialDetails(true)}
+                        >
+                          <List className="w-3.5 h-3.5" />
+                          Merchants &amp; Transactions
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* ── Details view: merchants + transaction browser ── */}
+                    {showFinancialDetails && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                            Merchants &amp; Transactions
+                          </h4>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
-                            onClick={() => {
-                              setSelectedAccount("all");
-                              setSelectedCategory("all");
-                            }}
+                            className="h-7 text-xs gap-1 text-muted-foreground"
+                            onClick={() => setShowFinancialDetails(false)}
                           >
-                            Clear filters
+                            <ArrowLeft className="w-3 h-3" /> Summary
                           </Button>
-                        )}
-                      </div>
-
-                      {/* Count + total */}
-                      {!txLoading && transactions.length > 0 && (
-                        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                          <span>
-                            {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
-                          </span>
-                          <span className="font-medium text-emerald-500">
-                            {fmt(txTotal)} spent
-                          </span>
                         </div>
-                      )}
 
-                      {/* List */}
-                      {txLoading ? (
-                        <div className="space-y-2">
-                          {[...Array(5)].map((_, i) => (
-                            <div key={i} className="glass-card p-3 rounded-lg animate-pulse">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-muted/40" />
-                                <div className="flex-1 space-y-1">
-                                  <div className="h-3 bg-muted/40 rounded w-2/3" />
-                                  <div className="h-2.5 bg-muted/30 rounded w-1/3" />
+                        {spendingSummary.topMerchants.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                              Top Merchants
+                            </h4>
+                            <div className="space-y-2">
+                              {spendingSummary.topMerchants.slice(0, 8).map((merchant, i) => (
+                                <div
+                                  key={i}
+                                  className="glass-card p-2.5 rounded-lg flex items-center justify-between gap-2"
+                                >
+                                  <p className="text-xs text-foreground break-words flex-1">
+                                    {merchant.merchant}
+                                  </p>
+                                  <span className="text-xs font-semibold text-emerald-500 shrink-0">
+                                    {fmt(merchant.amount)}
+                                  </span>
                                 </div>
-                                <div className="h-3 bg-muted/40 rounded w-16" />
-                              </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      ) : transactions.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                          <p className="text-sm">No transactions match your filters</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                          </div>
+                        )}
+
+                        <div id="eco-tx-browser" className="space-y-3 pt-2 border-t border-white/10">
+                          <h4 className="text-xs font-semibold text-foreground flex items-center gap-2 uppercase tracking-wide">
+                            <CreditCard className="w-4 h-4 text-teal-400" />
+                            Transactions
+                          </h4>
+
+                          {/* Filters */}
+                          <div className="flex flex-wrap gap-2">
+                            {visibleAccounts.length > 1 && (
+                              <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                                <SelectTrigger className="h-8 text-xs flex-1 min-w-32">
+                                  <SelectValue placeholder="All Accounts" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">All Accounts</SelectItem>
+                                  {visibleAccounts.map(a => (
+                                    <SelectItem key={a.id} value={a.id}>
+                                      {a.name}{a.mask ? ` ····${a.mask}` : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+
+                            {categoryOptions.length > 0 && (
+                              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                                <SelectTrigger className="h-8 text-xs flex-1 min-w-36">
+                                  <SelectValue placeholder="All Categories" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">All Categories</SelectItem>
+                                  {categoryOptions.map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+
+                            {(selectedAccount !== "all" || selectedCategory !== "all") && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
+                                onClick={() => {
+                                  setSelectedAccount("all");
+                                  setSelectedCategory("all");
+                                }}
+                              >
+                                Clear filters
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Count + total */}
+                          {!txLoading && transactions.length > 0 && (
+                            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                              <span>
+                                {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
+                              </span>
+                              <span className="font-medium text-emerald-500">
+                                {fmt(txTotal)} spent
+                              </span>
+                            </div>
+                          )}
+
+                          {/* List */}
+                          {txLoading ? (
+                            <div className="space-y-2">
+                              {[...Array(5)].map((_, i) => (
+                                <div key={i} className="glass-card p-3 rounded-lg animate-pulse">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-muted/40" />
+                                    <div className="flex-1 space-y-1">
+                                      <div className="h-3 bg-muted/40 rounded w-2/3" />
+                                      <div className="h-2.5 bg-muted/30 rounded w-1/3" />
+                                    </div>
+                                    <div className="h-3 bg-muted/40 rounded w-16" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : transactions.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <CreditCard className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                              <p className="text-sm">No transactions match your filters</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                           {transactions.map(tx => {
                             const isDebit = tx.amount > 0;
                             return (
@@ -1222,10 +1403,12 @@ export default function Ecosystem() {
                             );
                           })}
                         </div>
-                      )}
-                    </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                  )}
               </CardContent>
             </Card>
           </>
