@@ -1,6 +1,6 @@
 import { 
   users, logEntries, settings, categories, people, aiActions, aiActionPreferences, aiCache, ideas, ideaTasks,
-  locationHistory, frequentPlaces, pushSubscriptions, goals, reminders,
+  locationHistory, frequentPlaces, pushSubscriptions, goals, goalProgressHistory, reminders,
   messageConversations, messages, messageImports,
   relayDestinations, relayEvents,
   automationRules,
@@ -20,6 +20,7 @@ import {
   type FrequentPlace, type InsertFrequentPlace,
   type PushSubscription, type InsertPushSubscription,
   type Goal, type InsertGoal, type GoalMilestone,
+  type GoalProgressHistory,
   type Reminder, type InsertReminder,
   type MessageConversation, type InsertMessageConversation,
   type Message, type InsertMessage,
@@ -171,6 +172,9 @@ export interface IStorage {
   updateGoal(id: string, userId: string, updates: Partial<InsertGoal & { milestones: GoalMilestone[], aiSummary: string, aiLastAnalyzed: Date, relatedMemoryIds: string[] }>): Promise<Goal | undefined>;
   deleteGoal(id: string, userId: string): Promise<boolean>;
   getActiveGoals(userId: string): Promise<Goal[]>;
+  // Goal Progress History
+  createProgressSnapshot(goalId: string, userId: string, progressPercent: number, note?: string): Promise<GoalProgressHistory>;
+  getProgressHistory(goalId: string, userId: string): Promise<GoalProgressHistory[]>;
 
   // Reminders (user-scoped)
   getReminders(userId: string, status?: string): Promise<Reminder[]>;
@@ -2475,6 +2479,32 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Failed to get active goals:', error);
       throw new Error('Database error while fetching active goals');
+    }
+  }
+
+  async createProgressSnapshot(goalId: string, userId: string, progressPercent: number, note?: string): Promise<GoalProgressHistory> {
+    try {
+      const [snapshot] = await db
+        .insert(goalProgressHistory)
+        .values({ goalId, userId, progressPercent, note: note ?? null })
+        .returning();
+      return snapshot;
+    } catch (error) {
+      console.error('Failed to create progress snapshot:', error);
+      throw new Error('Database error while creating progress snapshot');
+    }
+  }
+
+  async getProgressHistory(goalId: string, userId: string): Promise<GoalProgressHistory[]> {
+    try {
+      return await db
+        .select()
+        .from(goalProgressHistory)
+        .where(and(eq(goalProgressHistory.goalId, goalId), eq(goalProgressHistory.userId, userId)))
+        .orderBy(desc(goalProgressHistory.createdAt));
+    } catch (error) {
+      console.error('Failed to get progress history:', error);
+      throw new Error('Database error while fetching progress history');
     }
   }
 

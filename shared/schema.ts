@@ -978,6 +978,31 @@ export type Goal = typeof goals.$inferSelect;
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
 
 /**
+ * Goal Progress History table - immutable timeline of progress snapshots
+ * Created whenever a user commits a progress change (slider, AI suggestion, or analyze)
+ */
+export const goalProgressHistory = pgTable("goal_progress_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  goalId: varchar("goal_id").notNull().references(() => goals.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  progressPercent: integer("progress_percent").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  goalIdIdx: index("goal_progress_history_goal_id_idx").on(table.goalId),
+  userIdIdx: index("goal_progress_history_user_id_idx").on(table.userId),
+  goalCreatedAtIdx: index("goal_progress_history_goal_created_idx").on(table.goalId, table.createdAt.desc()),
+}));
+
+export const insertGoalProgressHistorySchema = createInsertSchema(goalProgressHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type GoalProgressHistory = typeof goalProgressHistory.$inferSelect;
+export type InsertGoalProgressHistory = z.infer<typeof insertGoalProgressHistorySchema>;
+
+/**
  * Reminders table - stores user reminders with time or location triggers
  * Supports:
  * - Time-based: "remind me tomorrow at 3pm"

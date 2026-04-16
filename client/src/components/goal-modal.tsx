@@ -47,6 +47,10 @@ import {
   XCircle,
   Wand2,
   Save,
+  History,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -98,9 +102,20 @@ interface AiProgressSuggestion {
   suggestions?: string[];
 }
 
+interface GoalProgressSnapshot {
+  id: string;
+  goalId: string;
+  userId: string;
+  progressPercent: number;
+  note: string | null;
+  createdAt: string;
+}
+
+type GoalUpdateInput = Partial<Goal> & { progress?: number; milestones?: GoalMilestone[] };
+
 export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal, isCreatePending }: GoalModalProps) {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'details' | 'milestones' | 'progress'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'milestones' | 'progress' | 'history'>('details');
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
@@ -117,6 +132,17 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
       return res.json();
     },
     enabled: !!goalId && !isCreating,
+    staleTime: 30 * 1000,
+  });
+
+  const { data: progressHistory, isLoading: historyLoading } = useQuery<GoalProgressSnapshot[]>({
+    queryKey: ['/api/goals', goalId, 'history'],
+    queryFn: async () => {
+      const res = await fetch(`/api/goals/${goalId}/history`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch progress history');
+      return res.json();
+    },
+    enabled: !!goalId && !isCreating && activeTab === 'history',
     staleTime: 30 * 1000,
   });
 
@@ -139,14 +165,17 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
   }, [goal, isCreating]);
 
   const updateGoalMutation = useMutation({
-    mutationFn: async (updates: Partial<Goal>) => {
+    mutationFn: async (updates: GoalUpdateInput) => {
       const response = await apiRequest("PATCH", `/api/goals/${goalId}`, updates);
       if (!response.ok) throw new Error("Failed to update goal");
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, updates) => {
       queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
+      if (updates.progress !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId, 'history'] });
+      }
       setHasUnsavedChanges(false);
       toast({ title: "Goal updated" });
     },
@@ -204,6 +233,7 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
       setAiSuggestion(null);
       queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/goals', goalId, 'history'] });
       toast({ title: "Progress updated", description: `Set to ${progress}%` });
     },
     onError: () => {
@@ -352,18 +382,23 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
 
             {!isCreating && (
               <div className="flex border-b flex-shrink-0">
-                {(['details', 'milestones', 'progress'] as const).map(tab => (
+                {(['details', 'milestones', 'progress', 'history'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={cn(
-                      "flex-1 px-4 py-2 text-sm font-medium transition-colors capitalize",
+                      "flex-1 px-2 py-2 text-sm font-medium transition-colors capitalize",
                       activeTab === tab 
                         ? "border-b-2 border-primary text-primary" 
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {tab}
+                    {tab === 'history' ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <History className="w-3 h-3" />
+                        History
+                      </span>
+                    ) : tab}
                   </button>
                 ))}
               </div>
@@ -642,6 +677,118 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                       </div>
                       <p className="text-lg font-semibold">
                         {format(new Date(goal.targetDate), 'MMMM d, yyyy')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!isCreating && activeTab === 'history' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-medium">Progress Timeline</h3>
+                    {progressHistory && progressHistory.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {progressHistory.length} snapshot{progressHistory.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : progressHistory && progressHistory.length > 0 ? (
+                    <div className="relative">
+                      {/* Sparkline bar */}
+                      <div className="flex items-end gap-1 h-16 mb-4 px-1">
+                        {[...progressHistory].reverse().map((snapshot, i, arr) => {
+                          const prev = i > 0 ? arr[i - 1].progressPercent : snapshot.progressPercent;
+                          const delta = snapshot.progressPercent - prev;
+                          return (
+                            <div
+                              key={snapshot.id}
+                              className="flex-1 min-w-0 flex flex-col items-center justify-end"
+                              title={`${snapshot.progressPercent}%`}
+                            >
+                              <div
+                                className={cn(
+                                  "w-full rounded-sm transition-all",
+                                  delta > 0 ? "bg-green-500 dark:bg-green-400" :
+                                  delta < 0 ? "bg-red-400 dark:bg-red-500" :
+                                  "bg-muted-foreground/40"
+                                )}
+                                style={{ height: `${Math.max(4, snapshot.progressPercent * 0.56)}px` }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Timeline list */}
+                      <div className="space-y-3">
+                        {progressHistory.map((snapshot, i) => {
+                          const prev = progressHistory[i + 1]?.progressPercent;
+                          const delta = prev !== undefined ? snapshot.progressPercent - prev : null;
+                          return (
+                            <div key={snapshot.id} className="flex items-start gap-3">
+                              <div className="flex flex-col items-center flex-shrink-0">
+                                <div className={cn(
+                                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold",
+                                  delta === null ? "bg-primary/10 text-primary" :
+                                  delta > 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                                  delta < 0 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                                  "bg-muted text-muted-foreground"
+                                )}>
+                                  {delta === null ? <Minus className="w-3 h-3" /> :
+                                   delta > 0 ? <ArrowUp className="w-3 h-3" /> :
+                                   delta < 0 ? <ArrowDown className="w-3 h-3" /> :
+                                   <Minus className="w-3 h-3" />}
+                                </div>
+                                {i < progressHistory.length - 1 && (
+                                  <div className="w-px flex-1 bg-border mt-1 min-h-[16px]" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0 pb-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold text-sm">
+                                    {snapshot.progressPercent}%
+                                  </span>
+                                  {delta !== null && delta !== 0 && (
+                                    <span className={cn(
+                                      "text-xs font-medium",
+                                      delta > 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"
+                                    )}>
+                                      {delta > 0 ? '+' : ''}{delta}%
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(new Date(snapshot.createdAt), 'MMM d, yyyy h:mm a')}
+                                  </span>
+                                  {snapshot.note && (
+                                    <span className="text-xs text-primary/70 italic">· {snapshot.note}</span>
+                                  )}
+                                </div>
+                                <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-primary rounded-full transition-all"
+                                    style={{ width: `${snapshot.progressPercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="font-medium">No history yet</p>
+                      <p className="text-sm mt-1">
+                        Progress snapshots are saved whenever you update progress using the slider or AI.
                       </p>
                     </div>
                   )}

@@ -5501,12 +5501,23 @@ Return ONLY the JSON array, no other text.`;
       if (updateData.targetDate && typeof updateData.targetDate === 'string') {
         updateData.targetDate = new Date(updateData.targetDate);
       }
-      if (updateData.progress !== undefined) {
-        updateData.progressPercent = updateData.progress;
+      const newProgress: number | undefined = updateData.progress;
+      if (newProgress !== undefined) {
+        updateData.progressPercent = newProgress;
         delete updateData.progress;
       }
       
       const updated = await storage.updateGoal(req.params.id, user.id, updateData);
+
+      // Snapshot when progress explicitly changed
+      if (newProgress !== undefined && newProgress !== goal.progressPercent) {
+        try {
+          await storage.createProgressSnapshot(req.params.id, user.id, newProgress);
+        } catch (snapErr) {
+          console.error('Non-fatal: failed to create progress snapshot:', snapErr);
+        }
+      }
+
       res.json(updated);
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to update goal", error);
@@ -5524,6 +5535,21 @@ Return ONLY the JSON array, no other text.`;
       res.json({ success: true });
     } catch (error) {
       sendErrorResponse(res, 500, "Failed to delete goal", error);
+    }
+  });
+
+  // Get progress history for a goal
+  app.get("/api/goals/:id/history", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const goal = await storage.getGoal(req.params.id, user.id);
+      if (!goal) {
+        return sendErrorResponse(res, 404, "Goal not found");
+      }
+      const history = await storage.getProgressHistory(req.params.id, user.id);
+      res.json(history);
+    } catch (error) {
+      sendErrorResponse(res, 500, "Failed to fetch progress history", error);
     }
   });
 
@@ -5562,6 +5588,15 @@ Return ONLY the JSON array, no other text.`;
         aiLastAnalyzed: new Date(),
         relatedMemoryIds: analysis.relatedMemoryIds,
       });
+
+      // Snapshot AI-applied progress change
+      if (analysis.progressPercent !== goal.progressPercent) {
+        try {
+          await storage.createProgressSnapshot(req.params.id, user.id, analysis.progressPercent, 'AI analysis');
+        } catch (snapErr) {
+          console.error('Non-fatal: failed to create AI progress snapshot:', snapErr);
+        }
+      }
       
       res.json({
         goal: updated,
