@@ -176,7 +176,7 @@ function NavItem({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link key={item.href} href={item.href}>
+          <Link key={item.href} href={isLocked ? "/billing" : item.href}>
             <button
               data-testid={`nav${mobile ? "-mobile" : ""}-${item.href.slice(1) || "home"}`}
               className={cn(
@@ -203,7 +203,7 @@ function NavItem({
         </TooltipTrigger>
         {isLocked && (
           <TooltipContent side="right" className="text-xs">
-            {lockLabel} feature — tap to upgrade
+            {lockLabel} feature — tap to open billing
           </TooltipContent>
         )}
       </Tooltip>
