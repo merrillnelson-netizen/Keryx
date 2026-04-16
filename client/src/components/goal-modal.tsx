@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ReadAloudButton } from "@/components/read-aloud-button";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -585,7 +586,17 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                     <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
                       <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                         <Sparkles className="w-4 h-4" />
-                        Keryx suggests {aiSuggestion.progressPercent}%
+                        <span className="flex-1">Keryx suggests {aiSuggestion.progressPercent}%</span>
+                        <ReadAloudButton
+                          text={[
+                            aiSuggestion.summary,
+                            aiSuggestion.achievements?.length ? `Achievements: ${aiSuggestion.achievements.join(". ")}.` : "",
+                            aiSuggestion.blockers?.length ? `Blockers: ${aiSuggestion.blockers.join(". ")}.` : "",
+                            aiSuggestion.suggestions?.length ? `Suggestions: ${aiSuggestion.suggestions.join(". ")}.` : "",
+                          ].filter(Boolean).join(" ")}
+                          variant="ghost"
+                          className="text-primary/70 hover:text-primary"
+                        />
                       </div>
                       <p className="text-sm text-muted-foreground leading-relaxed">{aiSuggestion.summary}</p>
                       {aiSuggestion.achievements && aiSuggestion.achievements.length > 0 && (
@@ -658,7 +669,8 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                     <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Sparkles className="w-4 h-4 text-primary" />
-                        Last Keryx Analysis
+                        <span className="flex-1">Last Keryx Analysis</span>
+                        <ReadAloudButton text={goal.aiSummary} />
                       </div>
                       <p className="text-sm text-muted-foreground">{goal.aiSummary}</p>
                       {goal.aiLastAnalyzed && (

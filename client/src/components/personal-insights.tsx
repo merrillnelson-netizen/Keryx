@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ReadAloudButton } from "@/components/read-aloud-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,26 +140,33 @@ function NewsStoryCard({ story, animate = false }: { story: PersonalNewsStory; a
           
           <p className="text-sm text-muted-foreground leading-relaxed">{story.summary}</p>
           
-          {(story.details || story.relatedItems?.length) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2 h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? (
-                <>
-                  <ChevronUp className="w-3 h-3 mr-1" />
-                  Less
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3 h-3 mr-1" />
-                  More details
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-1 mt-2">
+            <ReadAloudButton
+              text={[story.headline, story.summary, story.details].filter(Boolean).join(". ")}
+              label="Read"
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+            />
+            {(story.details || story.relatedItems?.length) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setExpanded(!expanded)}
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="w-3 h-3 mr-1" />
+                    Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-3 h-3 mr-1" />
+                    More details
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
           
           {expanded && (
             <div className="mt-3 pt-3 border-t border-white/10 space-y-2 animate-fade-in">

@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ReadAloudButton } from "@/components/read-aloud-button";
 
 interface ThematicInsight {
   summary: string;
@@ -41,11 +42,21 @@ interface ChatMessage {
   memoriesAnalyzed?: number;
 }
 
+function buildInsightReadText(insight: ThematicInsight): string {
+  const parts: string[] = [];
+  if (insight.callout) parts.push(insight.callout);
+  if (insight.summary) parts.push(insight.summary);
+  if (insight.patterns.length > 0) parts.push(`Patterns detected: ${insight.patterns.join(". ")}.`);
+  if (insight.recommendations.length > 0) parts.push(`Recommendations: ${insight.recommendations.join(". ")}.`);
+  return parts.join(" ");
+}
+
 export default function SynthesisContent() {
   const [days, setDays] = useState("30");
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const lastAssistantRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: initialAnalysis, isLoading: isLoadingInitial, refetch: refetchAnalysis } = useQuery({
@@ -72,8 +83,16 @@ export default function SynthesisContent() {
   }, [initialAnalysis]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory]);
+    if (chatHistory.length === 0) return;
+    const lastMessage = chatHistory[chatHistory.length - 1];
+    if (lastMessage.role !== "assistant") return;
+
+    if (chatHistory.length === 1) {
+      scrollAreaRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      lastAssistantRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [chatHistory.length]);
 
   const questionMutation = useMutation({
     mutationFn: async ({ question, days }: { question: string; days: number }) => {
@@ -123,6 +142,8 @@ export default function SynthesisContent() {
     setChatHistory([]);
   };
 
+  const assistantMessages = chatHistory.filter(m => m.role === "assistant");
+
   return (
     <div className="flex flex-col h-full">
       {/* Controls row */}
@@ -157,7 +178,7 @@ export default function SynthesisContent() {
       </div>
 
       {/* Chat area — scrollable */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0">
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0">
         {isLoadingInitial && chatHistory.length === 0 ? (
           <Card className="glass-card border-white/20">
             <CardContent className="py-12">
@@ -170,85 +191,103 @@ export default function SynthesisContent() {
           </Card>
         ) : (
           <>
-            {chatHistory.map((message) => (
-              <div key={message.id} className={cn("animate-fade-in", message.role === "user" && "flex justify-end")}>
-                {message.role === "user" ? (
-                  <div className="max-w-[85%] bg-purple-500/20 border border-purple-500/30 rounded-2xl rounded-tr-sm px-4 py-3">
-                    <p className="text-foreground">{message.content}</p>
-                  </div>
-                ) : (
-                  <Card className="glass-card border-white/20 w-full">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Sparkles className="w-5 h-5 text-purple-500" />
-                        {message.content === "Full Analysis" ? "Full Analysis" : `Analysis: "${message.content}"`}
-                      </CardTitle>
-                      {message.memoriesAnalyzed && (
-                        <CardDescription>Based on {message.memoriesAnalyzed} memories</CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {message.insight && (
-                        <>
-                          <div className="glass-card p-4 rounded-xl bg-white/5">
-                            <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
-                              <Brain className="w-4 h-4 text-purple-500" />
-                              Summary
-                            </h4>
-                            <p className="text-muted-foreground leading-relaxed">{message.insight.summary}</p>
-                            <p className="text-xs text-muted-foreground mt-2">{message.insight.timespan}</p>
-                          </div>
+            {chatHistory.map((message, idx) => {
+              const isLastAssistant =
+                message.role === "assistant" &&
+                idx === chatHistory.length - 1;
 
-                          {message.insight.callout && (
-                            <div className="glass-card p-4 rounded-xl border-l-4 border-orange-500 bg-orange-500/10">
-                              <h4 className="font-medium text-orange-400 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
-                                <Zap className="w-4 h-4" />
-                                Keryx
-                              </h4>
-                              <p className="text-foreground font-medium leading-relaxed">{message.insight.callout}</p>
-                            </div>
+              return (
+                <div
+                  key={message.id}
+                  ref={isLastAssistant ? lastAssistantRef : undefined}
+                  className={cn("animate-fade-in", message.role === "user" && "flex justify-end")}
+                >
+                  {message.role === "user" ? (
+                    <div className="max-w-[85%] bg-purple-500/20 border border-purple-500/30 rounded-2xl rounded-tr-sm px-4 py-3">
+                      <p className="text-foreground">{message.content}</p>
+                    </div>
+                  ) : (
+                    <Card className="glass-card border-white/20 w-full">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Sparkles className="w-5 h-5 text-purple-500" />
+                          <span className="flex-1">
+                            {message.content === "Full Analysis" ? "Full Analysis" : `Analysis: "${message.content}"`}
+                          </span>
+                          {message.insight && (
+                            <ReadAloudButton
+                              text={buildInsightReadText(message.insight)}
+                              className="text-muted-foreground hover:text-foreground"
+                            />
                           )}
-
-                          {message.insight.patterns.length > 0 && (
+                        </CardTitle>
+                        {message.memoriesAnalyzed && (
+                          <CardDescription>Based on {message.memoriesAnalyzed} memories</CardDescription>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {message.insight && (
+                          <>
                             <div className="glass-card p-4 rounded-xl bg-white/5">
-                              <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-blue-500" />
-                                Patterns Detected
+                              <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                                <Brain className="w-4 h-4 text-purple-500" />
+                                Summary
                               </h4>
-                              <ul className="space-y-2">
-                                {message.insight.patterns.map((pattern, i) => (
-                                  <li key={i} className="text-muted-foreground flex items-start gap-2">
-                                    <span className="text-blue-500 mt-1">•</span>
-                                    <span>{pattern}</span>
-                                  </li>
-                                ))}
-                              </ul>
+                              <p className="text-muted-foreground leading-relaxed">{message.insight.summary}</p>
+                              <p className="text-xs text-muted-foreground mt-2">{message.insight.timespan}</p>
                             </div>
-                          )}
 
-                          {message.insight.recommendations.length > 0 && (
-                            <div className="glass-card p-4 rounded-xl border-l-4 border-yellow-500 bg-yellow-500/5">
-                              <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                                <Lightbulb className="w-4 h-4 text-yellow-500" />
-                                Recommendations
-                              </h4>
-                              <ul className="space-y-2">
-                                {message.insight.recommendations.map((rec, i) => (
-                                  <li key={i} className="text-muted-foreground flex items-start gap-2">
-                                    <span className="text-yellow-500 mt-1">→</span>
-                                    <span>{rec}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            ))}
+                            {message.insight.callout && (
+                              <div className="glass-card p-4 rounded-xl border-l-4 border-orange-500 bg-orange-500/10">
+                                <h4 className="font-medium text-orange-400 mb-2 flex items-center gap-2 text-sm uppercase tracking-wide">
+                                  <Zap className="w-4 h-4" />
+                                  Keryx
+                                </h4>
+                                <p className="text-foreground font-medium leading-relaxed">{message.insight.callout}</p>
+                              </div>
+                            )}
+
+                            {message.insight.patterns.length > 0 && (
+                              <div className="glass-card p-4 rounded-xl bg-white/5">
+                                <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                                  <TrendingUp className="w-4 h-4 text-blue-500" />
+                                  Patterns Detected
+                                </h4>
+                                <ul className="space-y-2">
+                                  {message.insight.patterns.map((pattern, i) => (
+                                    <li key={i} className="text-muted-foreground flex items-start gap-2">
+                                      <span className="text-blue-500 mt-1">•</span>
+                                      <span>{pattern}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {message.insight.recommendations.length > 0 && (
+                              <div className="glass-card p-4 rounded-xl border-l-4 border-yellow-500 bg-yellow-500/5">
+                                <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                                  <Lightbulb className="w-4 h-4 text-yellow-500" />
+                                  Recommendations
+                                </h4>
+                                <ul className="space-y-2">
+                                  {message.insight.recommendations.map((rec, i) => (
+                                    <li key={i} className="text-muted-foreground flex items-start gap-2">
+                                      <span className="text-yellow-500 mt-1">→</span>
+                                      <span>{rec}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              );
+            })}
 
             {questionMutation.isPending && (
               <Card className="glass-card border-white/20 animate-pulse">
@@ -260,7 +299,6 @@ export default function SynthesisContent() {
                 </CardContent>
               </Card>
             )}
-            <div ref={chatEndRef} />
           </>
         )}
       </div>

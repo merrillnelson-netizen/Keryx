@@ -1,4 +1,5 @@
 import AppLayout from "@/components/app-layout";
+import { ReadAloudButton } from "@/components/read-aloud-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -473,7 +474,19 @@ export default function Dashboard() {
             <CardHeader className="relative">
               <CardTitle className="text-xl flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-yellow-500" />
-                {briefing.greeting}
+                <span className="flex-1">{briefing.greeting}</span>
+                <ReadAloudButton
+                  text={[
+                    briefing.summary,
+                    briefing.focusAreas?.length ? `Focus areas for today: ${briefing.focusAreas.join(". ")}.` : "",
+                    briefing.reminders?.length ? `Reminders: ${briefing.reminders.join(". ")}.` : "",
+                    briefing.moodTrend ? `Emotional patterns: ${briefing.moodTrend}.` : "",
+                    briefing.affirmation ? `Today's affirmation: ${briefing.affirmation}.` : "",
+                  ].filter(Boolean).join(" ")}
+                  label="Read Briefing"
+                  variant="outline"
+                  className="flex-shrink-0 text-muted-foreground border-white/20"
+                />
               </CardTitle>
               <CardDescription className="text-base leading-relaxed mt-2">
                 {briefing.summary}
