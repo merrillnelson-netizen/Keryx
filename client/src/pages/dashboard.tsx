@@ -1,6 +1,7 @@
 import AppLayout from "@/components/app-layout";
 import { ReadAloudButton } from "@/components/read-aloud-button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
@@ -462,10 +463,51 @@ export default function Dashboard() {
 
         {/* Main Briefing Card */}
         {briefingLoading ? (
-          <Card className="glass-card border-white/20">
-            <CardContent className="py-12 flex flex-col items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-              <p className="text-muted-foreground">Generating your personalized briefing...</p>
+          <Card className="glass-card border-white/20 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5" />
+            <CardHeader className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <Skeleton className="w-5 h-5 rounded" />
+                <Skeleton className="h-6 w-48" />
+                <div className="flex items-center gap-1.5 ml-auto text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Generating your briefing…</span>
+                </div>
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6 mt-1" />
+              <Skeleton className="h-4 w-3/4 mt-1" />
+            </CardHeader>
+            <CardContent className="relative space-y-6">
+              {/* Focus Areas skeleton */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="glass-card p-3 rounded-lg flex items-start gap-3">
+                    <Skeleton className="w-6 h-6 rounded-full flex-shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                  </div>
+                ))}
+              </div>
+              {/* Reminders skeleton */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Skeleton className="h-8 w-36 rounded-full" />
+                  <Skeleton className="h-8 w-44 rounded-full" />
+                  <Skeleton className="h-8 w-32 rounded-full" />
+                </div>
+              </div>
+              {/* Mood skeleton */}
+              <Skeleton className="h-20 w-full rounded-xl" />
+              {/* Affirmation skeleton */}
+              <Skeleton className="h-14 w-full rounded-xl" />
             </CardContent>
           </Card>
         ) : briefing ? (
@@ -495,14 +537,14 @@ export default function Dashboard() {
             <CardContent className="relative space-y-6">
               {/* Focus Areas */}
               {briefing.focusAreas.length > 0 && (
-                <div className="space-y-3">
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '80ms', animationFillMode: 'both' }}>
                   <h4 className="font-medium text-foreground flex items-center gap-2">
                     <Target className="w-4 h-4 text-primary" />
                     Focus Areas for Today
                   </h4>
                   <div className="grid gap-2">
                     {briefing.focusAreas.map((area, i) => (
-                      <div key={i} className="glass-card p-3 rounded-lg flex items-start gap-3">
+                      <div key={i} className="glass-card p-3 rounded-lg flex items-start gap-3 animate-fade-in" style={{ animationDelay: `${120 + i * 60}ms`, animationFillMode: 'both' }}>
                         <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                           <span className="text-xs font-medium text-primary">{i + 1}</span>
                         </div>
@@ -515,7 +557,7 @@ export default function Dashboard() {
 
               {/* Reminders */}
               {briefing.reminders.length > 0 && (
-                <div className="space-y-3">
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '300ms', animationFillMode: 'both' }}>
                   <h4 className="font-medium text-foreground flex items-center gap-2">
                     <Bell className="w-4 h-4 text-amber-500" />
                     Reminders
@@ -525,7 +567,8 @@ export default function Dashboard() {
                       <Badge 
                         key={i} 
                         variant="outline" 
-                        className="bg-amber-500/10 border-amber-500/30 text-amber-300 py-1.5"
+                        className="bg-amber-500/10 border-amber-500/30 text-amber-300 py-1.5 animate-fade-in"
+                        style={{ animationDelay: `${340 + i * 40}ms`, animationFillMode: 'both' }}
                       >
                         {reminder}
                       </Badge>
@@ -536,7 +579,7 @@ export default function Dashboard() {
 
               {/* Email Highlights */}
               {briefing.emailHighlights && briefing.emailHighlights.length > 0 && (
-                <div className="space-y-3">
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '420ms', animationFillMode: 'both' }}>
                   <h4 className="font-medium text-foreground flex items-center gap-2">
                     <Mail className="w-4 h-4 text-blue-500" />
                     Relevant Emails
@@ -553,7 +596,7 @@ export default function Dashboard() {
 
               {/* Financial Insights */}
               {briefing.financialInsights && briefing.financialInsights.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '500ms', animationFillMode: 'both' }}>
                   <h4 className="font-medium text-foreground flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-emerald-500" />
                     Spending Insights
@@ -567,7 +610,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : briefingData?.hasFinancialData ? (
-                <div className="space-y-3">
+                <div className="space-y-3 animate-fade-in" style={{ animationDelay: '500ms', animationFillMode: 'both' }}>
                   <h4 className="font-medium text-foreground flex items-center gap-2">
                     <Wallet className="w-4 h-4 text-emerald-500" />
                     Spending Insights
@@ -579,7 +622,7 @@ export default function Dashboard() {
               ) : null}
 
               {/* Mood Trend */}
-              <div className="glass-card p-4 rounded-xl border-l-4 border-l-pink-500">
+              <div className="glass-card p-4 rounded-xl border-l-4 border-l-pink-500 animate-fade-in" style={{ animationDelay: '580ms', animationFillMode: 'both' }}>
                 <div className="flex items-start gap-3">
                   <Heart className="w-5 h-5 text-pink-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -590,7 +633,7 @@ export default function Dashboard() {
               </div>
 
               {/* Affirmation */}
-              <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 p-4 rounded-xl text-center">
+              <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 p-4 rounded-xl text-center animate-fade-in" style={{ animationDelay: '660ms', animationFillMode: 'both' }}>
                 <p className="text-lg font-medium text-foreground italic">"{briefing.affirmation}"</p>
               </div>
             </CardContent>
@@ -629,8 +672,20 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {alertsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <div className="space-y-3">
+                {[1, 2].map(i => (
+                  <div key={i} className="p-4 rounded-xl border border-white/10 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Skeleton className="w-5 h-5 rounded flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-3/4" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : alerts.length === 0 ? (
               <div className="text-center py-8">
