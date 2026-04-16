@@ -166,7 +166,7 @@ export default function Billing() {
       if (res.ok) {
         setJoinedList(true);
         queryClient.invalidateQueries({ queryKey: ['/api/billing/status'] });
-        toast({ title: "You're on the list!", description: "We'll notify you before billing goes live." });
+        toast({ title: "You're on the list!", description: "We'll keep you posted on launch." });
       }
     } catch {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
@@ -339,7 +339,7 @@ export default function Billing() {
               </div>
               {!alreadyOnList && (
                 <p className="text-xs text-yellow-500/60">
-                  Not ready to pay yet? Join the interest list and we'll remind you before billing goes live.
+                  Not ready to pay yet? Join the interest list and we'll keep you posted after the founding deal ends.
                 </p>
               )}
             </CardContent>
