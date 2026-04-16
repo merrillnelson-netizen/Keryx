@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
 import AppLayout from "@/components/app-layout";
 import { TierGate } from "@/components/tier-gate";
+import { useBillingTier } from "@/hooks/use-billing-tier";
 import {
   Bot,
   Calendar,
@@ -939,6 +940,8 @@ interface ActionsResponse {
 }
 
 function AgentPageInner() {
+  const { hasTier } = useBillingTier();
+  const canViewActions = hasTier("life_os");
   const [mainTab, setMainTab] = useState<"actions" | "rules">("actions");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -960,6 +963,7 @@ function AgentPageInner() {
   const { data: statsData } = useQuery<{ status: string; data: ActionStats }>({
     queryKey: ["/api/actions/stats"],
     refetchInterval: 30000,
+    enabled: canViewActions && mainTab === "actions",
   });
 
   const { data: actionsData, isLoading, isFetching } = useQuery<ActionsResponse>({
@@ -974,6 +978,7 @@ function AgentPageInner() {
       return res.json();
     },
     refetchInterval: 30000,
+    enabled: canViewActions && mainTab === "actions",
   });
 
   // Merge newly fetched page into accumulated list
