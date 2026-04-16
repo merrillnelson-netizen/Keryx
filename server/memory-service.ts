@@ -47,15 +47,23 @@ export async function runMemorySideEffects(
         ).catch((err) => console.error("Failed to track people:", err));
       }
 
-      // 3. AI action detection
-      import("./ai-actions-service")
-        .then(({ processUserInputForActions }) => {
-          processUserInputForActions(user.id, memoryText, "memory", entryId, {
-            timezone,
-            userProfile,
-          }).catch((err) => console.warn("AI action detection failed:", err));
-        })
-        .catch((err) => console.warn("Failed to load ai-actions-service:", err));
+      // 3. AI action detection — Life OS only (when billing enforcement is active)
+      const billingActive = process.env.BILLING_ENFORCEMENT === "true";
+      const subActive =
+        (user.subscriptionStatus === "active" || user.subscriptionStatus === "trialing") &&
+        (!user.currentPeriodEnd || new Date(user.currentPeriodEnd) > new Date());
+      const actionDetectionAllowed =
+        !billingActive || (user.subscriptionTier === "life_os" && subActive);
+      if (actionDetectionAllowed) {
+        import("./ai-actions-service")
+          .then(({ processUserInputForActions }) => {
+            processUserInputForActions(user.id, memoryText, "memory", entryId, {
+              timezone,
+              userProfile,
+            }).catch((err) => console.warn("AI action detection failed:", err));
+          })
+          .catch((err) => console.warn("Failed to load ai-actions-service:", err));
+      }
 
       // 4. Auto-create reminder if the AI detected a reminder intent
       if (extracted.reminderIntent?.detected && extracted.reminderIntent.content) {
