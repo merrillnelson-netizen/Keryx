@@ -420,7 +420,7 @@ export default function Ecosystem() {
     const debits = transactions.filter(t => t.amount > 0);
     const dailyBurn = spendingSummary.totalSpending / parseInt(txDays);
     const biggestTxn = debits.length > 0 ? Math.max(...debits.map(t => t.amount)) : 0;
-    const topCatPct = spendingChartData.length > 0
+    const topCatPct = spendingChartData.length > 0 && spendingSummary.totalSpending > 0
       ? Math.round((spendingChartData[0].value / spendingSummary.totalSpending) * 100)
       : 0;
     const onlinePct = debits.length > 0
@@ -798,6 +798,7 @@ export default function Ecosystem() {
                                 </g>
                               );
                             }}
+                            position="center"
                           />
                         </Pie>
                       </PieChart>
