@@ -52,6 +52,8 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -75,6 +77,8 @@ interface Goal {
   aiSummary: string | null;
   aiLastAnalyzed: string | null;
   relatedMemoryIds: string[] | null;
+  sortOrder: number;
+  pinned: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -362,6 +366,19 @@ export function GoalModal({ open, onOpenChange, goalId, isCreating, onCreateGoal
                 <div className="flex items-center gap-3 mt-2 pl-[52px]">
                   <Progress value={goal.progressPercent} className="h-1.5 flex-1" />
                   <span className="text-xs text-muted-foreground flex-shrink-0">{goal.progressPercent}%</span>
+                  <button
+                    onClick={() => updateGoalMutation.mutate({ pinned: !goal.pinned } as any)}
+                    disabled={updateGoalMutation.isPending}
+                    className={cn(
+                      "flex-shrink-0 p-1.5 rounded-md border transition-colors",
+                      goal.pinned
+                        ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                    title={goal.pinned ? "Unpin goal" : "Pin goal"}
+                  >
+                    {goal.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                  </button>
                   <Select value={goal.status} onValueChange={handleStatusChange}>
                     <SelectTrigger className="w-32 h-8 text-xs flex-shrink-0">
                       <SelectValue />

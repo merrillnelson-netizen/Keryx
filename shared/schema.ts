@@ -937,6 +937,8 @@ export const goals = pgTable("goals", {
   aiSummary: text("ai_summary"), // AI-generated progress summary
   aiLastAnalyzed: timestamp("ai_last_analyzed"), // When AI last analyzed progress
   relatedMemoryIds: text("related_memory_ids").array(), // IDs of memories that contributed to progress
+  sortOrder: integer("sort_order").default(0).notNull(), // User-defined display order
+  pinned: boolean("pinned").default(false).notNull(), // Pinned goals always appear first
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({

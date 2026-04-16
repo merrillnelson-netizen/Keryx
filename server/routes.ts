@@ -5490,6 +5490,8 @@ Return ONLY the JSON array, no other text.`;
         progress: z.number().min(0).max(100).optional(),
         targetDate: z.string().nullable().optional(),
         milestones: z.array(goalMilestoneSchema).optional(),
+        sortOrder: z.number().int().optional(),
+        pinned: z.boolean().optional(),
       });
       
       const parsed = goalUpdateSchema.safeParse(req.body);
