@@ -1488,7 +1488,7 @@ export async function processUserInputForActions(
   userInput: string,
   sourceType: 'voice_input' | 'memory' | 'briefing' | 'manual' | 'discovery' | 'velocity' | 'high_signal' = 'voice_input',
   sourceId?: string,
-  contextInfo?: { timezone?: string; userProfile?: string | null },
+  contextInfo?: { timezone?: string; userProfile?: string | null; skipActionTypes?: string[] },
   minConfidence?: number
 ): Promise<{ 
   actionDetected: boolean; 
@@ -1539,9 +1539,56 @@ export async function processUserInputForActions(
     return { actionDetected: false };
   }
 
+  // Skip action types the caller has already handled directly (e.g. memory-service
+  // creates reminders from extracted.reminderIntent — don't double-up).
+  if (contextInfo?.skipActionTypes?.includes(detected.actionType)) {
+    return { actionDetected: false };
+  }
+
   // Enforce minimum confidence gate before any persistence
   if (minConfidence !== undefined && (detected.confidence ?? 0) < minConfidence) {
     return { actionDetected: false };
+  }
+
+  // Generic dedup: skip if a near-identical PENDING action already exists for this user
+  // within the last 24h. Prevents duplicate suggestions from different sources
+  // (e.g. two discoveries proposing the same reminder).
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentPending = await storage.getAiActions(
+      userId,
+      [AI_ACTION_STATUSES.PENDING],
+      50,
+      0,
+      since,
+    );
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const newTitle = norm(detected.title);
+    const newWords = new Set(newTitle.split(' ').filter((w) => w.length > 2));
+    const isDup = recentPending.some((existing) => {
+      if (existing.actionType !== detected.actionType) return false;
+      const existTitle = norm(existing.title);
+      if (existTitle === newTitle) return true;
+      if (existTitle.includes(newTitle) || newTitle.includes(existTitle)) return true;
+      const existWords = new Set(existTitle.split(' ').filter((w) => w.length > 2));
+      if (newWords.size === 0 || existWords.size === 0) return false;
+      let overlap = 0;
+      for (const w of newWords) if (existWords.has(w)) overlap++;
+      const smaller = Math.min(newWords.size, existWords.size);
+      return overlap / smaller >= 0.7;
+    });
+    if (isDup) {
+      console.log(
+        `[ai-actions] Skipping duplicate ${detected.actionType} action "${detected.title}" — similar pending action exists`,
+      );
+      return { actionDetected: false };
+    }
+  } catch (dedupErr) {
+    console.warn(
+      '[ai-actions] Dedup check failed (continuing):',
+      dedupErr instanceof Error ? dedupErr.message : dedupErr,
+    );
   }
   
   // For goal.update actions: inject goalId from the user's goals list so that

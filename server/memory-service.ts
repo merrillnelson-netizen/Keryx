@@ -55,11 +55,18 @@ export async function runMemorySideEffects(
       const actionDetectionAllowed =
         !billingActive || (user.subscriptionTier === "life_os" && subActive);
       if (actionDetectionAllowed) {
+        // If extracted.reminderIntent already produced a reminder (step 4 below),
+        // skip reminder.create from action detection so we don't queue a duplicate.
+        const skipActionTypes: string[] = [];
+        if (extracted.reminderIntent?.detected && extracted.reminderIntent.content) {
+          skipActionTypes.push("reminder.create");
+        }
         import("./ai-actions-service")
           .then(({ processUserInputForActions }) => {
             processUserInputForActions(user.id, memoryText, "memory", entryId, {
               timezone,
               userProfile,
+              skipActionTypes,
             }).catch((err) => console.warn("AI action detection failed:", err));
           })
           .catch((err) => console.warn("Failed to load ai-actions-service:", err));
