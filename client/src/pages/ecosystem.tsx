@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import AppLayout from "@/components/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -333,6 +333,11 @@ export default function Ecosystem() {
 
   // ── Topic Distribution state ──
   const [activeTopicIndex, setActiveTopicIndex] = useState<number | null>(null);
+
+  // Reset active topic when data changes (e.g. refresh) to avoid out-of-bounds access
+  useEffect(() => {
+    setActiveTopicIndex(null);
+  }, [data?.topicDistribution]);
 
   const fmt = (amount: number) =>
     privacyMode ? "••••••" : `$${amount.toFixed(2)}`;
@@ -740,7 +745,7 @@ export default function Ecosystem() {
                             <Cell
                               key={entry.topic}
                               fill={TOPIC_COLORS[i % TOPIC_COLORS.length]}
-                              opacity={activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.4}
+                              opacity={activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.45}
                               stroke={activeTopicIndex === i ? "#fff" : "transparent"}
                               strokeWidth={2}
                             />
@@ -749,7 +754,10 @@ export default function Ecosystem() {
                             content={({ viewBox }) => {
                               const { cx, cy } = viewBox as { cx: number; cy: number };
                               const total = data.topicDistribution.reduce((s, t) => s + t.count, 0);
-                              if (activeTopicIndex === null) {
+                              const t = activeTopicIndex !== null
+                                ? data.topicDistribution[activeTopicIndex]
+                                : undefined;
+                              if (activeTopicIndex === null || !t) {
                                 return (
                                   <text
                                     x={cx}
@@ -763,7 +771,6 @@ export default function Ecosystem() {
                                   </text>
                                 );
                               }
-                              const t = data.topicDistribution[activeTopicIndex];
                               const pct = Math.round((t.count / total) * 100);
                               return (
                                 <g>
@@ -808,7 +815,7 @@ export default function Ecosystem() {
                               className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-opacity"
                               style={{
                                 background: TOPIC_COLORS[i % TOPIC_COLORS.length],
-                                opacity: activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.4,
+                                opacity: activeTopicIndex === null || activeTopicIndex === i ? 1 : 0.45,
                               }}
                             />
                             <span className={cn(
@@ -1243,7 +1250,7 @@ export default function Ecosystem() {
                               Top Merchants
                             </h4>
                             <div className="space-y-2">
-                              {spendingSummary.topMerchants.slice(0, 8).map((merchant, i) => (
+                              {spendingSummary.topMerchants.slice(0, 6).map((merchant, i) => (
                                 <div
                                   key={i}
                                   className="glass-card p-2.5 rounded-lg flex items-center justify-between gap-2"
