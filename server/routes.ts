@@ -7218,7 +7218,7 @@ Respond with JSON only.`
 
     // ── Event: log diagnostic events from the Bridge for visibility ──────
     if (type === 'event') {
-      const payload = (rest as any).payload;
+      const payload = rest.payload;
       const kind = payload && typeof payload === 'object' ? payload.kind : undefined;
       if (source === 'android-bridge' && kind === 'parse_skip') {
         // Silent-breakage canary — surfaces when Google Messages copy changes

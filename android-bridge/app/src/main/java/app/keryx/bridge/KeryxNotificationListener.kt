@@ -230,65 +230,70 @@ class KeryxNotificationListener : NotificationListenerService() {
     /**
      * Detects outgoing-RCS / "sent" / "sending" / "delivered" notifications.
      *
-     * Heuristics are intentionally broad — Google reshuffles Messages copy
-     * frequently as they fold Samsung-Messages-style features in, so we
-     * recognise a wide family of outgoing signals rather than exact strings.
+     * Designed to be broad enough to survive Google Messages copy reshuffles
+     * while NEVER misclassifying a real incoming message as outgoing.
      *
-     * Recognised signals (any one is sufficient):
-     *   - Title is a self-label: "You", "Me", "Self", etc.
-     *   - Title starts with: "sent", "sending", "delivered", "you sent",
-     *     "you to ", "to "
-     *   - Title equals: "message sent", "message sending", "message delivered"
-     *   - Text equals: "message sent", "sending", "sending…", "delivered",
-     *     "you sent a message"
-     *   - Text starts with: "message sent ", "sending to ", "message sending",
-     *     "delivered ", "you: ", "you sent ", "✓", "✔"
-     *   - Text contains a status badge near the start: "delivered" within the
-     *     first 20 chars (covers "Delivered • 2:31 PM"-style suffixes)
+     * Two strict structural categories trigger an outgoing classification:
+     *
+     *   A. Self-label title — Google packs a sent-side notification with
+     *      title == "You" / "Me" / "Self" / etc. Real contacts keep their
+     *      actual name in the title, so a self-label there is a strong
+     *      outgoing signal.
+     *
+     *   B. Status-only template — title OR text is one of the well-known
+     *      status phrases ("Message sent", "Sending…", "Message delivered",
+     *      "You sent a message", "Message sent to <contact>"). These are
+     *      Google's templated status notifications and can never appear as
+     *      the body of a real incoming message because they live in the
+     *      title slot or are the entire text.
+     *
+     * Patterns that could plausibly appear inside a legitimate incoming
+     * message body (e.g. "you: ", a leading checkmark, the word "delivered"
+     * appearing somewhere in the first 20 chars) are intentionally NOT used
+     * as triggers — they would route real incoming messages as sent.
      */
     private fun isSentRcsNotification(title: String, text: String): Boolean {
         val titleTrim = title.trim()
         val titleLower = titleTrim.lowercase()
         val textLower = text.trim().lowercase()
 
-        // Title-side self-labels and prefixes
+        // Category A — self-label title (strong signal: real contacts have names here)
         if (isSelfSender(titleTrim)) return true
+
+        // Category B1 — title is a status template
         if (titleLower == "message sent"
             || titleLower == "message sending"
             || titleLower == "message delivered"
+            || titleLower == "sent"
+            || titleLower == "sending"
+            || titleLower == "sending\u2026"
+            || titleLower == "delivered"
         ) return true
-        if (titleLower.startsWith("sent")
-            || titleLower.startsWith("sending")
-            || titleLower.startsWith("delivered")
-            || titleLower.startsWith("you sent")
-            || titleLower.startsWith("you to ")
-            || titleLower.startsWith("to ")
-        ) return true
+        // Title that begins with a status word followed by a separator —
+        // covers "Sent: …", "Sending to Mel", "Message sent to Mel",
+        // "Delivered • 2:31 PM". The trailing separator is required so a
+        // contact named "Sentinel" or "Sender" cannot match.
+        if (titleLower.matches(
+            Regex("""^(sent|sending|delivered|message sent|message sending|message delivered|you sent)([\s:•·\-]|\sto\s).*""")
+        )) return true
 
-        // Text-side equality
+        // Category B2 — text is the entire status template (no body)
         if (textLower == "message sent"
             || textLower == "sending"
             || textLower == "sending\u2026"
             || textLower == "delivered"
+            || textLower == "sent"
             || textLower == "you sent a message"
         ) return true
-
-        // Text-side prefixes
+        // Text that begins with a Google status template specifically — these
+        // are never legitimate inbound bodies because they're Google's own
+        // notification phrasings, not message content.
         if (textLower.startsWith("message sent to ")
             || textLower.startsWith("message sent ")
             || textLower.startsWith("sending to ")
             || textLower.startsWith("message sending")
-            || textLower.startsWith("delivered ")
-            || textLower.startsWith("you: ")
             || textLower.startsWith("you sent ")
-            || textLower.startsWith("\u2713") // ✓
-            || textLower.startsWith("\u2714") // ✔
         ) return true
-
-        // "Delivered • 2:31 PM"-style status banners — keyword early in the text
-        if (textLower.length >= 9 && textLower.substring(0, minOf(20, textLower.length)).contains("delivered")) {
-            return true
-        }
 
         return false
     }
