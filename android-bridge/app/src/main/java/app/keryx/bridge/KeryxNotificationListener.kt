@@ -52,9 +52,14 @@ class KeryxNotificationListener : NotificationListenerService() {
         stats.notificationsSeen.incrementAndGet()
 
         try {
+            // Preserve the historical fallback: if the OS didn't stamp the
+            // notification (postTime <= 0), use the current wall clock so
+            // downstream timestamps remain "now-ish" instead of 1970-01-01.
+            // Parser stays pure — clock injection happens here.
+            val postTime = sbn.postTime.takeIf { it > 0 } ?: System.currentTimeMillis()
             val input = NotificationBundleExtractor.extract(
                 packageName = pkg,
-                postTimeMs = sbn.postTime,
+                postTimeMs = postTime,
                 extras = extras,
                 isGroupSummary = false,
             )
