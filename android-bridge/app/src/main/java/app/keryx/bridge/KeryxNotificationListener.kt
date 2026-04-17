@@ -5,6 +5,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import app.keryx.bridge.network.RelayClient
+import app.keryx.bridge.parser.BridgeFixtureDump
 import app.keryx.bridge.parser.BridgeParser
 import app.keryx.bridge.parser.NotificationBundleExtractor
 import app.keryx.bridge.util.Prefs
@@ -45,6 +46,27 @@ class KeryxNotificationListener : NotificationListenerService() {
         val extras = notification.extras ?: return
 
         val isGroupSummary = (notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0
+
+        // One-shot debug capture: when BridgeFixtureDump.DUMP_ENABLED is true
+        // (compile-time const, never on in release), every Messages-family
+        // notification we see — including group summaries — is dumped as a
+        // JSON blob to logcat under the "KeryxFixtureDump" tag in the exact
+        // shape BridgeParserFixturesTest consumes. This is how real on-device
+        // fixtures get captured. See android-bridge/CAPTURING_FIXTURES.md.
+        if (BridgeFixtureDump.DUMP_ENABLED) {
+            try {
+                val dump = BridgeFixtureDump.dumpExtras(
+                    packageName = pkg,
+                    postTimeMs = sbn.postTime,
+                    isGroupSummary = isGroupSummary,
+                    extras = extras,
+                )
+                Log.i(BridgeFixtureDump.LOG_TAG, dump)
+            } catch (e: Exception) {
+                Log.w(TAG, "Fixture dump failed: ${e.message}")
+            }
+        }
+
         if (isGroupSummary) return
 
         val relay = RelayClient.get(applicationContext)
