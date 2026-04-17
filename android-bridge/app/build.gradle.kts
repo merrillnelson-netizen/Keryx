@@ -44,6 +44,14 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    // Robolectric needs the Android resources jar on the test classpath so it
+    // can fake a working Android runtime for unit tests.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
@@ -62,6 +70,10 @@ dependencies {
     implementation(libs.libphonenumber)
     implementation(libs.androidx.security.crypto)
 
-    // JVM unit tests for the pure parser (no emulator / Robolectric needed).
+    // JVM unit tests for the pure parser. Robolectric is used by the
+    // fixtures-driven test to construct real Android `Bundle` objects from
+    // anonymized JSON fixtures, exercising the full Bundle → NotificationInput
+    // translation path that the production listener uses. No emulator needed.
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }

@@ -1,0 +1,16 @@
+{
+  "scenario": "count_only_summary",
+  "description": "A summary-style notification with no real body — just '3 new messages'. Parser must skip silently (not as a diagnostic) so it never bubbles up as a parse failure.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000240000,
+  "isGroupSummary": false,
+  "extras": {
+    "android.title": "Messages",
+    "android.text": "3 new messages"
+  },
+  "expected": {
+    "skipReason": "COUNT_ONLY_TEXT",
+    "diagnostic": false,
+    "payloads": []
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "scenario": "group_chat_messagingstyle",
+  "description": "Group chat notification with two recent messages from different senders. Anonymized: real names replaced with 'Mel' and 'Sam'.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000180000,
+  "isGroupSummary": false,
+  "extras": {
+    "android.title": "Weekend plans",
+    "android.text": "2 new messages",
+    "android.messages": [
+      { "text": "Saturday brunch?", "sender": "Mel", "time": 1700000170000 },
+      { "text": "I'm in", "sender": "Sam", "time": 1700000180000 }
+    ]
+  },
+  "expected": {
+    "skipReason": null,
+    "diagnostic": false,
+    "payloads": [
+      {
+        "direction": "RECEIVED",
+        "address": "Mel",
+        "name": "Mel",
+        "body": "Saturday brunch?",
+        "timestampIso": "2023-11-14T22:16:10Z",
+        "channel": "rcs",
+        "packageName": "com.google.android.apps.messaging"
+      },
+      {
+        "direction": "RECEIVED",
+        "address": "Sam",
+        "name": "Sam",
+        "body": "I'm in",
+        "timestampIso": "2023-11-14T22:16:20Z",
+        "channel": "rcs",
+        "packageName": "com.google.android.apps.messaging"
+      }
+    ]
+  }
+}

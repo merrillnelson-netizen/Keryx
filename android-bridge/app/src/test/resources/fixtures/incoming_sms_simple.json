@@ -1,0 +1,26 @@
+{
+  "scenario": "incoming_sms_simple",
+  "description": "Plain SMS arriving as a simple (non-MessagingStyle) notification — title is the contact name, text is the body. No 'android.messages' array.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000120000,
+  "isGroupSummary": false,
+  "extras": {
+    "android.title": "Sam",
+    "android.text": "Can you grab milk on the way home?"
+  },
+  "expected": {
+    "skipReason": null,
+    "diagnostic": false,
+    "payloads": [
+      {
+        "direction": "RECEIVED",
+        "address": "Sam",
+        "name": "Sam",
+        "body": "Can you grab milk on the way home?",
+        "timestampIso": "2023-11-14T22:15:20Z",
+        "channel": "sms",
+        "packageName": "com.google.android.apps.messaging"
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "scenario": "incoming_rcs_messagingstyle",
+  "description": "RCS message arriving via Google Messages MessagingStyle notification (single message from a known contact). Anonymized: real contact name replaced with 'Mel'.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000000000,
+  "isGroupSummary": false,
+  "extras": {
+    "android.title": "Mel",
+    "android.text": "Heading out, see you in 10",
+    "android.messages": [
+      { "text": "Heading out, see you in 10", "sender": "Mel", "time": 1700000000000 }
+    ]
+  },
+  "expected": {
+    "skipReason": null,
+    "diagnostic": false,
+    "payloads": [
+      {
+        "direction": "RECEIVED",
+        "address": "Mel",
+        "name": "Mel",
+        "body": "Heading out, see you in 10",
+        "timestampIso": "2023-11-14T22:13:20Z",
+        "channel": "rcs",
+        "packageName": "com.google.android.apps.messaging"
+      }
+    ]
+  }
+}

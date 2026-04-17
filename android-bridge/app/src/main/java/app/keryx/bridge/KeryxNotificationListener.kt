@@ -6,6 +6,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import app.keryx.bridge.network.RelayClient
 import app.keryx.bridge.parser.BridgeParser
+import app.keryx.bridge.parser.NotificationBundleExtractor
 import app.keryx.bridge.util.Prefs
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -51,7 +52,12 @@ class KeryxNotificationListener : NotificationListenerService() {
         stats.notificationsSeen.incrementAndGet()
 
         try {
-            val input = extractNotificationInput(pkg, extras, sbn.postTime, isGroupSummary = false)
+            val input = NotificationBundleExtractor.extract(
+                packageName = pkg,
+                postTimeMs = sbn.postTime,
+                extras = extras,
+                isGroupSummary = false,
+            )
             val result = BridgeParser.parseNotification(input)
             handleParseResult(relay, stats, pkg, input, result)
         } finally {
@@ -59,38 +65,6 @@ class KeryxNotificationListener : NotificationListenerService() {
             // a separate scheduler. Cheap check; sendStatsIfDue handles throttling.
             sendStatsIfDue(prefs, relay)
         }
-    }
-
-    /** Bundle → pure input. The only Android-type-touching code in the hot path. */
-    private fun extractNotificationInput(
-        pkg: String,
-        extras: Bundle,
-        postTimeMs: Long,
-        isGroupSummary: Boolean,
-    ): BridgeParser.NotificationInput {
-        val title = extras.getCharSequence("android.title")?.toString()
-        val text = extras.getCharSequence("android.text")?.toString()
-        val bigText = extras.getCharSequence("android.bigText")?.toString()
-
-        val msgArr = extras.getParcelableArray("android.messages")
-        val msgList: List<BridgeParser.MessagingStyleMessage>? = msgArr?.mapNotNull { item ->
-            val b = item as? Bundle ?: return@mapNotNull null
-            BridgeParser.MessagingStyleMessage(
-                text = b.getCharSequence("text")?.toString(),
-                sender = b.getCharSequence("sender")?.toString(),
-                timeMs = b.getLong("time", 0L),
-            )
-        }
-
-        return BridgeParser.NotificationInput(
-            packageName = pkg,
-            postTimeMs = postTimeMs,
-            title = title,
-            text = text,
-            bigText = bigText,
-            messagingStyleMessages = msgList,
-            isGroupSummary = isGroupSummary,
-        )
     }
 
     /** Translates a [BridgeParser.ParseResult] into relay enqueues + diagnostics + counter updates. */

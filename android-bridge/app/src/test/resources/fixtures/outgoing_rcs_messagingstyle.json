@@ -1,0 +1,29 @@
+{
+  "scenario": "outgoing_rcs_messagingstyle",
+  "description": "Outgoing RCS message captured via MessagingStyle. The 'sender' field is null (Android convention for the local user). Conversation address is 'Mel'.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000060000,
+  "isGroupSummary": false,
+  "extras": {
+    "android.title": "Mel",
+    "android.text": "On my way",
+    "android.messages": [
+      { "text": "On my way", "sender": null, "time": 1700000060000 }
+    ]
+  },
+  "expected": {
+    "skipReason": null,
+    "diagnostic": false,
+    "payloads": [
+      {
+        "direction": "SENT",
+        "address": "outgoing",
+        "name": null,
+        "body": "On my way",
+        "timestampIso": "2023-11-14T22:14:20Z",
+        "channel": "rcs",
+        "packageName": "com.google.android.apps.messaging"
+      }
+    ]
+  }
+}

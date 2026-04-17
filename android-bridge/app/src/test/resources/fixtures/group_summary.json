@@ -1,0 +1,16 @@
+{
+  "scenario": "group_summary",
+  "description": "Notification has FLAG_GROUP_SUMMARY set — Android posts these alongside per-conversation children. We must skip silently to avoid double-relay.",
+  "package": "com.google.android.apps.messaging",
+  "postTimeMs": 1700000300000,
+  "isGroupSummary": true,
+  "extras": {
+    "android.title": "Messages",
+    "android.text": "5 new messages from 3 people"
+  },
+  "expected": {
+    "skipReason": "GROUP_SUMMARY",
+    "diagnostic": false,
+    "payloads": []
+  }
+}
