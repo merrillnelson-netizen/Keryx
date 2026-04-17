@@ -13,6 +13,7 @@ coroutinesVersion = "1.8.1"
 okhttp = "4.12.0"
 libphonenumber = "8.13.43"
 securityCrypto = "1.1.0-alpha06"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +30,7 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 libphonenumber = { group = "com.googlecode.libphonenumber", name = "libphonenumber", version.ref = "libphonenumber" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

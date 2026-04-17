@@ -61,4 +61,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.libphonenumber)
     implementation(libs.androidx.security.crypto)
+
+    // JVM unit tests for the pure parser (no emulator / Robolectric needed).
+    testImplementation(libs.junit)
 }
