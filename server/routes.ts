@@ -7221,13 +7221,41 @@ Respond with JSON only.`
       const payload = rest.payload;
       const kind = payload && typeof payload === 'object' ? payload.kind : undefined;
       if (source === 'android-bridge' && kind === 'parse_skip') {
-        // Silent-breakage canary — surfaces when Google Messages copy changes
-        // and the Bridge stops being able to extract message bodies.
+        // Silent-breakage canary — surfaces when a Messages-family app's copy
+        // changes and the Bridge stops being able to extract message bodies.
         console.warn(
           `[relay] android-bridge parse_skip: reason=${payload.reason} ` +
+          `pkg=${payload.package} ` +
           `titleLen=${payload.titleLen} textLen=${payload.textLen} ` +
           `messagingStyleCount=${payload.messagingStyleCount} user=${userId}`
         );
+      } else if (source === 'android-bridge' && kind === 'stats') {
+        // Hourly per-package extraction-rate snapshot. Bodies/addresses/names
+        // are never included — only counts. We log every ping for trend
+        // visibility, and emit an extra warning when the extraction rate drops
+        // below a threshold on a meaningful sample size, which is the canary
+        // for a sustained-but-quiet break (e.g. an OEM variant we don't yet
+        // parse correctly).
+        const pkg = String(payload.package ?? 'unknown');
+        const notif = Number(payload.notificationsSeen) || 0;
+        const extracted = Number(payload.messagesExtracted) || 0;
+        const outgoing = Number(payload.outgoing) || 0;
+        const incoming = Number(payload.incoming) || 0;
+        const ratePct = notif > 0 ? Math.round((extracted / notif) * 100) : 0;
+        console.log(
+          `[relay] android-bridge stats: pkg=${pkg} notif=${notif} ` +
+          `extracted=${extracted} (out=${outgoing} in=${incoming}) ` +
+          `rate=${ratePct}% user=${userId}`
+        );
+        const LOW_RATE_THRESHOLD_PCT = 50;
+        const MIN_SAMPLE_FOR_WARN = 5;
+        if (notif >= MIN_SAMPLE_FOR_WARN && ratePct < LOW_RATE_THRESHOLD_PCT) {
+          console.warn(
+            `[relay] android-bridge LOW_EXTRACTION_RATE: pkg=${pkg} ` +
+            `${extracted}/${notif} = ${ratePct}% ` +
+            `(threshold ${LOW_RATE_THRESHOLD_PCT}%) user=${userId}`
+          );
+        }
       }
     }
 

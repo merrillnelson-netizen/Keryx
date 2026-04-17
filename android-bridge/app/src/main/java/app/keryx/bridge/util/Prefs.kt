@@ -69,6 +69,16 @@ class Prefs private constructor(context: Context) {
         get() = prefs.getInt(KEY_PENDING_RETRY, 0)
         set(value) = prefs.edit().putInt(KEY_PENDING_RETRY, value).apply()
 
+    /**
+     * Wall-clock millis of the last Bridge → server diagnostic stats ping.
+     * Used by KeryxNotificationListener to throttle hourly counter pings.
+     * Defaults to 0 so the first notification after install fires a ping
+     * (with whatever counters have accumulated since boot).
+     */
+    var lastStatsPingAt: Long
+        get() = prefs.getLong(KEY_LAST_STATS_PING_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_STATS_PING_AT, value).apply()
+
     fun recordSuccess() {
         lastRelayedAt = System.currentTimeMillis()
         val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
@@ -104,6 +114,7 @@ class Prefs private constructor(context: Context) {
         private const val KEY_ERROR_COUNT = "error_count"
         private const val KEY_PERM_FAILURE_COUNT = "perm_failure_count"
         private const val KEY_PENDING_RETRY = "pending_retry"
+        private const val KEY_LAST_STATS_PING_AT = "last_stats_ping_at"
 
         @Volatile private var instance: Prefs? = null
 
