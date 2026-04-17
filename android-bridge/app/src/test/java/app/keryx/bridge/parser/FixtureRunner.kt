@@ -104,7 +104,16 @@ object FixtureRunner {
     ) {
         val tag = "[$fixtureName]"
 
-        val expectedSkipReason = expected.optString("skipReason", "").ifBlank { null }
+        // NB: Android's JSONObject.optString returns the literal string "null"
+        // (not "" or Java null) when the JSON value is `null`, because
+        // JSON.toString(NULL) routes through String.valueOf(NULL) → "null".
+        // Check isNull explicitly so a `"skipReason": null` fixture is treated
+        // as "no skip expected" instead of "expected skip reason 'null'".
+        val expectedSkipReason: String? = when {
+            !expected.has("skipReason") -> null
+            expected.isNull("skipReason") -> null
+            else -> expected.optString("skipReason", "").ifBlank { null }
+        }
         if (expectedSkipReason != null) {
             assertNotNull("$tag expected skip but got payloads", result.skip)
             assertTrue(
