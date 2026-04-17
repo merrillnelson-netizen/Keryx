@@ -29,6 +29,13 @@ private const val GOOGLE_MESSAGES_PKG = "com.google.android.apps.messaging"
  *    extras["android.title"] = sender name or conversation title
  *    extras["android.text"]  = message body
  *    extras["android.bigText"] = full body (fallback)
+ *
+ * Resilience to Google Messages copy changes:
+ *   The outgoing-RCS detection uses broad heuristics rather than exact phrase
+ *   matches, because Google routinely renames notification labels as they merge
+ *   features from Samsung Messages. If a notification still produces zero
+ *   relayable payloads, an anonymized "parse_skip" diagnostic event is sent
+ *   so silent breakage shows up server-side before users notice missing messages.
  */
 class KeryxNotificationListener : NotificationListenerService() {
 
@@ -47,6 +54,7 @@ class KeryxNotificationListener : NotificationListenerService() {
 
         val title = extras.getCharSequence("android.title")?.toString()
         val relay = RelayClient.get(applicationContext)
+        var emitted = 0
 
         // ── Path 1: MessagingStyle ────────────────────────────────────────────
         // Modern Google Messages uses MessagingStyle which packs all messages in
@@ -55,24 +63,59 @@ class KeryxNotificationListener : NotificationListenerService() {
         // Title is not required here — sender info comes from each message bundle.
         val messagingStyleMessages = extras.getParcelableArray("android.messages")
         if (!messagingStyleMessages.isNullOrEmpty()) {
-            processMessagingStyleMessages(relay, messagingStyleMessages, sbn.postTime)
+            emitted += processMessagingStyleMessages(relay, messagingStyleMessages, sbn.postTime)
+            if (emitted == 0) {
+                // MessagingStyle was present but yielded nothing — odd, fire diagnostic.
+                sendParseSkipDiagnostic(
+                    relay,
+                    reason = "messaging_style_zero_payloads",
+                    title = title,
+                    textLen = 0,
+                    messagingStyleCount = messagingStyleMessages.size,
+                )
+            }
             return
         }
 
         // ── Path 2: Simple notification (SMS / older Google Messages) ─────────
         // Title is required for the simple path to identify the sender.
-        if (title == null) return
         val text = extras.getCharSequence("android.text")?.toString()
             ?: extras.getCharSequence("android.bigText")?.toString()
-            ?: return
-        if (text.isBlank() || isCountOnlyText(text)) return
+
+        if (title == null || text == null || text.isBlank()) {
+            // Nothing extractable. Skip count-only summaries silently — they're expected.
+            if (text != null && isCountOnlyText(text)) return
+            // Otherwise, this is a notification we couldn't parse. Tell the server.
+            sendParseSkipDiagnostic(
+                relay,
+                reason = "simple_path_missing_fields",
+                title = title,
+                textLen = text?.length ?: 0,
+                messagingStyleCount = 0,
+            )
+            return
+        }
+        if (isCountOnlyText(text)) return
 
         val timestampMs = sbn.postTime.takeIf { it > 0 } ?: System.currentTimeMillis()
         val timestampIso = Instant.ofEpochMilli(timestampMs).toString()
 
         val isSent = isSentRcsNotification(title, text)
         if (isSent) {
-            val body = extractSentBody(text) ?: return
+            val body = extractSentBody(title, text)
+            if (body == null) {
+                // We classified this as a sent-RCS notification but couldn't recover
+                // the actual body. This is the silent-breakage case the diagnostic
+                // exists to catch — Google likely changed the body format.
+                sendParseSkipDiagnostic(
+                    relay,
+                    reason = "sent_classified_but_no_body",
+                    title = title,
+                    textLen = text.length,
+                    messagingStyleCount = 0,
+                )
+                return
+            }
             Log.d(TAG, "Outgoing RCS (simple): \"${body.take(40)}\"")
             relay.enqueue(
                 RelayClient.RelayPayload(
@@ -83,6 +126,7 @@ class KeryxNotificationListener : NotificationListenerService() {
                     name = null
                 )
             )
+            emitted++
         } else {
             val normalizedAddress = PhoneNormalizer.normalize(title)
             val senderName = if (normalizedAddress != title) null else title
@@ -96,6 +140,7 @@ class KeryxNotificationListener : NotificationListenerService() {
                     name = senderName
                 )
             )
+            emitted++
         }
     }
 
@@ -106,14 +151,19 @@ class KeryxNotificationListener : NotificationListenerService() {
      *   "time"   → timestamp ms (Long)
      *   "sender" → sender name (CharSequence), null/empty for outgoing messages
      *
-     * Outgoing messages (sender == null/blank) are relayed with direction="sent".
-     * Incoming messages use sender as the address/name.
+     * Outgoing messages (sender == null/blank, OR sender matches a self-label
+     * like "You" / "Me" — which Google has used for sent-side senders in some
+     * versions) are relayed with direction="sent". Incoming messages use sender
+     * as the address/name.
+     *
+     * @return number of relay payloads enqueued.
      */
     private fun processMessagingStyleMessages(
         relay: RelayClient,
         messages: Array<out android.os.Parcelable>,
         notifPostTime: Long,
-    ) {
+    ): Int {
+        var enqueued = 0
         for (item in messages) {
             val bundle = item as? Bundle ?: continue
             val body = bundle.getCharSequence("text")?.toString()?.trim() ?: continue
@@ -126,7 +176,7 @@ class KeryxNotificationListener : NotificationListenerService() {
 
             val sender = bundle.getCharSequence("sender")?.toString()?.trim()
 
-            if (sender.isNullOrBlank()) {
+            if (sender.isNullOrBlank() || isSelfSender(sender)) {
                 Log.d(TAG, "MessagingStyle outgoing: \"${body.take(40)}\"")
                 relay.enqueue(
                     RelayClient.RelayPayload(
@@ -137,6 +187,7 @@ class KeryxNotificationListener : NotificationListenerService() {
                         name = null
                     )
                 )
+                enqueued++
             } else {
                 val normalizedAddress = PhoneNormalizer.normalize(sender)
                 val senderName = if (normalizedAddress != sender) null else sender
@@ -150,8 +201,10 @@ class KeryxNotificationListener : NotificationListenerService() {
                         name = senderName
                     )
                 )
+                enqueued++
             }
         }
+        return enqueued
     }
 
     /**
@@ -163,41 +216,182 @@ class KeryxNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Detects outgoing-RCS "sent" / "sending" notifications.
-     * Known patterns (vary by Google Messages version and OEM):
-     *   title == "You" — older versions
-     *   title == "Message sent" | "Message sending" — newer versions
-     *   title starts with "Sent" | "Sending" — some OEM variants
-     *   text == "Message sent" | "Sending…"
-     *   text starts with "Message sent to " | "Sending to "
+     * Returns true when [sender] looks like a self-label that Google Messages
+     * (or its OEM variants) uses for outgoing messages in the MessagingStyle
+     * sender field. Conservative — only matches well-known self-labels in
+     * isolation, never substrings, so a real contact named "Mel" doesn't get
+     * mis-classified as outgoing.
      */
-    private fun isSentRcsNotification(title: String, text: String): Boolean {
-        val titleLower = title.lowercase()
-        val textLower = text.lowercase()
-        return titleLower == "you"
-            || titleLower == "message sent"
-            || titleLower == "message sending"
-            || titleLower.startsWith("sent")
-            || titleLower.startsWith("sending")
-            || textLower == "message sent"
-            || textLower == "sending"
-            || textLower == "sending\u2026"
-            || textLower.startsWith("message sent to ")
-            || textLower.startsWith("sending to ")
-            || textLower.startsWith("message sending")
+    private fun isSelfSender(sender: String): Boolean {
+        val s = sender.trim().lowercase().removeSuffix(":").trim()
+        return s == "you" || s == "me" || s == "self" || s == "you sent" || s == "yourself"
     }
 
-    private fun extractSentBody(text: String): String? {
-        val textLower = text.lowercase()
+    /**
+     * Detects outgoing-RCS / "sent" / "sending" / "delivered" notifications.
+     *
+     * Heuristics are intentionally broad — Google reshuffles Messages copy
+     * frequently as they fold Samsung-Messages-style features in, so we
+     * recognise a wide family of outgoing signals rather than exact strings.
+     *
+     * Recognised signals (any one is sufficient):
+     *   - Title is a self-label: "You", "Me", "Self", etc.
+     *   - Title starts with: "sent", "sending", "delivered", "you sent",
+     *     "you to ", "to "
+     *   - Title equals: "message sent", "message sending", "message delivered"
+     *   - Text equals: "message sent", "sending", "sending…", "delivered",
+     *     "you sent a message"
+     *   - Text starts with: "message sent ", "sending to ", "message sending",
+     *     "delivered ", "you: ", "you sent ", "✓", "✔"
+     *   - Text contains a status badge near the start: "delivered" within the
+     *     first 20 chars (covers "Delivered • 2:31 PM"-style suffixes)
+     */
+    private fun isSentRcsNotification(title: String, text: String): Boolean {
+        val titleTrim = title.trim()
+        val titleLower = titleTrim.lowercase()
+        val textLower = text.trim().lowercase()
+
+        // Title-side self-labels and prefixes
+        if (isSelfSender(titleTrim)) return true
+        if (titleLower == "message sent"
+            || titleLower == "message sending"
+            || titleLower == "message delivered"
+        ) return true
+        if (titleLower.startsWith("sent")
+            || titleLower.startsWith("sending")
+            || titleLower.startsWith("delivered")
+            || titleLower.startsWith("you sent")
+            || titleLower.startsWith("you to ")
+            || titleLower.startsWith("to ")
+        ) return true
+
+        // Text-side equality
         if (textLower == "message sent"
             || textLower == "sending"
-            || textLower == "sending\u2026") return null
+            || textLower == "sending\u2026"
+            || textLower == "delivered"
+            || textLower == "you sent a message"
+        ) return true
 
-        val colonIdx = text.indexOf(':')
-        return if (colonIdx > 0 && colonIdx < text.length - 1) {
-            text.substring(colonIdx + 1).trim().takeIf { it.isNotBlank() }
-        } else {
-            text.takeIf { it.isNotBlank() }
+        // Text-side prefixes
+        if (textLower.startsWith("message sent to ")
+            || textLower.startsWith("message sent ")
+            || textLower.startsWith("sending to ")
+            || textLower.startsWith("message sending")
+            || textLower.startsWith("delivered ")
+            || textLower.startsWith("you: ")
+            || textLower.startsWith("you sent ")
+            || textLower.startsWith("\u2713") // ✓
+            || textLower.startsWith("\u2714") // ✔
+        ) return true
+
+        // "Delivered • 2:31 PM"-style status banners — keyword early in the text
+        if (textLower.length >= 9 && textLower.substring(0, minOf(20, textLower.length)).contains("delivered")) {
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * Recovers the actual sent message body from a sent-RCS notification.
+     *
+     * Strategy (in order):
+     *   1. If [text] is a pure status string ("message sent", "sending…",
+     *      "delivered"), return null — there's no body to relay.
+     *   2. Strip a leading status prefix ("Sent: ", "Sending: ", "You: ",
+     *      "Delivered • 2:31 PM — ") if present.
+     *   3. If a colon separator exists and the prefix looks like a status/sender
+     *      label, return everything after it.
+     *   4. If the title is a self-label ("You", "Me") and the text doesn't
+     *      contain a status prefix, the entire text is the body.
+     *
+     * Returns null when no usable body can be recovered — caller fires a
+     * parse_skip diagnostic so we see when Google introduces a new format.
+     */
+    private fun extractSentBody(title: String, text: String): String? {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return null
+        val lower = trimmed.lowercase()
+
+        // Pure status strings — no body present
+        if (lower == "message sent"
+            || lower == "sending"
+            || lower == "sending\u2026"
+            || lower == "delivered"
+            || lower == "you sent a message"
+        ) return null
+
+        // Strip a known leading status prefix (case-insensitive, then return remainder).
+        val statusPrefixes = listOf(
+            "you: ", "you said: ", "you sent: ",
+            "sent: ", "sending: ", "delivered: ",
+            "message sent: ", "message sent to ",
+            "sending to ", "message sending: ",
+            "\u2713 ", "\u2714 ", // ✓ ✔
+        )
+        for (p in statusPrefixes) {
+            if (lower.startsWith(p)) {
+                val after = trimmed.substring(p.length).trim()
+                if (after.isNotBlank()) return after
+            }
+        }
+
+        // "Delivered • 2:31 PM — actual body" or "Sent · actual body"
+        // Look for separators after a status keyword in the first ~30 chars.
+        val sepMatch = Regex("""^(?i)(delivered|sent|sending)[^a-z0-9]{1,30}(.+)$""").find(trimmed)
+        if (sepMatch != null) {
+            val body = sepMatch.groupValues[2].trim()
+            if (body.isNotBlank() && !body.lowercase().matches(Regex("""\d+:\d+(\s*[ap]m)?"""))) {
+                return body
+            }
+        }
+
+        // Generic colon separator (e.g. "Mel: Hello there")
+        val colonIdx = trimmed.indexOf(':')
+        if (colonIdx in 1 until trimmed.length - 1) {
+            val after = trimmed.substring(colonIdx + 1).trim()
+            if (after.isNotBlank()) return after
+        }
+
+        // If title was a self-label and text has no recognisable prefix, it IS the body.
+        if (isSelfSender(title.trim())) {
+            return trimmed
+        }
+
+        // Fallback — return text verbatim (better than dropping silently when we
+        // already classified this as outgoing).
+        return trimmed
+    }
+
+    /**
+     * Fires a small anonymized "parse_skip" diagnostic event so the server can
+     * see when Google Messages notifications stop yielding parseable payloads.
+     * No bodies, no addresses, no names — only structural counts.
+     */
+    private fun sendParseSkipDiagnostic(
+        relay: RelayClient,
+        reason: String,
+        title: String?,
+        textLen: Int,
+        messagingStyleCount: Int,
+    ) {
+        try {
+            relay.sendDiagnostic(
+                kind = "parse_skip",
+                fields = mapOf(
+                    "reason" to reason,
+                    "package" to GOOGLE_MESSAGES_PKG,
+                    "hasTitle" to (title != null),
+                    "titleLen" to (title?.length ?: 0),
+                    "textLen" to textLen,
+                    "messagingStyleCount" to messagingStyleCount,
+                )
+            )
+            Log.w(TAG, "parse_skip [$reason] titleLen=${title?.length ?: 0} textLen=$textLen msgStyle=$messagingStyleCount")
+        } catch (e: Exception) {
+            // Diagnostic must never crash the listener
+            Log.w(TAG, "Failed to send parse_skip diagnostic: ${e.message}")
         }
     }
 

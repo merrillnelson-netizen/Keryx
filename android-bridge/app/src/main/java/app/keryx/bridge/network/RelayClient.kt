@@ -75,6 +75,57 @@ class RelayClient private constructor(private val context: Context) {
     }
 
     /**
+     * Fire-and-forget diagnostic event.
+     *
+     * Posts a `type: "event"` payload to /api/relay/inbound carrying anonymized
+     * structural counters (no message bodies, no addresses, no names) so the
+     * Keryx server can detect when notification-parsing silently breaks after a
+     * Google Messages update.
+     *
+     * Bypasses the debounce buffer (we want the server to see breakage as soon
+     * as it happens) and intentionally does NOT queue to Room on failure —
+     * diagnostics are best-effort, never critical.
+     */
+    fun sendDiagnostic(kind: String, fields: Map<String, Any>) {
+        scope.launch {
+            val prefs = Prefs.get(context)
+            if (!prefs.enabled || !prefs.isConfigured()) return@launch
+            val serverUrl = prefs.serverUrl!!.trimEnd('/')
+            val apiKey = prefs.apiKey!!
+
+            val payload = JSONObject().apply {
+                put("kind", kind)
+                for ((k, v) in fields) put(k, v)
+            }
+            val bodyJson = JSONObject().apply {
+                put("type", "event")
+                put("source", "android-bridge")
+                put("payload", payload)
+            }.toString()
+
+            val request = Request.Builder()
+                .url("$serverUrl/api/relay/inbound")
+                .addHeader("X-API-Key", apiKey)
+                .post(bodyJson.toRequestBody(jsonType))
+                .build()
+
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    client.newCall(request).execute()
+                }
+                response.use {
+                    if (!response.isSuccessful) {
+                        Log.d(TAG, "Diagnostic [$kind] returned ${response.code} — dropping")
+                    }
+                }
+            } catch (e: Exception) {
+                // Diagnostics are non-essential; drop on any failure.
+                Log.d(TAG, "Diagnostic [$kind] send failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Attempts to relay [payload] immediately (bypassing the debounce buffer).
      * - On 2xx: records success, returns true.
      * - On 5xx / network error: queues to Room for [RetryWorker], returns true

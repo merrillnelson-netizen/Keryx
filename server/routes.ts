@@ -7072,6 +7072,44 @@ Respond with JSON only.`
     source: z.string().max(200).optional(),
   }).catchall(z.any());
 
+  // ── Echo-merge cache for outgoing-message duplicate suppression ──────────
+  // When the Bridge misclassifies a sent message as "received" (e.g. after a
+  // Google Messages copy change), we'd otherwise log the same message twice in
+  // the user's timeline. This in-memory cache remembers the most recent "sent"
+  // bodies per user; a "received" arriving with the same normalized body inside
+  // the window is suppressed. Per-process only — survives restarts is not a
+  // requirement here (window is 10s).
+  const ECHO_WINDOW_MS = 10_000;
+  const recentSentByUser = new Map<string, Array<{ body: string; ts: number }>>();
+
+  function normalizeForEcho(body: string): string {
+    return body.trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function pruneEchoCache(userId: string, now: number): Array<{ body: string; ts: number }> {
+    const arr = recentSentByUser.get(userId) || [];
+    const fresh = arr.filter(e => now - e.ts <= ECHO_WINDOW_MS);
+    if (fresh.length !== arr.length) {
+      if (fresh.length === 0) recentSentByUser.delete(userId);
+      else recentSentByUser.set(userId, fresh);
+    }
+    return fresh;
+  }
+
+  function recordSentForEcho(userId: string, body: string): void {
+    const now = Date.now();
+    const fresh = pruneEchoCache(userId, now);
+    fresh.push({ body: normalizeForEcho(body), ts: now });
+    recentSentByUser.set(userId, fresh);
+  }
+
+  function isEchoOfRecentSent(userId: string, body: string): boolean {
+    const now = Date.now();
+    const fresh = pruneEchoCache(userId, now);
+    const norm = normalizeForEcho(body);
+    return fresh.some(e => e.body === norm);
+  }
+
   /**
    * Shared processing logic for relay payloads.
    * Both /api/relay/inbound (API-key auth) and /api/relay/test (session auth) call this.
@@ -7117,8 +7155,24 @@ Respond with JSON only.`
       // than a raw thread ID.  The upsert preserves existing names when null.
       const contactName = (name && typeof name === 'string' && name.trim()) ? name.trim() : null;
 
+      // ── Echo-merge: a "received" message whose body matches a recently-relayed
+      // "sent" message for this user is almost certainly the same physical
+      // message coming back through a misclassifying notification path. Drop it.
+      // Test-fires bypass this so they always exercise the full pipeline.
+      if (!isTest && direction === 'received' && isEchoOfRecentSent(userId, body)) {
+        console.log(`[relay] echo-merge: suppressed received echo of recent sent (user=${userId}, bodyLen=${body.length})`);
+        routedTo.push('keryx (echo of recent sent — suppressed)');
+        // Skip storage but still fall through to fan-out + event log so external
+        // destinations (and the audit log) see what arrived.
+      } else {
+
       const exists = await storage.messageExistsByExternalId(userId, externalId, 'live_relay');
       if (!exists) {
+        // Record outgoing bodies in the echo cache so a misclassified "received"
+        // echo arriving inside the window can be suppressed above.
+        if (!isTest && direction === 'sent') {
+          recordSentForEcho(userId, body);
+        }
         const conversation = await storage.upsertMessageConversation({
           userId,
           contactAddress: normalizedAddress,
@@ -7158,6 +7212,22 @@ Respond with JSON only.`
         routedTo.push('keryx');
       } else if (isTest) {
         routedTo.push('keryx (duplicate — skipped)');
+      }
+      } // end echo-merge else
+    }
+
+    // ── Event: log diagnostic events from the Bridge for visibility ──────
+    if (type === 'event') {
+      const payload = (rest as any).payload;
+      const kind = payload && typeof payload === 'object' ? payload.kind : undefined;
+      if (source === 'android-bridge' && kind === 'parse_skip') {
+        // Silent-breakage canary — surfaces when Google Messages copy changes
+        // and the Bridge stops being able to extract message bodies.
+        console.warn(
+          `[relay] android-bridge parse_skip: reason=${payload.reason} ` +
+          `titleLen=${payload.titleLen} textLen=${payload.textLen} ` +
+          `messagingStyleCount=${payload.messagingStyleCount} user=${userId}`
+        );
       }
     }
 
